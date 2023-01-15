@@ -1,0 +1,4 @@
+- name: Sidekick Main Playbook
+  hosts: sidekick
+  roles:
+    - system/package
