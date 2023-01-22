@@ -2,6 +2,7 @@
   become: true
   ansible.builtin.copy:
     content: |
+      nameserver 1.1.1.1
       nameserver 8.8.8.8
       nameserver 8.8.4.4
     dest: /etc/resolv.dnsmasq
@@ -38,11 +39,6 @@
     dnsmasq_dnsmasq_d_files_present:
       cache:
         - |
-          domain-needed
-          bogus-priv
-          no-hosts
-          dns-forward-max=150
-          cache-size=1000
-          neg-ttl=3600
+          cache-size=100000
           resolv-file=/etc/resolv.dnsmasq
           no-poll
