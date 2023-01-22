@@ -1,0 +1,8 @@
+- name: Sidekick Main Playbook
+  hosts: sidekick
+  roles:
+    - system/package
+    - system/resolve
+    - system/hosts
+    - network/tailscale
+    - network/dnsmasq

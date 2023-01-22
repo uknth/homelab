@@ -1,0 +1,48 @@
+- name: create resolv-file for dnsmasq
+  become: true
+  ansible.builtin.copy:
+    content: |
+      nameserver 8.8.8.8
+      nameserver 8.8.4.4
+    dest: /etc/resolv.dnsmasq
+
+- name: create hosts file
+  become: true
+  ansible.builtin.copy:
+    force: true
+    content: |
+      127.0.0.1 localhost
+      127.0.1.1 hl-mini-1
+
+      ::1     ip6-localhost ip6-loopback
+      fe00::0 ip6-localnet
+      ff00::0 ip6-mcastprefix
+      ff02::1 ip6-allnodes
+      ff02::2 ip6-allrouters
+
+      100.89.95.80 homelab.uknth.me
+      192.168.1.2 homelab.uknth.me
+    dest: /etc/hosts
+
+- name: execute dnsmasq role
+  become: true
+  ansible.builtin.import_role:
+    name: dnsmasq
+  vars:
+    dnsmasq_service_enabled: true
+    dnsmasq_dnsmasq_conf:
+      - |
+        port=53
+        bind-dynamic
+        localise-queries
+    dnsmasq_dnsmasq_d_files_present:
+      cache:
+        - |
+          domain-needed
+          bogus-priv
+          no-hosts
+          dns-forward-max=150
+          cache-size=1000
+          neg-ttl=3600
+          resolv-file=/etc/resolv.dnsmasq
+          no-poll
