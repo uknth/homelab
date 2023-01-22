@@ -2,3 +2,7 @@
   hosts: sidekick
   roles:
     - system/package
+    - system/resolve
+    - system/hosts
+    - network/tailscale
+    - network/dnsmasq

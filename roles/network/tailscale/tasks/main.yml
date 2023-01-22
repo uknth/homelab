@@ -1,0 +1,6 @@
+- name: setup tailscale network
+  become: true
+  ansible.builtin.import_role:
+    name: artis3n.tailscale
+  vars:
+    tailscale_authkey: "{{ lookup('env', 'TAILSCALE_KEY') }}"
