@@ -1,2 +1,7 @@
+roles:
+  - src: https://github.com/artis3n/ansible-role-tailscale
+    name: artis3n.tailscale
+  - src: https://github.com/Oefenweb/ansible-dnsmasq
+    name: dnsmasq
 collections:
   - community.docker
