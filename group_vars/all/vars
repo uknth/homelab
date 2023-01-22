@@ -1,0 +1,6 @@
+packages:
+  - curl
+  - zsh
+  - htop
+  - tree
+  - wget

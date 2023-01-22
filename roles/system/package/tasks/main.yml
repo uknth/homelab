@@ -1,0 +1,6 @@
+- name: set up basic packages
+  become: true
+  package:
+    update_cache: true
+    name: "{{ packages }}"
+    state: latest
