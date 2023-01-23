@@ -1,0 +1,86 @@
+---
+- name: Check if Docker is already present.
+  ansible.builtin.command: which docker
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  register: docker_command_result
+
+- name: Create a directory for apt keyring
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  when: docker_command_result.rc == 1
+
+- name: create shell script file
+  ansible.builtin.file:
+    path: /home/ansible/setup-docker.sh
+    state: touch
+    mode: "755"
+  when: docker_command_result.rc == 1
+
+- name: shell script to write keyring
+  become: true
+  ansible.builtin.shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    exit 0
+  when: docker_command_result.rc == 1
+
+- name: install docker using apt
+  become: true
+  apt:
+    update_cache: true
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+  when: docker_command_result.rc == 1
+
+- name: Pause for 2 minutes for systemctl to recover
+  ansible.builtin.pause:
+    minutes: 2
+  when: docker_command_result.rc == 1
+
+- name: Ensure Docker is started.
+  become: true
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Ensure dependencies are installed (Debian).
+  become: true
+  ansible.builtin.apt:
+    name:
+      - libffi-dev
+      - libssl-dev
+      - python3-dev
+      - python3-pip
+      - git
+      - rsync
+    state: present
+  when: ansible_facts.os_family == "Debian"
+
+- name: Install Docker Compose using Pip.
+  become: true
+  ansible.builtin.pip:
+    name: docker-compose
+    state: present
+    executable: pip3
+
+- name: "Ensure user is added to the docker group: {{ ansible_user }}"
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+
+# reset_connection doesn't support conditionals.
+- name: Reset connection so docker group is picked up.
+  meta: reset_connection

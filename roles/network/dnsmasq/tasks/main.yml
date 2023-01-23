@@ -2,12 +2,14 @@
   become: true
   ansible.builtin.copy:
     content: |
+      nameserver 1.1.1.1
       nameserver 8.8.8.8
       nameserver 8.8.4.4
     dest: /etc/resolv.dnsmasq
 
 - name: create hosts file
   become: true
+  notify: Restart dnsmasq
   ansible.builtin.copy:
     force: true
     content: |
@@ -20,12 +22,22 @@
       ff02::1 ip6-allnodes
       ff02::2 ip6-allrouters
 
-      100.89.95.80 homelab.uknth.me
-      192.168.1.2 homelab.uknth.me
+      100.89.95.80 homelab.uknth.me 
+      100.89.95.80 grafana.homelab.uknth.me prometheus.homelab.uknth.me
+      192.168.1.2 homelab.uknth.me 
+      192.168.1.2 grafana.homelab.uknth.me prometheus.homelab.uknth.me
     dest: /etc/hosts
+
+- name: Check if dnsmasq is already present.
+  ansible.builtin.command: which dnsmasq
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  register: dnsmasq_command_result
 
 - name: execute dnsmasq role
   become: true
+  when: dnsmasq_command_result.rc == 1
   ansible.builtin.import_role:
     name: dnsmasq
   vars:
@@ -38,11 +50,7 @@
     dnsmasq_dnsmasq_d_files_present:
       cache:
         - |
-          domain-needed
-          bogus-priv
-          no-hosts
-          dns-forward-max=150
-          cache-size=1000
-          neg-ttl=3600
+          cache-size=100000
+          min-cache-ttl=600
           resolv-file=/etc/resolv.dnsmasq
           no-poll
