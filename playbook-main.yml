@@ -5,3 +5,4 @@
     - system/docker
     - network/tailscale
     - network/dnsmasq
+    - monitoring/prometheus-grafana-docker
