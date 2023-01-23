@@ -9,6 +9,7 @@
 
 - name: create hosts file
   become: true
+  notify: Restart dnsmasq
   ansible.builtin.copy:
     force: true
     content: |
@@ -21,8 +22,10 @@
       ff02::1 ip6-allnodes
       ff02::2 ip6-allrouters
 
-      100.89.95.80 homelab.uknth.me
-      192.168.1.2 homelab.uknth.me
+      100.89.95.80 homelab.uknth.me 
+      100.89.95.80 grafana.homelab.uknth.me prometheus.homelab.uknth.me
+      192.168.1.2 homelab.uknth.me 
+      192.168.1.2 grafana.homelab.uknth.me prometheus.homelab.uknth.me
     dest: /etc/hosts
 
 - name: Check if dnsmasq is already present.
