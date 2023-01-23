@@ -2,5 +2,6 @@
   hosts: sidekick
   roles:
     - system/package
+    - system/docker
     - network/tailscale
     - network/dnsmasq

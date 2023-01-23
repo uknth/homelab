@@ -4,3 +4,6 @@ packages:
   - htop
   - tree
   - wget
+  - ca-certificates
+  - gnupg
+  - lsb-release
