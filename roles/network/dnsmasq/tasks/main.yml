@@ -25,8 +25,16 @@
       192.168.1.2 homelab.uknth.me
     dest: /etc/hosts
 
+- name: Check if dnsmasq is already present.
+  ansible.builtin.command: which dnsmasq
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  register: dnsmasq_command_result
+
 - name: execute dnsmasq role
   become: true
+  when: dnsmasq_command_result.rc == 1
   ansible.builtin.import_role:
     name: dnsmasq
   vars:

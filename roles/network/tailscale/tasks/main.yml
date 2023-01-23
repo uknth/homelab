@@ -1,6 +1,14 @@
+- name: Check if tailscale is already present.
+  ansible.builtin.command: which tailscale
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  register: tailscale_command_result
+
 - name: setup tailscale network
   become: true
   ansible.builtin.import_role:
     name: artis3n.tailscale
   vars:
     tailscale_authkey: "{{ lookup('env', 'TAILSCALE_KEY') }}"
+  when: tailscale_command_result.rc == 1

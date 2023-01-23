@@ -1,6 +1,11 @@
 - name: set up basic packages
   become: true
-  package:
+  apt:
     update_cache: true
     name: "{{ packages }}"
     state: latest
+
+- name: Upgrade the OS (apt-get dist-upgrade)
+  become: true
+  ansible.builtin.apt:
+    upgrade: dist
