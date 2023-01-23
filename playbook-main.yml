@@ -2,7 +2,7 @@
   hosts: sidekick
   roles:
     - system/package
-    - system/resolve
-    - system/hosts
+    - system/docker
     - network/tailscale
     - network/dnsmasq
+    - monitoring/prometheus-grafana-docker
