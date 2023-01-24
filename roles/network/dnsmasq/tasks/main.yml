@@ -42,11 +42,19 @@
     name: dnsmasq
   vars:
     dnsmasq_service_enabled: true
+    # TODO: take the config for `listen-address` from config & tailscale command
     dnsmasq_dnsmasq_conf:
       - |
         port=53
+        domain-needed
+        bogus-priv
+        strict-order
         bind-dynamic
         localise-queries
+        listen-address=0.0.0.0
+        listen-address=127.0.0.1
+        listen-address=192.168.1.2
+        listen-address=100.89.95.80
     dnsmasq_dnsmasq_d_files_present:
       cache:
         - |
