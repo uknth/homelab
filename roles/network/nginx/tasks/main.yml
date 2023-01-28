@@ -11,7 +11,7 @@
       - listen: "80 default_server"
         server_name: "_"
         extra_parameters: |
-          return       301 $scheme://$host$request_uri;
+          return       301 https://$host$request_uri;
 
       - listen: "443 ssl http2"
         server_name: "homelab.uknth.me"
