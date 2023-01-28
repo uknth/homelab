@@ -23,6 +23,8 @@
       ff02::1 ip6-allnodes
       ff02::2 ip6-allrouters
 
+
+      192.168.1.2 dns.uknth.me
       192.168.1.2 homelab.uknth.me sidekick-1.homelab.uknth.me
       100.89.95.80 homelab.uknth.me sidekick-1.homelab.uknth.me
 
