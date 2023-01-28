@@ -1,0 +1,8 @@
+- name: Common plays for all hosts
+  ansible.builtin.import_playbook: common-playbook.yml
+
+- name: Sidekick plays for 'sidekick' hosts
+  ansible.builtin.import_playbook: sidekick-playbook.yml
+
+- name: Hero plays for 'hero' hosts
+  ansible.builtin.import_playbook: hero-playbook.yml

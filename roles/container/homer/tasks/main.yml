@@ -1,0 +1,42 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ docker_dir }}/homer/assets/icons && mkdir -p {{ docker_dir }}/homer/assets/tools
+- name: Copy config files to homer
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: "{{ docker_dir }}/homer/assets/config.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+
+- name: Copy logos to homer
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ docker_dir }}/homer/assets/tools"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  with_fileglob:
+    - "files/tools/*"
+
+- name: Copy icons to homer
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ docker_dir }}/homer/assets/icons"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  with_fileglob:
+    - "files/icons/*"
+
+- name: Deploy homer
+  community.docker.docker_container:
+    name: homer
+    image: b4bz/homer:latest
+    ports:
+      - "8080:8080"
+    env:
+      TZ: "{{ timezone }}"
+    volumes:
+      - "{{ docker_dir }}/homer/assets:/www/assets"
+    restart_policy: always

@@ -1,0 +1,5 @@
+- name: Hero Playbook for 'hero' Hosts
+  hosts: hero
+  roles:
+    - network/tailscale
+    - monitoring/node_exporter
