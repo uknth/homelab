@@ -10,3 +10,5 @@ packages:
 
 timezone: Asia/Kolkata
 domain_name: homelab.uknth.me
+
+cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
