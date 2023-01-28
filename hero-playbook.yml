@@ -6,3 +6,9 @@
 
     - role: monitor/node_exporter
       tags: ["monitor", "prometheus", "node_exporter"]
+    
+    - role: network/samba
+      tags: ["network", "samba"]
+
+    - role: system/proxmox
+      tags: ["system", "proxmox", "proxmox-install"]
