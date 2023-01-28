@@ -1,1 +1,3 @@
 sudo_password: "{{ vault_sudo_password }}"
+docker_dir: /home/ansible/docker_dir
+domain_name: homelab.uknth.me

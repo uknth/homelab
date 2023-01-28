@@ -1,0 +1,4 @@
+- name: install node_exporter
+  become: true
+  ansible.builtin.import_role:
+    name: geerlingguy.node_exporter
