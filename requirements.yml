@@ -3,9 +3,8 @@ roles:
     name: artis3n.tailscale
   - src: https://github.com/Oefenweb/ansible-dnsmasq
     name: dnsmasq
-  - name: ansible-netdata
-    src: https://github.com/mrlesmithjr/ansible-netdata
-  - name: ansible-role-nodejs
-    src: https://github.com/geerlingguy/ansible-role-nodejs
+  - name: geerlingguy.node_exporter
+  - name: geerlingguy.ntp
+  - name: geerlingguy.nginx
 collections:
   - community.docker

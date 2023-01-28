@@ -1,0 +1,5 @@
+- name: Common plays for all hosts
+  hosts: all
+  roles:
+    - system/package
+    - system/ntp

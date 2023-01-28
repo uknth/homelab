@@ -7,3 +7,5 @@ packages:
   - ca-certificates
   - gnupg
   - lsb-release
+
+timezone: Asia/Kolkata

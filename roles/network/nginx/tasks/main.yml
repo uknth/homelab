@@ -1,0 +1,4 @@
+- name: Setup nginx to run on host
+  become: true
+  ansible.builtin.import_role:
+    name: geerlingguy.nginx

@@ -3,7 +3,7 @@
 config_dir: "~"
 
 # Domain names configuration (related services need to be enabled).
-domain_name_enable: true
+domain_name_enable: false
 domain_name: "homelab.uknth.me"
 domain_grafana: "grafana" # to access grafana via: http://grafana.homelab.uknth.me
 domain_prometheus: "prometheus" # to access prometheus via: http://prometheus.homelab.uknth.me
@@ -21,6 +21,7 @@ monitoring_ping_hosts: # [URL];[HUMAN_READABLE_NAME]
 # Prometheus configuration.
 prometheus_monitor_prometheus: false
 prometheus_node_exporter_targets:
-  - "nodeexp:9100"
+  - "sidekick-1.homelab.uknth.me:9100"
+  - "hero-1.homelab.uknth.me:9100"
 prometheus_extra_scrape_configs: ""
-prometheus_tsdb_retention_time: 90d
+prometheus_tsdb_retention_time: 30d

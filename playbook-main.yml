@@ -1,8 +1,0 @@
-- name: Sidekick Main Playbook
-  hosts: sidekick
-  roles:
-    - system/package
-    - system/docker
-    - network/tailscale
-    - network/dnsmasq
-    - monitoring/prometheus-grafana-docker
