@@ -9,3 +9,4 @@ packages:
   - lsb-release
 
 timezone: Asia/Kolkata
+domain_name: homelab.uknth.me
