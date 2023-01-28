@@ -9,5 +9,7 @@ roles:
   - name: geerlingguy.certbot
   - name: ansible-portainer
     src: https://github.com/uknth/ansible-role-portainer
+  - name: lae.proxmox
 collections:
   - community.docker
+  - vladgh.samba

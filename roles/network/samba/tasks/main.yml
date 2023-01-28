@@ -1,0 +1,34 @@
+- name: create group samba for user access
+  become: true
+  ansible.builtin.group:
+    name: samba
+    state: present
+
+- name: Add the user 'samba-user' with a bash shell, with samba group
+  become: true
+  ansible.builtin.user:
+    name: samba-user
+    shell: /bin/bash
+    groups: samba
+    append: yes
+    password: "{{ samba_user_password }}"
+
+- name: install samba server and setup role
+  become: true
+  ansible.builtin.import_role:
+    name: vladgh.samba.server
+  vars:
+    samba_users:
+      - name: samba-user
+        password: "{{ samba_user_password }}"
+    samba_shares_root: "/mnt/databank"
+    samba_shares:
+      - name: data
+        group: samba
+        write_list: +samba
+        guest_ok: yes
+      - name: guestshare
+        comment: "Share accessible for guests"
+        guest_ok: "yes"
+        writable: "yes"
+        browseable: "yes"
