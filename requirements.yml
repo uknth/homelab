@@ -6,6 +6,7 @@ roles:
   - name: geerlingguy.node_exporter
   - name: geerlingguy.ntp
   - name: geerlingguy.nginx
+  - name: geerlingguy.certbot
   - name: ansible-portainer
     src: https://github.com/uknth/ansible-role-portainer
 collections:
