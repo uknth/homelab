@@ -1,0 +1,32 @@
+- name: "Install 'certbot' & 'cloudflare-dns-plugin' for certbot"
+  become: true
+  apt: name={{ item }} state=present
+  with_items:
+    - certbot
+    - python3-certbot-dns-cloudflare
+
+- name: Create certbot directory
+  become: true
+  ansible.builtin.command: |
+    mkdir -p /etc/letsencrypt
+
+- name: Certbot Template
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: 0600
+  with_items:
+    - {
+        src: "templates/confcloudflare.ini.j2",
+        dest: "/etc/letsencrypt/dnscloudflare.ini",
+      }
+    - {
+        src: "templates/letsencrypt_cli.ini.j2",
+        dest: "/etc/letsencrypt/cli.ini",
+      }
+
+- name: Create Certs.
+  include_role:
+    name: geerlingguy.certbot

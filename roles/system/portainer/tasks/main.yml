@@ -1,0 +1,8 @@
+- name: "Install portainer"
+  ansible.builtin.import_role:
+    name: ansible-portainer
+  vars:
+    persistent_data_path: "{{ docker_dir }}/portainer:/data"
+    auth_method: 1
+    admin_user: "uknth"
+    admin_password: "{{ portainer_admin_password }}"
