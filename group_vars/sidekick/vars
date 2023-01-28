@@ -1,3 +1,4 @@
 sudo_password: "{{ vault_sudo_password }}"
 portainer_admin_password: "{{ vault_portainer_admin_password }}"
+cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
 docker_dir: /home/ansible/docker_dir
