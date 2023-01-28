@@ -29,6 +29,7 @@
         extra_parameters: |
           location / {
             proxy_pass http://sidekick-1.homelab.uknth.me:3030/;
+            proxy_set_header Host $http_host;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
           ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
