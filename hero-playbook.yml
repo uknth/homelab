@@ -1,5 +1,8 @@
 - name: Hero Playbook for 'hero' Hosts
   hosts: hero
   roles:
-    - network/tailscale
-    - monitoring/node_exporter
+    - role: network/tailscale
+      tags: ["network", "tailscale"]
+
+    - role: monitor/node_exporter
+      tags: ["monitor", "prometheus", "node_exporter"]
