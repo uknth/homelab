@@ -1,8 +1,20 @@
 - name: Sidekick Playbook for 'sidekick' hosts
   hosts: sidekick
   roles:
-    - system/docker
-    - network/tailscale
-    - network/dnsmasq
-    - monitoring/prometheus-grafana-docker
-    - container/homer
+    - role: system/docker
+      tags: ["docker"]
+
+    - role: system/portainer
+      tags: ["docker","container", "portainer"]
+
+    - role: network/tailscale
+      tags: ["network", "tailscale"]
+
+    - role: network/dnsmasq
+      tags: ["network", "dnsmasq"]
+
+    - role: monitor/prometheus-grafana-docker
+      tags: ["docker", "container", "monitoring", "prometheus", "grafana"]
+
+    - role: ui/homer
+      tags: ["docker", "container", "homer"]
