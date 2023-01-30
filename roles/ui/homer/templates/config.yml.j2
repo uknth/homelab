@@ -58,14 +58,7 @@ services:
         url: "http://{{ ansible_hostname }}.{{ domain_name }}:2342"
         target: "_blank"
 
-      - name: "Salt TV"
-        logo: "assets/tools/salt-tv.svg"
-        subtitle: "Stream TV live and on demand."
-        url: "https://tv.salt.ch/"
-        target: "_blank"
-        tag: "extern"
-
-  - name: "File Storage & Sharing"
+  - name: "Networking & Storage"
     icon: "fas fa-folder"
     items:
       - name: "Transmission"
@@ -73,6 +66,13 @@ services:
         subtitle: "Bittorrent client"
         url: "http://{{ ansible_hostname }}.{{ domain_name }}:9091"
         target: "_blank"
+
+      - name: "Tailscale"
+        logo: "assets/tools/tailscale.png"
+        subtitle: "WireGuard-based VPN"
+        url: "https://login.tailscale.com/admin/machines"
+        target: "_blank"
+        tag: "extern"
 
   - name: "Monitoring"
     icon: "fas fa-desktop"
@@ -95,11 +95,11 @@ services:
         url: "https://portainer.{{ domain_name }}"
         target: "_blank"
 
-  - name: "Virtualisation"
+  - name: "Kubernetes"
     icon: "fas fa-cogs"
     items:
-      - name: "Proxmox"
-        logo: "assets/tools/proxmox.svg"
-        url: "https://proxmox.{{ domain_name }}"
-        subtitle: "Virtualisation of K3s Cluster"
+      - name: "Skooner"
+        logo: "assets/tools/skooner.png"
+        url: "https://skooner.{{ domain_name }}"
+        subtitle: "Visualisation of K3s Cluster"
         target: "_blank"
