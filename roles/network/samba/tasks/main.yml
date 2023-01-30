@@ -23,7 +23,7 @@
         password: "{{ samba_user_password }}"
     samba_shares_root: "/mnt/databank"
     samba_shares:
-      - name: data
+      - name: fast-storage
         group: samba
         write_list: +samba
         guest_ok: yes

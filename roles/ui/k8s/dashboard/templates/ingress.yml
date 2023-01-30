@@ -1,0 +1,17 @@
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: skooner
+  namespace: kube-system
+spec:
+  rules:
+    - host: skooner.homelab.uknth.me
+      http:
+        paths:
+          - path: /
+            backend:
+              service:
+                name: skooner
+                port:
+                  number: 80
+            pathType: ImplementationSpecific
