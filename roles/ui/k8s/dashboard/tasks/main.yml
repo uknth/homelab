@@ -1,0 +1,31 @@
+- name: Download Skooner manifest to the cluster.
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/skooner-k8s/skooner/master/kubernetes-skooner.yaml
+    dest: ~/skooner-manifest.yaml
+    mode: "0664"
+
+- name: Apply Skooner manifest to the cluster.
+  kubernetes.core.k8s:
+    state: present
+    src: ~/skooner-manifest.yaml
+
+- name: Create Skooner Service Account in Kube-System
+  kubernetes.core.k8s:
+    state: present
+    template: "sa.yml"
+- name: Create ClusterRoleBinding for Skooner-sa
+  kubernetes.core.k8s:
+    state: present
+    template: crb.yml
+
+- name: Get and Print Service Token for User to login
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: secret
+    name: skooner-sa-token
+    namespace: default
+  register: skooner_secret
+
+- name: Print Token
+  debug:
+    msg: "Skooner SA Token: {{ skooner_secret.result.data.token }}"

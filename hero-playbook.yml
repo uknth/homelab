@@ -10,5 +10,8 @@
     - role: network/samba
       tags: ["network", "samba"]
 
-    - role: system/proxmox
-      tags: ["system", "proxmox", "proxmox-install"]
+    - role: system/microk8s 
+      tags: ["system", "microk8s", "kubernetes"] 
+
+    - role: ui/k8s/dashboard
+      tags: ["k8s", "k8s-dashboard"]
