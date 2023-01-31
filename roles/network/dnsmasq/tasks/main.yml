@@ -35,6 +35,12 @@
       192.168.1.2 grafana.homelab.uknth.me prometheus.homelab.uknth.me 
       192.168.1.2 proxmox.homelab.uknth.me portainer.homelab.uknth.me
 
+      192.168.1.11 k8s-hero-1.homelab.uknth.me
+
+      # Kubernetes
+      100.89.95.80 skooner.homelab.uknth.me
+      192.168.1.2 skooner.homelab.uknth.me
+
     dest: /etc/hosts
 
 - name: Check if dnsmasq is already present.

@@ -7,9 +7,12 @@ roles:
   - name: geerlingguy.ntp
   - name: geerlingguy.nginx
   - name: geerlingguy.certbot
+  - name: geerlingguy.pip
   - name: ansible-portainer
     src: https://github.com/uknth/ansible-role-portainer
-  - name: lae.proxmox
+  - name: ansible_role_microk8s
+    src: https://github.com/istvano/ansible_role_microk8s
 collections:
   - community.docker
   - vladgh.samba
+  - kubernetes.core
