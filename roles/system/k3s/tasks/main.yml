@@ -1,0 +1,139 @@
+- name: Download k3s binary x64
+  become: true
+  get_url:
+    url: https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s
+    checksum: sha256:https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/sha256sum-amd64.txt
+    dest: /usr/local/bin/k3s
+    owner: root
+    group: root
+    mode: 0755
+  when: ansible_facts.architecture == "x86_64"
+
+- name: Enable IPv4 forwarding
+  become: true
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: yes
+
+- name: Copy K3s service file
+  become: true
+  register: k3s_service
+  template:
+    src: "k3s.service.j2"
+    dest: "{{ systemd_dir }}/k3s.service"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Enable and check K3s service
+  become: true
+  systemd:
+    name: k3s
+    daemon_reload: yes
+    state: restarted
+    enabled: yes
+
+- name: Wait for node-token
+  become: true
+  wait_for:
+    path: "{{ k3s_server_location }}/server/node-token"
+
+- name: Register node-token file access mode
+  become: true
+  stat:
+    path: "{{ k3s_server_location }}/server/node-token"
+  register: p
+
+- name: Change file access node-token
+  become: true
+  file:
+    path: "{{ k3s_server_location }}/server/node-token"
+    mode: "g+rx,o+rx"
+
+- name: Read node-token from master
+  become: true
+  slurp:
+    path: "{{ k3s_server_location }}/server/node-token"
+  register: node_token
+
+- name: Store Master node-token
+  become: true
+  set_fact:
+    token: "{{ node_token.content | b64decode | regex_replace('\n', '') }}"
+
+- name: Restore node-token file access
+  become: true
+  file:
+    path: "{{ k3s_server_location }}/server/node-token"
+    mode: "{{ p.stat.mode }}"
+
+- name: Create directory .kube
+  file:
+    path: ~{{ ansible_user }}/.kube
+    state: directory
+    owner: "{{ ansible_user }}"
+    mode: "u=rwx,g=rx,o="
+
+- name: Copy config file to user home directory
+  become: true
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: ~{{ ansible_user }}/.kube/config
+    remote_src: yes
+    owner: "{{ ansible_user }}"
+    mode: "u=rw,g=,o="
+
+- name: Replace https://localhost:6443 by https://master-ip:6443
+  become: true
+  command: >-
+    k3s kubectl config set-cluster default
+      --server=https://{{ master_ip }}:6443
+      --kubeconfig ~{{ ansible_user }}/.kube/config
+  changed_when: true
+
+- name: Create kubectl symlink
+  become: true
+  file:
+    src: /usr/local/bin/k3s
+    dest: /usr/local/bin/kubectl
+    state: link
+
+- name: Create crictl symlink
+  become: true
+  file:
+    src: /usr/local/bin/k3s
+    dest: /usr/local/bin/crictl
+    state: link
+
+- name: change owner of config `.kube/config`
+  command: |
+    chown {{ ansible_user }} ~/.kube/config
+
+- name: change permission of `.kube/config`
+  command: |
+    chmod 600 ~/.kube/config
+
+- name: Update bashrc with export
+  command: |
+    echo "export KUBECONFIG=~/.kube/config" >> ~/.bashrc
+
+- name: reset ssh connection
+  meta: reset_connection
+
+- name: Post Install steps to enable Ansible on Kubernetes [ APT ]
+  become: true
+  ansible.builtin.apt:
+    pkg:
+      - python3-kubernetes
+
+- name: Post Install steps to enable Ansible on Kubernetes [ pip3 ]
+  become: true
+  ansible.builtin.pip:
+    name:
+      - pyyaml
+      - jsonpatch
+      - kubernetes-validate
+    state: present
+    executable: pip3

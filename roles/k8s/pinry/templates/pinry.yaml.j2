@@ -1,0 +1,68 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ pinry_name }}"
+  namespace: "{{ homelab_namespace }}"
+  labels:
+    app: pinry
+    name: "{{ pinry_name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+        app: pinry
+        name: "{{ pinry_name }}"
+  template:
+    metadata:
+      labels:
+        app: pinry
+        name: "{{ pinry_name }}"
+    spec:
+      containers:
+      - name: pinry
+        image: {{ pinry_image }}:{{ pinry_version }}
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /data
+          name: fast-storage-data
+          readOnly: false
+      volumes:
+      - name: fast-storage-data
+        persistentVolumeClaim:
+          claimName: "{{ pvc_name }}"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ pinry_name }}-service"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  selector:
+    app: pinry
+    name: "{{ pinry_name }}"
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ pinry_name }}-ingress"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: {{ homelab_shiori_domain_name }}
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ pinry_name }}-service"
+            port:
+              number: 80

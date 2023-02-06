@@ -13,6 +13,7 @@
   kubernetes.core.k8s:
     state: present
     template: "sa.yml"
+
 - name: Create ClusterRoleBinding for Skooner-sa
   kubernetes.core.k8s:
     state: present
@@ -29,3 +30,8 @@
 - name: Print Token
   debug:
     msg: "Skooner SA Token: {{ skooner_secret.result.data.token }}"
+
+- name: Install skooner ingress
+  kubernetes.core.k8s:
+    state: present
+    template: ingress.yml

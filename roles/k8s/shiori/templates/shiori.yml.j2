@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ shiori_name }}"
+  namespace: "{{ homelab_namespace }}"
+  labels:
+    app: shiori
+    name: "{{ shiori_name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+        app: shiori
+        name: "{{ shiori_name }}"
+  template:
+    metadata:
+      labels:
+        app: shiori
+        name: "{{ shiori_name }}"
+    spec:
+      initContainers:
+      containers:
+      - name: shiori
+        image: {{ shiori_image }}:{{ shiori_image_version }}
+        env:
+        - name: "SHIORI_DIR"
+          value: "/data/shiori"
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - mountPath: /data
+          name: fast-storage-data
+          readOnly: false
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      volumes:
+      - name: fast-storage-data
+        persistentVolumeClaim:
+          claimName: "{{ pvc_name }}"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ shiori_name }}-service"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  selector:
+    app: shiori
+    name: "{{ shiori_name }}"
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ shiori_name }}-ingress"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: {{ homelab_shiori_domain_name }}
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ shiori_name }}-service"
+            port:
+              number: 80
