@@ -4,7 +4,6 @@
     content: |
       nameserver 1.1.1.1
       nameserver 8.8.8.8
-      nameserver 8.8.4.4
     dest: /etc/resolv.dnsmasq
 
 - name: create hosts file
@@ -35,11 +34,11 @@
       192.168.1.2 grafana.homelab.uknth.me prometheus.homelab.uknth.me 
       192.168.1.2 proxmox.homelab.uknth.me portainer.homelab.uknth.me
 
-      192.168.1.11 k8s-hero-1.homelab.uknth.me
+      192.168.1.3 k8s-hero-1.homelab.uknth.me
 
       # Kubernetes
-      100.89.95.80 skooner.homelab.uknth.me
-      192.168.1.2 skooner.homelab.uknth.me
+      100.89.95.80 skooner.homelab.uknth.me {{ homelab_shiori_domain_name }}
+      192.168.1.2 skooner.homelab.uknth.me {{ homelab_shiori_domain_name }}
 
     dest: /etc/hosts
 

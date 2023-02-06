@@ -10,8 +10,24 @@
     - role: network/samba
       tags: ["network", "samba"]
 
-    - role: system/microk8s 
-      tags: ["system", "microk8s", "kubernetes"] 
+    # - role: system/microk8s 
+    #   tags: ["system", "microk8s", "kubernetes"] 
 
-    - role: ui/k8s/dashboard
-      tags: ["k8s", "k8s-dashboard"]
+    - role: system/k3s
+      tags: ["system", "k3s", "kubernetes"] 
+
+    - role: system/helm
+      tags: ["system", "helm", "helm-installer"]
+
+    - role: k8s/dashboard
+      tags: ["k8s", "k8s-dashboard", "skooner"]
+
+    # K8s Roles
+    - role: k8s/samba
+      tags: ["k8s", "samba","k8s-samba" ,"k8s-config", "k8s-samba-csi"]
+    
+    - role: k8s/shiori
+      tags: ["k8s", "shiori", "k8s-app"]
+    
+    - role: k8s/postgresql
+      tags: ["k8s", "postgresql", "k8s-app", "k8s-postgresql"]
