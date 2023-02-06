@@ -1,0 +1,53 @@
+- name: Ensure pyyaml is already installed
+  become: true
+  ansible.builtin.pip:
+    name:
+      - pyyaml
+    state: present
+    executable: pip3
+
+- name: Ensure `cifs-utils` is already installed
+  become: true
+  ansible.builtin.apt:
+    pkg:
+      - "cifs-utils"
+    state: present
+
+- name: Check if helm is installed
+  command: which helm
+  changed_when: false
+  failed_when: helm_installed.rc not in [0,1]
+  register: helm_installed
+
+- name: Return fail if it is not installed
+  fail:
+    msg: "helm is not installed, install first"
+  when: helm_installed.rc not in [ 0 ]
+
+- name: Add a csi-driver-smb repository
+  kubernetes.core.helm_repository:
+    name: csi-driver-smb
+    repo_url: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/master/charts
+
+- name: Deploy CSI Driver for Samba
+  kubernetes.core.helm:
+    name: csi-driver-smb
+    chart_ref: csi-driver-smb/csi-driver-smb
+    release_namespace: kube-system
+    chart_version: v1.9.0
+
+- name: "Create namespace if it doesn't exist"
+  kubernetes.core.k8s:
+    name: "{{ homelab_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Create Secret
+  kubernetes.core.k8s:
+    state: present
+    template: "fast-storage.yml.j2"
+
+- name: waiting for 5 mins for deployment to stabilise
+  ansible.builtin.pause:
+    minutes: 3

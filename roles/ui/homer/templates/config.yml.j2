@@ -52,21 +52,16 @@ services:
   - name: "Media"
     icon: "fas fa-film"
     items:
-      - name: "Photoprism"
-        logo: "assets/tools/photoprism.svg"
-        subtitle: "Photo storage at home"
-        url: "http://{{ ansible_hostname }}.{{ domain_name }}:2342"
+      - name: "Shiori"
+        logo: "assets/tools/shiori.png"
+        subtitle: "Bookmark Manager"
+        url: "https://shiori.{{ domain_name }}"
         target: "_blank"
+
 
   - name: "Networking & Storage"
     icon: "fas fa-folder"
     items:
-      - name: "Transmission"
-        logo: "assets/tools/transmission.svg"
-        subtitle: "Bittorrent client"
-        url: "http://{{ ansible_hostname }}.{{ domain_name }}:9091"
-        target: "_blank"
-
       - name: "Tailscale"
         logo: "assets/tools/tailscale.png"
         subtitle: "WireGuard-based VPN"

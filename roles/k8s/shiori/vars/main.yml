@@ -1,0 +1,8 @@
+shiori_name: homelab-shiori
+shiori_image: ghcr.io/go-shiori/shiori
+shiori_image_version: v1.5.4
+
+pv_name: "smb.fast-storage.shiori.pv"
+storage_capacity: 400Gi
+pvc_name: "smb.fast-storage.shiori.pvc"
+smb_storage_host: "hero-1.homelab.uknth.me"

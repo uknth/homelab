@@ -1,0 +1,17 @@
+auth:
+  enablePostgresUser: true
+  postgresPassword: "som3thing#in#th3#way"
+
+primary:
+  persistence:
+    existingClaim: "{{ pvc_name }}"
+    subPath: "postgresql"
+  livenessProbe:
+    initialDelaySeconds: 120
+
+readReplicas:
+  persistence:
+    existingClaim: "{{ pvc_name }}"
+    subPath: "postgresql"
+  livenessProbe:
+    initialDelaySeconds: 120
