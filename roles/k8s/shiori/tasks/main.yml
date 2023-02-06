@@ -1,0 +1,9 @@
+- name: Setup PV & PVC
+  kubernetes.core.k8s:
+    state: present
+    template: "fast-storage.yaml.j2"
+
+- name: Install shiori for Bookmarks Management
+  kubernetes.core.k8s:
+    state: present
+    template: "shiori.yml.j2"

@@ -16,3 +16,12 @@ domain_name: homelab.uknth.me
 cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
 ansible_ssh_public_key: "{{ vault_ansible_ssh_public_key }}"
 sudo_password: "{{ vault_sudo_password }}"
+
+# Homelab Config
+
+# Common
+homelab_namespace: homelab
+homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"
+
+# Shiori
+homelab_shiori_domain_name: "shiori.homelab.uknth.me"

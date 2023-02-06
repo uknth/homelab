@@ -1,0 +1,12 @@
+- name: Download fast installer script for Helm
+  command: |
+    curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+
+- name: Change permission for Helm script
+  command: |
+    chmod 700 get_helm.sh
+
+- name: Execute helm installer script
+  become: true
+  command: |
+    ./get_helm.sh
