@@ -15,6 +15,7 @@
       127.0.0.1 localhost
       127.0.0.1 {{ inventory_hostname }}
       127.0.0.1 {{ ansible_hostname }}
+      127.0.0.1 sidekick-1.homelab
 
       ::1     ip6-localhost ip6-loopback
       fe00::0 ip6-localnet
@@ -51,7 +52,7 @@
 
 - name: execute dnsmasq role
   become: true
-  when: dnsmasq_command_result.rc == 1
+  # when: dnsmasq_command_result.rc == 1
   ansible.builtin.import_role:
     name: dnsmasq
   vars:
@@ -59,13 +60,11 @@
     # TODO: take the config for `listen-address` from config & tailscale command
     dnsmasq_dnsmasq_conf:
       - |
-        port=53
-        domain-needed
+        port=54
         bogus-priv
         strict-order
         bind-dynamic
         localise-queries
-        listen-address=0.0.0.0
         listen-address=127.0.0.1
         listen-address=192.168.1.2
         listen-address=100.89.95.80
@@ -73,6 +72,6 @@
     dnsmasq_dnsmasq_d_files_present:
       cache:
         - |
-          cache-size=100000
+          cache-size=10000
           min-cache-ttl=600
           no-poll

@@ -49,6 +49,10 @@ scrape_configs:
   - job_name: 'node'
     static_configs:
       - targets: {{ prometheus_node_exporter_targets | to_yaml }}
+    
+  - job_name: 'blocky'
+    static_configs:
+      - targets: {{ prometheus_dns_exporter_targets | to_yaml }}
 
 {% filter indent(width=2,first=True) %}
 {{ prometheus_extra_scrape_configs }}

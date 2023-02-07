@@ -5,6 +5,7 @@
     delete: false
     recursive: true
     perms: false
+  notify: Restart internet-monitoring
   become: false
 
 - name: Copy templated internet-monitoring files into place.

@@ -25,3 +25,6 @@ prometheus_node_exporter_targets:
   - "hero-1.homelab.uknth.me:9100"
 prometheus_extra_scrape_configs: ""
 prometheus_tsdb_retention_time: 30d
+
+prometheus_dns_exporter_targets:
+  - "sidekick-1.homelab.uknth.me:4000"

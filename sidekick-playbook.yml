@@ -10,8 +10,11 @@
     - role: network/tailscale
       tags: ["network", "tailscale"]
 
-    - role: network/dnsmasq
-      tags: ["network", "dnsmasq"]
+    # - role: network/dnsmasq
+    #   tags: ["network", "dns", "dnsmasq"]
+
+    - role: network/blocky
+      tags: ["network", "dns", "blocky"]
 
     - role: monitor/prometheus-grafana-docker
       tags: ["docker", "container", "monitoring", "prometheus", "grafana"]
