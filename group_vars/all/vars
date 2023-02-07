@@ -22,6 +22,8 @@ sudo_password: "{{ vault_sudo_password }}"
 # Common
 homelab_namespace: homelab
 homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"
+homelab_smb_nas_secret: "homelab.smb.nas.cred"
 
 # Shiori
 homelab_shiori_domain_name: "shiori.homelab.uknth.me"
+homelab_jellyfin_domain_name: "jellyfin.homelab.uknth.me"

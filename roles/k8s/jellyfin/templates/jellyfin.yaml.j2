@@ -1,0 +1,86 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ jellyfin_name }}"
+  namespace: "{{ homelab_namespace }}"
+  labels:
+    app: jellyfin
+    name: "{{ jellyfin_name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+        app: jellyfin
+        name: "{{ jellyfin_name }}"
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+        name: "{{ jellyfin_name }}"
+    spec:
+      initContainers:
+      containers:
+      - name: jellyfin
+        image: {{ jellyfin_image }}:{{ jellyfin_image_version }}
+        env:
+        - name: "JELLYFIN_CACHE_DIR"
+          value: "/fast/jellyfin/cache"
+        - name: "JELLYFIN_CONFIG_DIR"
+          value: "/fast/jellyfin/config"
+        - name: "JELLYFIN_DATA_DIR"
+          value: "/fast/jellyfin/data"
+        - name: "JELLYFIN_LOG_DIR"
+          value: "/fast/jellyfin/log"
+        - name: "JELLYFIN_PublishedServerUrl"
+          value: "{{ homelab_jellyfin_domain_name }}"
+        ports:
+        - containerPort: 8096
+        volumeMounts:
+        - mountPath: /fast
+          name: fast-storage-data
+          readOnly: false
+        - mountPath: /media
+          name: nas-storage
+          readOnly: false
+      volumes:
+      - name: fast-storage-data
+        persistentVolumeClaim:
+          claimName: "{{ fast_pvc_name }}"
+      - name: nas-storage
+        persistentVolumeClaim:
+          claimName: "{{ nas_pvc_name }}"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ jellyfin_name }}-service"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  selector:
+    app: jellyfin
+    name: "{{ jellyfin_name }}"
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8096
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ jellyfin_name }}-ingress"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: {{ homelab_jellyfin_domain_name }}
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ jellyfin_name }}-service"
+            port:
+              number: 80

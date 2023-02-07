@@ -29,5 +29,5 @@
     - role: k8s/shiori
       tags: ["k8s", "shiori", "k8s-app"]
     
-    - role: k8s/postgresql
-      tags: ["k8s", "postgresql", "k8s-app", "k8s-postgresql"]
+    - role: k8s/jellyfin
+      tags: ["k8s", "jellyfin", "k8s-app"]
