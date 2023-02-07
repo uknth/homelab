@@ -1,8 +1,0 @@
-pinry_name: homelab-pinry
-pinry_image: getpinry/pinry
-pinry_version: 2.1.12
-
-pv_name: "smb.fast-storage.pinry.pv"
-storage_capacity: 400Gi
-pvc_name: "smb.fast-storage.pinry.pvc"
-smb_storage_host: "hero-1.homelab.uknth.me"

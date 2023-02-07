@@ -1,0 +1,41 @@
+- name: Synchronize blocky directory.
+  ansible.posix.synchronize:
+    src: files/blocky
+    dest: "{{ config_dir }}/"
+    delete: false
+    recursive: true
+    perms: false
+  become: false
+
+- name: Copy templated blocky files into place.
+  ansible.builtin.template:
+    src: templates/{{ item.src }}
+    dest: "{{ config_dir }}/blocky/{{ item.dest }}"
+    mode: 0644
+  loop:
+    - src: docker-compose.yml.j2
+      dest: docker-compose.yml
+    - src: config.yml.j2
+      dest: config/config.yml
+  notify: Restart blocky
+  become: false
+
+- name: Replace string in resolve file
+  become: true
+  replace:
+    path: "/etc/resolv.conf"
+    regexp: "127.0.0.53"
+    replace: "127.0.0.1"
+
+- name: Ensure 'systemd-resolved' is not runnning
+  become: true
+  ansible.builtin.systemd:
+    state: stopped
+    enabled: false
+    name: systemd-resolved
+
+- name: Ensure blocky-compose is running
+  community.docker.docker_compose:
+    project_src: "{{ config_dir }}/blocky/"
+    build: false
+  become: false

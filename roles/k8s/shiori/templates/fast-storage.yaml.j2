@@ -24,7 +24,7 @@ spec:
     readOnly: false
     # volumeHandle format: {smb-server-address}#{sub-dir-name}#{share-name}
     # make sure this value is unique for every share in the cluster
-    volumeHandle: {{ smb_storage_host }}/fast-storage##
+    volumeHandle: {{ smb_storage_host }}/fast-storage/shiori##
     volumeAttributes:
       source: "//{{ smb_storage_host }}/fast-storage"
     nodeStageSecretRef:

@@ -8,3 +8,13 @@ metadata:
   name: {{ homelab_smb_fast_storage_secret }} 
   namespace: {{ homelab_namespace }}
   
+---
+apiVersion: v1
+data:
+  password: c29tM3RoaW5nI2luI3RoMyN3YXk=
+  username: aG9tZWxhYi11c2Vy
+kind: Secret
+metadata:
+  name: {{ homelab_smb_nas_secret }}
+  namespace: {{ homelab_namespace }}
+type: Opaque
