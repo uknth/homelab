@@ -1,0 +1,4 @@
+pv_name: "smb.nas-storage.jellyfin.video.pv"
+storage_capacity: 200Gi
+pvc_name: "smb.nas-storage.jellyfin.video.pvc"
+smb_storage_host: "hero-1.homelab.uknth.me"
