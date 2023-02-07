@@ -3,7 +3,7 @@
 # Source: https://github.com/lento234/homelab/blob/main/roles/containers/server/homer/templates/config.yml.j2 
 
 title: "Homelab"
-subtitle: "homelab.uknth.me"
+subtitle: "{{ domain_name }}"
 logo: "assets/tools/homer.svg"
 
 header: true
@@ -58,9 +58,16 @@ services:
         url: "https://shiori.{{ domain_name }}"
         target: "_blank"
 
+      - name: "Jellyfin"
+        logo: "assets/tools/jellyfin.svg"
+        subtitle: "Local Media Streaming"
+        url: "https://jellyfin.{{ domain_name }}"
+        target: "_blank"
+
+
 
   - name: "Networking & Storage"
-    icon: "fas fa-folder"
+    icon: "fas fa-network-wired"
     items:
       - name: "Tailscale"
         logo: "assets/tools/tailscale.png"
@@ -72,19 +79,19 @@ services:
       - name: "DNS Hole (Blocky)"
         logo: "assets/tools/blocky.svg"
         subtitle: "Ad Blocker using DNS"
-        url: "https://blocky.homelab.uknth.me"
+        url: "https://blocky.{{ domain_name }}"
         target: "_blank"
 
       - name: "Multi WAN Load Balancer"
         logo: "assets/tools/cisco.svg"
         subtitle: "Internet Gateway, Load Balancer"
-        url: "https://router-1.homelab.uknth.me"
+        url: "https://router-1.{{ domain_name }}"
         target: "_blank"
 
       - name: "Synolog NAS"
         logo: "assets/tools/synology.svg"
         subtitle: "NAS, Synology"
-        url: "https://nas.homelab.uknth.me"
+        url: "https://nas.{{ domain_name }}"
         target: "_blank"
 
   - name: "Monitoring"
@@ -102,13 +109,7 @@ services:
         url: "https://prometheus.{{ domain_name }}"
         target: "_blank"
 
-      - name: "Portainer"
-        logo: "assets/tools/portainer.svg"
-        subtitle: "Container Monitoring & Management"
-        url: "https://portainer.{{ domain_name }}"
-        target: "_blank"
-
-  - name: "Kubernetes"
+  - name: "Management"
     icon: "fas fa-cogs"
     items:
       - name: "Skooner"
@@ -116,3 +117,10 @@ services:
         url: "https://skooner.{{ domain_name }}"
         subtitle: "Visualisation of K3s Cluster"
         target: "_blank"
+
+      - name: "Portainer"
+        logo: "assets/tools/portainer.svg"
+        subtitle: "Container Monitoring & Management"
+        url: "https://portainer.{{ domain_name }}"
+        target: "_blank"
+

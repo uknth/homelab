@@ -1,4 +1,0 @@
-pv_name: "smb.fast-storage.postgre.pv"
-storage_capacity: 400Gi
-pvc_name: "smb.fast-storage.postgre.pvc"
-smb_storage_host: "hero-1.homelab.uknth.me"

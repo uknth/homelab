@@ -1,4 +1,13 @@
-pv_name: "smb.nas-storage.jellyfin.video.pv"
-storage_capacity: 200Gi
-pvc_name: "smb.nas-storage.jellyfin.video.pvc"
-smb_storage_host: "hero-1.homelab.uknth.me"
+fast_pv_name: "smb.fast-storage.jellyfin.pv"
+fast_storage_capacity: 200Gi
+fast_pvc_name: "smb.fast-storage.jellyfin.pvc" # for different directories of Jellyfin
+fast_storage_host: "hero-1.homelab.uknth.me"
+
+nas_pv_name: "smb.nas.jellyfin.video.pv"
+nas_pvc_name: "smb.nas.jellyfin.video.pvc"
+nas_storage_capacity: 500Gi
+nas_storage_host: "nas-1.homelab.uknth.me"
+
+jellyfin_name: "homelab-jellyfin"
+jellyfin_image: "jellyfin/jellyfin"
+jellyfin_image_version: "10.8.9"
