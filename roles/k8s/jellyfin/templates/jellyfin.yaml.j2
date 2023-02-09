@@ -84,3 +84,23 @@ spec:
             name: "{{ jellyfin_name }}-service"
             port:
               number: 80
+
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ jellyfin_name }}-ingress-infra"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: "jf.homelab.hero"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ jellyfin_name }}-service"
+            port:
+              number: 80
