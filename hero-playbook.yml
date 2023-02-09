@@ -31,3 +31,6 @@
     
     - role: k8s/jellyfin
       tags: ["k8s", "jellyfin", "k8s-app"]
+
+    - role: k8s/navidrome
+      tags: ["k8s", "navidrome", "k8s-app"]
