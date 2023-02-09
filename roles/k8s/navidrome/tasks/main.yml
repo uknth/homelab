@@ -1,0 +1,14 @@
+- name: Set up 'Persistence' for config
+  kubernetes.core.k8s:
+    state: present
+    template: "fast-storage.yaml.j2"
+
+- name: Set up 'Persistence' for Media
+  kubernetes.core.k8s:
+    state: present
+    template: "nas-storage.yaml.j2"
+
+- name: Install 'navidrome' from Docker Image
+  kubernetes.core.k8s:
+    state: present
+    template: "navidrome.yaml.j2"

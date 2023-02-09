@@ -1,0 +1,126 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ navidrome_name }}"
+  namespace: "{{ homelab_namespace }}"
+  labels:
+    app: navidrome
+    name: "{{ navidrome_name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+        app: navidrome
+        name: "{{ navidrome_name }}"
+  template:
+    metadata:
+      labels:
+        app: navidrome
+        name: "{{ navidrome_name }}"
+    spec:
+      initContainers:
+      containers:
+      - name: navidrome
+        image: {{ navidrome_image }}:{{ navidrome_image_version }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: "ND_MUSICFOLDER"
+          value: "/music"
+        - name: "ND_DATAFOLDER"
+          value: "/data/navidrome"
+        - name: "ND_SPOTIFY_ID"
+          value: "c076cf6a14844ff9b6f9c6392863fa46"
+        - name: "ND_SPOTIFY_SECRET"
+          value: "{{ nd_spotify_secret }}"
+        ports:
+        - containerPort: 4533
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /data
+          name: fast-storage
+          readOnly: false
+        - mountPath: /music
+          name: nas-storage
+          readOnly: false
+      volumes:
+      - name: fast-storage
+        persistentVolumeClaim:
+          claimName: "{{ fast_pvc_name }}"
+      - name: nas-storage
+        persistentVolumeClaim:
+          claimName: "{{ nas_pvc_name }}"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ navidrome_name }}-service"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  selector:
+    app: navidrome
+    name: "{{ navidrome_name }}"
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 4533
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ navidrome_name }}-ingress"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: {{ homelab_navidrome_domain_name }}
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ navidrome_name }}-service"
+            port:
+              number: 80
+
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ navidrome_name }}-ingress-infra"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: "music.homelab.hero"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ navidrome_name }}-service"
+            port:
+              number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ navidrome_name }}-ingress-alt"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: "music.homelab.uknth.me"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ navidrome_name }}-service"
+            port:
+              number: 80
