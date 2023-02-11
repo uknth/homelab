@@ -1,0 +1,135 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ transmission_name }}"
+  namespace: "{{ homelab_namespace }}"
+  labels:
+    app: transmission
+    name: "{{ transmission_name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+        app: transmission
+        name: "{{ transmission_name }}"
+  template:
+    metadata:
+      labels:
+        app: transmission
+        name: "{{ transmission_name }}"
+    spec:
+      initContainers:
+      - name: "write-config"
+        image: busybox:latest
+        command: ["sh", "-c", "cat /cm/settings.json > /config/settings.json"]
+        volumeMounts:
+        - mountPath: /cm
+          name: config-with-cm
+          readOnly: false
+        - mountPath: /config
+          name: fast-storage-config
+          readOnly: false
+      containers:
+      - name: transmission
+        image: {{ transmission_image }}:{{ transmission_image_version }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: "TZ"
+          value: "{{ timezone }}"
+        - name: "PUID"
+          value: "1000"
+        - name: "PGID"
+          value: "1000"
+        - name: "USER"
+          value: "uknth"
+        - name: "PASS"
+          value: "{{ transmission_password }}"
+        ports:
+        - name: "web-ui"
+          containerPort: 9091
+        - name: "torrent-tcp"
+          containerPort: 51413
+          protocol: TCP
+        - name: "torrent-udp"
+          containerPort: 51413
+          protocol: UDP
+        volumeMounts:
+        - mountPath: /config
+          name: fast-storage-config
+          readOnly: false
+        - mountPath: /data
+          name: fast-storage
+          readOnly: false
+        - mountPath: /complete
+          name: nas-storage
+          readOnly: false
+      volumes:
+      - name: fast-storage
+        persistentVolumeClaim:
+          claimName: "{{ fast_pvc_name }}"
+      - name: fast-storage-config
+        persistentVolumeClaim:
+          claimName: "{{ fast_config_pvc_name }}"
+      - name: nas-storage
+        persistentVolumeClaim:
+          claimName: "{{ nas_pvc_name }}"
+      - name: config-with-cm
+        configMap:
+          name: transmission-config
+          items:
+            - key: config
+              path: settings.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ transmission_name }}-service"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  selector:
+    app: transmission
+    name: "{{ transmission_name }}"
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 9091
+      name: "web-ui"
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ transmission_name }}-ingress"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: {{ homelab_transmission_domain_name }}
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ transmission_name }}-service"
+            port:
+              number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ transmission_name }}-ingress-alt"
+  namespace: "{{ homelab_namespace }}"
+spec:
+  rules:
+  - host: "transmission.homelab.hero"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: "{{ transmission_name }}-service"
+            port:
+              number: 80
