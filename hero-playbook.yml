@@ -34,3 +34,6 @@
 
     - role: k8s/navidrome
       tags: ["k8s", "navidrome", "k8s-app"]
+
+    - role: k8s/media-stack/transmission
+      tags: ["k8s", "media-stack", "transmission", "k8s-app"]
