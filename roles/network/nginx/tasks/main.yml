@@ -117,7 +117,7 @@
           ssl_ciphers         HIGH:!aNULL:!MD5;
 
       - listen: "443 ssl"
-        server_name: "{{ homelab_blackcandy_domain_name }}"
+        server_name: "{{ homelab_navidrome_domain_name }}"
         extra_parameters: |
           location / {
             proxy_pass http://hero-1.homelab.uknth.me:80/;

@@ -1,0 +1,16 @@
+fast_pv_name: "smb.fast-storage.transmission.pv"
+fast_storage_capacity: 200Gi
+fast_pvc_name: "smb.fast-storage.transmission.pvc" 
+
+nas_pv_name: "smb.nas.transmission.downloads.pv"
+nas_pvc_name: "smb.nas.transmission.downloads.pvc"
+nas_storage_capacity: 500Gi
+nas_storage_host: "nas-1.homelab.uknth.me"
+
+transmission_name: "homelab-transmission"
+transmission_image: "lscr.io/linuxserver/transmission"
+transmission_image_version: "4.0.0"
+
+fast_config_pv_name: "smb.fast-storage.transmission.config.pv"
+fast_config_storage_capacity: 200Gi
+fast_config_pvc_name: "smb.fast-storage.transmission.config.pvc" 
