@@ -1,0 +1,5 @@
+- name: Setup Golang on Server
+  ansible.builtin.import_role:
+    name: gantsign.golang
+  vars:
+    golang_version: "1.20.5"
