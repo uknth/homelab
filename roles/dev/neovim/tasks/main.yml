@@ -1,0 +1,4 @@
+- name: Setup Neovim
+  become: true
+  ansible.builtin.import_role:
+    name: gikeymarcia.neovim

@@ -1,0 +1,17 @@
+- name: Workstation Playbook for 'workstation' hosts
+  hosts: workstation
+  roles:
+    - role: system/docker
+      tags: ["docker"]
+
+    - role: network/tailscale
+      tags: ["network", "tailscale"]
+
+    - role: dev/go
+      tags: ["dev", "golang", "go"]
+
+    - role: dev/sdkman
+      tags: ["dev", "sdkman", "java"]
+
+    - role: dev/neovim
+      tags: ["dev", "neovim"]
