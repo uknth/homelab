@@ -23,6 +23,7 @@ prometheus_monitor_prometheus: false
 prometheus_node_exporter_targets:
   - "sidekick-1.homelab.uknth.me:9100"
   - "hero-1.homelab.uknth.me:9100"
+  - "workstation-1.homelab.uknth.me:9100"
 prometheus_extra_scrape_configs: ""
 prometheus_tsdb_retention_time: 30d
 
