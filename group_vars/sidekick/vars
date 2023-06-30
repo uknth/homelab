@@ -1,2 +1,0 @@
-portainer_admin_password: "{{ vault_portainer_admin_password }}"
-docker_dir: /home/ansible/docker_dir

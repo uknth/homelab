@@ -7,6 +7,12 @@
     - role: network/tailscale
       tags: ["network", "tailscale"]
 
+    - role: system/portainer
+      tags: ["docker", "container", "portainer"]
+
+    - role: monitor/node_exporter
+      tags: ["monitor", "prometheus", "node_exporter"]
+
     - role: dev/go
       tags: ["dev", "golang", "go"]
 

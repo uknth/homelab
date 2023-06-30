@@ -18,6 +18,8 @@ ansible_ssh_public_key: "{{ vault_ansible_ssh_public_key }}"
 sudo_password: "{{ vault_sudo_password }}"
 nd_spotify_secret: "{{ vault_nd_spotify_secret }}"
 transmission_password: "{{ vault_transmission_password }}"
+portainer_admin_password: "{{ vault_portainer_admin_password }}"
+docker_dir: /home/ansible/docker_dir
 
 # Homelab Config
 
