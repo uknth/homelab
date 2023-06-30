@@ -1,0 +1,52 @@
+- name: Clone hound repository
+  ansible.builtin.git:
+    repo: "https://github.com/hound-search/hound.git"
+    dest: "/home/{{ansible_user}}/checkout/hound"
+    clone: yes
+    update: yes
+
+- name: Ensure make is installed
+  become: true
+  ansible.builtin.apt:
+    name:
+      - make
+    state: present
+
+- name: Build hound & houndd binaries
+  ansible.builtin.command:
+    cmd: bash -ilc 'make'
+    chdir: "/home/{{ansible_user}}/checkout/hound"
+
+- name: Copy binaries to /usr/local/bin
+  copy: remote_src=True src="/home/{{ansible_user}}/checkout/hound/.build/bin/{{ item }}" dest="/usr/local/bin/{{item}}" mode=755
+  become: true
+  with_items:
+    - hound
+    - houndd
+
+- name: Create hound data dir in {{ hound_data_dir }}
+  become: true
+  file:
+    dest: "{{ hound_data_dir }}"
+    state: directory
+    owner: "{{ hound_user }}"
+    group: "{{ hound_user }}"
+
+- name: Write hound config.
+  become: true
+  copy:
+    content: "{{ hound_config | to_nice_json(indent=2) }}"
+    dest: "{{ hound_data_dir }}/config.json"
+  notify:
+    - restart hound
+
+- name: Write systemd service file
+  template:
+    src: hound.service.j2
+    dest: /etc/systemd/system/hound.service
+    owner: root
+    group: root
+    mode: 0640
+  become: true
+  notify:
+    - restart hound

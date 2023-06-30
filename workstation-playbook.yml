@@ -19,5 +19,11 @@
     - role: dev/sdkman
       tags: ["dev", "sdkman", "java"]
 
+    - role: dev/node
+      tags: ["dev", "node"]
+
     - role: dev/neovim
       tags: ["dev", "neovim"]
+
+    - role: dev/hound
+      tags: ["dev", "hound"]
