@@ -6,3 +6,6 @@
 
 - name: Hero plays for 'hero' hosts
   ansible.builtin.import_playbook: hero-playbook.yml
+
+- name: Workstation plays for 'workstation' hosts
+  ansible.builtin.import_playbook: workstation-playbook.yml

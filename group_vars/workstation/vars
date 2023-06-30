@@ -1,0 +1,47 @@
+hound_user: uknth
+hound_config:
+  max-concurrent-indexers: 4
+  dbpath: data
+  repos:
+    homelab:
+      url: git@github.com:uknth/homelab.git
+    dotfiles:
+      url: git@github.com:uknth/dotfiles.git
+    albus:
+      url: git@github.com:unbxd/albus.git
+    asterix:
+      url: git@github.com:unbxd/asterix.git
+    banshee:
+      url: git@github.com:unbxd/banshee.git
+    blackpearl:
+      url: git@github.com:unbxd/blackpearl.git
+    cube:
+      url: git@github.com:unbxd/cube.git
+    ether:
+      url: git@github.com:unbxd/ether.git
+    hagrid:
+      url: git@github.com:unbxd/hagrid.git
+    mozart:
+      url: git@github.com:unbxd/mozart.git
+    nats-bridge:
+      url: git@github.com:unbxd/nats-bridge.git
+    odin:
+      url: git@github.com:unbxd/odin.git
+    overpass:
+      url: git@github.com:unbxd/overpass.git
+    qpl:
+      url: git@github.com:unbxd/qpl.git
+    search-brewer:
+      url: git@github.com:unbxd/search-brewer.git
+    solr-zero:
+      url: git@github.com:unbxd/solr-zero.git
+    wingman:
+      url: git@github.com:unbxd/wingman.git
+    go-base:
+      url: git@github.com:unbxd/go-base.git
+    groot:
+      url: git@github.com:unbxd/groot.git
+    mimir:
+      url: git@github.com:unbxd/mimir.git
+    irene:
+      url: git@github.com:unbxd/irene.git

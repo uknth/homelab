@@ -1,0 +1,4 @@
+- name: Setup node-js
+  become: true
+  ansible.builtin.import_role:
+    name: geerlingguy.nodejs

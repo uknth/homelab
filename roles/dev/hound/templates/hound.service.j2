@@ -1,0 +1,17 @@
+[Unit]
+Description=Hound (Code Search Tool)
+After=syslog.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ hound_user }}
+Group={{ hound_user }}
+WorkingDirectory={{ hound_data_dir }}
+ExecStart=/usr/local/bin/houndd --addr=:{{ hound_port }}
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

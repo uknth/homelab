@@ -15,6 +15,7 @@ roles:
   - name: gantsign.golang
   - name: comcast.sdkman
   - name: gikeymarcia.neovim
+  - name: geerlingguy.nodejs
 collections:
   - community.docker
   - community.general
