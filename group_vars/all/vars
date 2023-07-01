@@ -19,9 +19,9 @@ sudo_password: "{{ vault_sudo_password }}"
 nd_spotify_secret: "{{ vault_nd_spotify_secret }}"
 transmission_password: "{{ vault_transmission_password }}"
 portainer_admin_password: "{{ vault_portainer_admin_password }}"
-docker_dir: /home/ansible/docker_dir
 
 # Homelab Config
+config_dir: "~/.config/homelab"
 
 # Common
 homelab_namespace: homelab
@@ -34,3 +34,5 @@ homelab_jellyfin_domain_name: "jellyfin.homelab.uknth.me"
 homelab_navidrome_domain_name: "navidrome.homelab.uknth.me"
 homelab_transmission_domain_name: "transmission.homelab.uknth.me"
 homelab_hound_domain_name: "hound.homelab.uknth.me"
+homelab_statping_domain_name: "statping.homelab.uknth.me"
+homelab_gotify_domain_name: "gotify.homelab.uknth.me"
