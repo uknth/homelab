@@ -1,0 +1,4 @@
+- name: Restart gotify
+  community.docker.docker_container:
+    name: gotify-homelab
+    restart: yes

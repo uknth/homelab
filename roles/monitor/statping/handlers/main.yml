@@ -1,0 +1,4 @@
+- name: Restart statping
+  community.docker.docker_container:
+    name: statping-homelab
+    restart: yes

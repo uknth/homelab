@@ -1,7 +1,4 @@
 ---
-# Location where configuration files will be stored.
-config_dir: "~"
-
 # Domain names configuration (related services need to be enabled).
 domain_name_enable: false
 domain_name: "homelab.uknth.me"

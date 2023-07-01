@@ -1,0 +1,12 @@
+- name: Make directory for gotify
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/gotify/data
+
+- name: "Start Gotify Docker Image"
+  community.docker.docker_container:
+    name: gotify-homelab
+    image: gotify/server
+    volumes:
+      - "{{ config_dir }}/gotify/data:/app/data"
+    published_ports:
+      - 0.0.0.0:8082:80

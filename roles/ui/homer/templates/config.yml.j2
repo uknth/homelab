@@ -98,7 +98,7 @@ services:
         url: "https://nas.{{ domain_name }}"
         target: "_blank"
 
-  - name: "Monitoring"
+  - name: "Monitoring & Alerting"
     icon: "fas fa-desktop"
     items:
       - name: "Grafana"
@@ -111,6 +111,17 @@ services:
         logo: "assets/tools/prometheus.svg"
         subtitle: "Monitoring Data Source"
         url: "https://prometheus.{{ domain_name }}"
+        target: "_blank"
+
+      - name: "Statping"
+        logo: "assets/tools/statping.png"
+        subtitle: "Endpoint Monitoring of Domains"
+        url: "https://{{ homelab_statping_domain_name }}"
+        target: "_blank"
+      - name: "Gotify"
+        logo: "assets/tools/gotify.svg"
+        subtitle: "Alerting System"
+        url: "https://{{ homelab_gotify_domain_name }}"
         target: "_blank"
 
   - name: "Hero"

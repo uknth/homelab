@@ -5,7 +5,7 @@
       tags: ["docker"]
 
     - role: system/portainer
-      tags: ["docker","container", "portainer"]
+      tags: ["docker", "container", "portainer"]
 
     - role: network/tailscale
       tags: ["network", "tailscale"]
@@ -19,8 +19,14 @@
     - role: monitor/prometheus-grafana-docker
       tags: ["docker", "container", "monitoring", "prometheus", "grafana"]
 
+    - role: monitor/statping
+      tags: ["docker", "container", "monitoring", "statping"]
+
+    - role: alert/gotify
+      tags: ["docker", "container", "alerting", "alert", "gotify"]
+
     - role: ui/homer
       tags: ["docker", "container", "homer"]
-    
+
     - role: network/nginx
       tags: ["network", "nginx"]
