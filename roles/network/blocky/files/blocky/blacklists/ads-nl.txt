@@ -51812,7 +51812,6 @@ clickhere.ru
 clickhereforcellphones.com
 clickhereforfun.org
 clickheretofind.com
-clickhouse.com
 clickhubs.com
 clickhype.com
 clicki.cn
@@ -116003,10 +116002,8 @@ segment-data.zqtk.net
 segment-pixel.invitemedia.com
 segment.a3cloud.net
 segment.api.useinsider.com
-segment.com
 segment.control.kochava.com
 segment.hotstar.com
-segment.io
 segment.prod.bidr.io
 segmentify.com
 segments.adap.tv
@@ -144824,7 +144821,6 @@ www.clickclick.com
 www.clickdealer.com
 www.clickdensity.com
 www.clickedyclick.com
-www.clickhouse.com
 www.clickice.com
 www.clickintext.com
 www.clickiocdn.com
