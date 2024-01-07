@@ -30,3 +30,6 @@
 
     - role: network/nginx
       tags: ["network", "nginx"]
+
+    - role: network/syncthing
+      tags: ["network", "storage", "syncthing"]
