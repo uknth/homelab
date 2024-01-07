@@ -1,0 +1,11 @@
+---
+# handlers file for syncthing
+- name: restart
+  become: true
+  systemd:
+    name: 'syncthing@{{ syncthing_user }}.service'
+    state: restarted
+
+- name: apply sysctl settings
+  become: true
+  command: 'sysctl -p {{ syncthing_sysctl_file }}'

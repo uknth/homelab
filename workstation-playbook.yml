@@ -27,3 +27,6 @@
 
     - role: dev/hound
       tags: ["dev", "hound"]
+      
+    - role: network/syncthing
+      tags: ["network", "storage", "syncthing"]

@@ -1,0 +1,24 @@
+syncthing_user: uknth
+syncthing_flags: --gui-address=0.0.0.0:8384
+
+syncthing_packages:
+  - syncthing
+
+syncthing_key_url: https://syncthing.net/release-key.gpg
+syncthing_key_dest: /etc/apt/trusted.gpg.d/syncthing-release-key.gpg
+syncthing_apt_repository:
+  "deb [signed-by={{ syncthing_key_dest }}] https://apt.syncthing.net/
+  syncthing stable"
+
+# service(s) dependencies
+# example to start syncthing after autofs
+# syncthing_systemd_after: 'autofs.service'
+
+# syncthing_max_user_watches :
+#
+# when defined, tweak /proc/sys/fs/inotify/max_user_watches with the defined
+# value.
+#
+# syncthing_max_user_watches: '65535'
+
+syncthing_sysctl_file: /etc/sysctl.d/99-syncthing.conf
