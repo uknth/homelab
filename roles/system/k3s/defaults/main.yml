@@ -1,5 +1,5 @@
 k3s_server_location: /var/lib/rancher/k3s
-k3s_version: v1.22.3+k3s1
+k3s_version: v1.28.5+k3s1
 systemd_dir: /etc/systemd/system
 master_ip: "{{ ansible_host }}"
 extra_server_args: ""
