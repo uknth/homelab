@@ -4,3 +4,4 @@
     name: artis3n.tailscale
   vars:
     tailscale_authkey: "{{ lookup('env', 'TAILSCALE_KEY') }}"
+    tailscale_args: "--reset"
