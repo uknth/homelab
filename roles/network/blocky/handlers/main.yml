@@ -1,6 +1,6 @@
 - name: Restart blocky
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ config_dir }}/blocky/"
-    build: false
-    restarted: true
+    build: never
+    state: restarted
   become: false

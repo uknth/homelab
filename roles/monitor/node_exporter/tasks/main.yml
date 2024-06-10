@@ -2,3 +2,13 @@
   become: true
   ansible.builtin.import_role:
     name: geerlingguy.node_exporter
+  when: ansible_architecture == "x86_64"
+
+
+- name: install node_exporter
+  become: true
+  ansible.builtin.import_role:
+    name: geerlingguy.node_exporter
+  vars:
+    node_exporter_arch: 'armv7'
+  when: ansible_architecture == "aarch64"

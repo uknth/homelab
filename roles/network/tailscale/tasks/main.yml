@@ -5,3 +5,25 @@
   vars:
     tailscale_authkey: "{{ lookup('env', 'TAILSCALE_KEY') }}"
     tailscale_args: "--reset"
+  when: "'gateway' not in group_names"
+
+
+- name: configure system for route-broadcast
+  become: true
+  ansible.builtin.shell: |
+    echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+    echo 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+    sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
+    firewall-cmd --permanent --add-masquerade
+    exit 0
+  when: "'gateway' in group_names"
+
+- name: setup tailscale network
+  become: true
+  ansible.builtin.import_role:
+    name: artis3n.tailscale
+  vars:
+    tailscale_authkey: "{{ lookup('env', 'TAILSCALE_KEY') }}"
+    tailscale_args: "--reset --advertise-routes=10.0.2.0/24"
+  when: "'gateway' in group_names"
+ 
