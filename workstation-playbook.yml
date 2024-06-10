@@ -4,9 +4,6 @@
     - role: system/docker
       tags: ["docker"]
 
-    - role: network/tailscale
-      tags: ["network", "tailscale"]
-
     - role: system/portainer
       tags: ["docker", "container", "portainer"]
 

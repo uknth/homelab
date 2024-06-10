@@ -33,9 +33,11 @@
     state: stopped
     enabled: false
     name: systemd-resolved
+  when: 
+    - ansible_facts['os_family'] == 'Ubuntu'
 
 - name: Ensure blocky-compose is running
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ config_dir }}/blocky/"
-    build: false
+    build: never
   become: false

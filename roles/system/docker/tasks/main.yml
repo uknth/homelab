@@ -20,7 +20,7 @@
     mode: "755"
   when: docker_command_result.rc == 1
 
-- name: shell script to write keyring
+- name: shell script to write keyring - ubuntu
   become: true
   ansible.builtin.shell: |
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
@@ -29,7 +29,23 @@
       "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
       $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
     exit 0
-  when: docker_command_result.rc == 1
+  when: 
+    - docker_command_result.rc == 1 
+    - ansible_facts['os_family'] == 'Ubuntu'
+
+- name: shell script to write keyring - debian
+  become: true
+  ansible.builtin.shell: |
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+      tee /etc/apt/sources.list.d/docker.list > /dev/nullk
+    exit 0
+  when: 
+    - docker_command_result.rc == 1 
+    - ansible_facts['os_family'] == 'Debian'
 
 - name: install docker using apt
   become: true
@@ -62,17 +78,11 @@
       - libssl-dev
       - python3-dev
       - python3-pip
+      - python3-docker
       - git
       - rsync
     state: present
   when: ansible_facts.os_family == "Debian"
-
-- name: Install Docker Compose using Pip.
-  become: true
-  ansible.builtin.pip:
-    name: docker-compose
-    state: present
-    executable: pip3
 
 - name: "Ensure user is added to the docker group: {{ ansible_user }}"
   become: true
