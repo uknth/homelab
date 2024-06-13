@@ -38,7 +38,6 @@
         server_name: "homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://pie-2.homelab.uknth.me:8080/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -50,7 +49,6 @@
         server_name: "grafana.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://sidekick-1.homelab.uknth.me:3030/;
             proxy_set_header Host $http_host;
           }
@@ -63,7 +61,6 @@
         server_name: "prometheus.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://sidekick-1.homelab.uknth.me:9090/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -75,7 +72,6 @@
         server_name: "portainer.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://sidekick-1.homelab.uknth.me:9000/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -87,7 +83,6 @@
         server_name: "skooner.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://hero-1.homelab.uknth.me:80/;
             proxy_set_header Host $http_host;
           }
@@ -100,7 +95,6 @@
         server_name: "{{ homelab_shiori_domain_name }}"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://hero-1.homelab.uknth.me:80/;
             proxy_set_header Host $http_host;
           }
@@ -113,7 +107,6 @@
         server_name: "blocky.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://pie-2.homelab.uknth.me:4000/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -125,7 +118,6 @@
         server_name: "nas.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://nas-1.homelab.uknth.me:5000/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -137,7 +129,6 @@
         server_name: "{{ homelab_jellyfin_domain_name }}"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://hero-1.homelab.uknth.me:80/;
             proxy_set_header Host $http_host;
           }
@@ -150,7 +141,6 @@
         server_name: "{{ homelab_navidrome_domain_name }}"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://hero-1.homelab.uknth.me:80/;
             proxy_set_header Host $http_host;
           }
@@ -163,7 +153,6 @@
         server_name: "music.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://hero-1.homelab.uknth.me:80/;
             proxy_set_header Host $http_host;
           }
@@ -175,7 +164,6 @@
         server_name: "portainer-workstation.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://workstation-1.homelab.uknth.me:9000/;
             proxy_set_header Host $http_host;
           }
@@ -188,7 +176,6 @@
         server_name: "{{ homelab_hound_domain_name }}"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://workstation-1.homelab.uknth.me:8301/;
             proxy_set_header Host $http_host;
           }
@@ -201,7 +188,6 @@
         server_name: "{{ homelab_statping_domain_name }}"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://sidekick-1.homelab.uknth.me:8081/;
             proxy_set_header Host $http_host;
           }
@@ -214,7 +200,6 @@
         server_name: "{{ homelab_gotify_domain_name }}"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://sidekick-1.homelab.uknth.me:8082/;
             proxy_set_header Host $http_host;
           }
@@ -227,7 +212,6 @@
         server_name: "pi-hole.homelab.uknth.me"
         extra_parameters: |
           location / {
-            resolver 127.0.0.1 valid=30s;
             proxy_pass http://pie-1.homelab.uknth.me:80/;
             proxy_set_header Host $http_host;
           }
