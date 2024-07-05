@@ -1,0 +1,4 @@
+samba_user: samba-user
+samba_user_password: "some-samba-password"
+samba_share_root: "/tmp/databank"
+samba_share_name: "slow-storage"

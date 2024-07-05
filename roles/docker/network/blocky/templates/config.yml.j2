@@ -12,27 +12,22 @@ upstream:
     - 10.0.2.7
 upstreamTimeout: 2s
 
-# conditional:
-#   fallbackUpstream: false
-#   rewrite:
-#     homelab.uknth.me: sidekick-1.homelab
-#   mapping:
-#     sidekick-1.homelab: 127.0.0.1:54
-
 bootstrapDns: tcp+udp:1.1.1.1
 
 # Caching Related Config
 caching:
-  minTime: 1m
-  maxTime: 5m
-  maxItemsCount: 1000
-  prefetching: false
+  minTime: 10m
+  maxTime: 30m
+  maxItemsCount: 10000
+  prefetching: true
   prefetchExpires: 3h
   prefetchThreshold: 5
-  prefetchMaxItemsCount: 5000
+  prefetchMaxItemsCount: 10000
   cacheTimeNegative: 3m
 
 # Blocking Related Config
+# We aren't doing any blocking here, it is handled by upstream dns server
+# running on pie-1.infra
 blocking:
   blackLists:
     ads: []
@@ -49,6 +44,7 @@ blocking:
   downloadCooldown: 30s
   startStrategy: failOnError
 
+
 # optional: custom IP address(es) for domain name (with all sub-domains). Multiple addresses must be separated by a comma
 # example: query "printer.lan" or "my.printer.lan" will return 192.168.178.3
 customDNS:
@@ -59,23 +55,11 @@ customDNS:
   # optional: replace domain in the query with other domain before resolver lookup in the mapping
 
   rewrite:
-
-    router-1.infra: router-1.homelab.uknth.me
-    pie-2.infra: pie-2.homelab.uknth.me
-    nas-1.infra: nas-1.homelab.uknth.me
-    sidekick-1.infra: sidekick-1.homelab.uknth.me
-    workstation-1.infra: workstation-1.homelab.uknth.me
-    hero-1.infra: hero-1.homelab.uknth.me
-    pie-1.infra: pie-1.homelab.uknth.me
-    infra: homelab.uknth.me
-
+    homelab.uknth.me: infra
   mapping:
-    router-1.homelab.uknth.me: 10.0.2.1
-    pie-2.homelab.uknth.me: 10.0.2.2
-    nas-1.homelab.uknth.me: 10.0.2.3
-    sidekick-1.homelab.uknth.me: 10.0.2.4
-    workstation-1.homelab.uknth.me: 10.0.2.5
-    hero-1.homelab.uknth.me: 10.0.2.6
-    pie-1.homelab.uknth.me: 10.0.2.7
-
-    homelab.uknth.me: 10.0.2.2
+    {% for name, var in hostvars.items() -%}
+    {{ name }}.infra: {{ hostvars[name]["ansible_host"] }}
+    {% endfor -%}  
+    router-1.infra: 10.0.2.1
+    nas-1.infra: 10.0.2.3
+    infra: 10.0.2.2

@@ -1,0 +1,82 @@
+# ALL INSTANCE ROLES
+- name: instance roles, run on all instances
+  hosts: all
+  roles:
+    - name: system/packages/apt
+      tags: ["system", "packages", "apt"]
+
+    - name: system/packages/ntp
+      tags: ["system", "ntp"]
+
+
+# Common Minis
+- name: common 'minis' roles
+  hosts: minis
+  roles:
+
+# pie-1
+- name: minis/pie-1 roles
+  hosts: pie-1
+  roles:
+    - role: docker/network/pi-hole
+      tags: ["docker", "network", "dns", "pi-hole", "pihole"]
+
+# pie-2
+- name: minis/pie-2 roles
+  hosts: pie-2
+  roles:
+    - role: system/packages/docker
+      tags: ["system", "docker"]
+
+    - role: system/network/tailscale
+      tags: ["system", "network", "tailscale"]
+
+    - role: docker/network/blocky
+      tags: ["docker", "network", "dns", "blocky"]
+
+# sidekick-1
+- name: minis/sidekick-1 roles
+  hosts: sidekick-1
+  roles:
+    - role: system/packages/docker
+      tags: ["system", "docker"]
+
+    - role: system/network/samba
+      tags: ["sidekick-1" ,"system", "network", "samba", "file-sharing"]
+      vars:
+        samba_share_root: "/mnt/fast2"
+        samba_share_name: "fast-storage2"
+
+# Common Mega
+- name: Common 'mega' roles
+  hosts: mega
+  roles:
+    - role: system/packages/k3s
+      tags: ["system", "k3s", "kubernetes"] 
+
+# hero-1
+- name: megas/hero-1 roles
+  hosts: hero-1
+  roles:
+    - role: system/network/samba
+      tags: ["hero-1", "system", "network", "samba", "file-sharing"]
+      vars:
+          samba_share_root: "/mnt/databank"
+          samba_share_name: "fast-storage"
+
+
+# Common Workstation
+- name: common 'workstation' roles
+  hosts: workstation
+  gather_facts: true
+  roles:
+
+- name: workstation/workstation-1 roles
+  hosts: workstation-1
+  gather_facts: true
+  roles:
+    - role: system/packages/helm
+      tags: ["system", "helm", "installer"]
+
+    - role: "system/packages/neovim"
+      tags: ["system", "neovim", "installer"]
