@@ -1,3 +1,13 @@
+# ansible access config
+ansible_ssh_public_key: "{{ vault_ansible_ssh_public_key }}"
+
+# homelab configuration
+timezone: Asia/Kolkata
+config_dir: "~/.config/homelab"
+domain_name: homelab.uknth.me
+domain: homelab.uknth.me
+
+# packages to install
 packages:
   - curl
   - zsh
@@ -9,19 +19,13 @@ packages:
   - lsb-release
   - dnsutils
   - python3-pip
+  - kitty-terminfo
 
-timezone: Asia/Kolkata
-domain_name: homelab.uknth.me
-
+# application passwords
+pihole_webpassword: "{{ vault_pihole_webpassword }}"
+samba_user_password: "{{ vault_samba_user_password }}"
 cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
-ansible_ssh_public_key: "{{ vault_ansible_ssh_public_key }}"
 sudo_password: "{{ vault_sudo_password }}"
-nd_spotify_secret: "{{ vault_nd_spotify_secret }}"
-transmission_password: "{{ vault_transmission_password }}"
-portainer_admin_password: "{{ vault_portainer_admin_password }}"
-
-# Homelab Config
-config_dir: "~/.config/homelab"
 
 # Common
 homelab_namespace: homelab
@@ -36,3 +40,16 @@ homelab_transmission_domain_name: "transmission.homelab.uknth.me"
 homelab_hound_domain_name: "hound.homelab.uknth.me"
 homelab_statping_domain_name: "statping.homelab.uknth.me"
 homelab_gotify_domain_name: "gotify.homelab.uknth.me"
+
+
+# Samba configuration
+
+# Extra Configuration
+smb_storage_host: "hero-1.homelab.uknth.me"
+
+statping_hosts:
+  - { name: "home", url: "https://homelab.uknth.me" }
+  - { name: "navidrome", url: "https://music.homelab.uknth.me" }
+  - { name: "blocky", url: "https://blocky.homelab.uknth.me" }
+  - { name: "prometheus", url: "https://prometheus.homelab.uknth.me" }
+  - { name: "grafana", url: "https://grafana.homelab.uknth.me" }

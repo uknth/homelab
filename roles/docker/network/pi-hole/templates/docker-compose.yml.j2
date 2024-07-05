@@ -1,0 +1,22 @@
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    # For DHCP it is recommended to remove these ports and instead add: network_mode: "host"
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "80:80/tcp"
+    environment:
+      TZ: 'America/Chicago'
+      WEBPASSWORD: '{{ pihole_web_password }}'
+      FTLCONF_LOCAL_IPV4: '{{ ansible_host }}'
+      PIHOLE_DNS_: '{{ pihole_upstream_dns }}'
+      DHCP_ACTIVE: 'false'
+      QUERY_LOGGING: '{{ pihole_query_logging }}'
+      CUSTOM_CACHE_SIZE: '{{ pihole_dnsmasq_cache_size }}'
+    # Volumes store your data between container upgrades
+    volumes:
+      - './etc/pihole:/etc/pihole'
+      - './etc/dnsmasq.d:/etc/dnsmasq.d'
+    restart: unless-stopped

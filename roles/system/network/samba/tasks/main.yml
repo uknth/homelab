@@ -7,7 +7,7 @@
 - name: Add the user 'samba-user' with a bash shell, with samba group
   become: true
   ansible.builtin.user:
-    name: samba-user
+    name: "{{ samba_user }}"
     shell: /bin/bash
     groups: samba
     append: yes
@@ -19,16 +19,11 @@
     name: vladgh.samba.server
   vars:
     samba_users:
-      - name: samba-user
+      - name: "{{ samba_user }}"
         password: "{{ samba_user_password }}"
-    samba_shares_root: "/mnt/databank"
+    samba_shares_root: "{{ samba_share_root }}"
     samba_shares:
-      - name: fast-storage
+      - name: "{{ samba_share_name }}"
         group: samba
         write_list: +samba
         guest_ok: yes
-      - name: guestshare
-        comment: "Share accessible for guests"
-        guest_ok: "yes"
-        writable: "yes"
-        browseable: "yes"

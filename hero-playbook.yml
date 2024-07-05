@@ -3,16 +3,7 @@
   roles:
     - role: monitor/node_exporter
       tags: ["monitor", "prometheus", "node_exporter"]
-    
-    - role: network/samba
-      tags: ["network", "samba"]
       
-    - role: system/k3s
-      tags: ["system", "k3s", "kubernetes"] 
-
-    - role: system/helm
-      tags: ["system", "helm", "helm-installer"]
-
     - role: k8s/tools/dashboard
       tags: ["k8s", "k8s-dashboard", "skooner"]
 

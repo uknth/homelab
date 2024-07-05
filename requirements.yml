@@ -16,6 +16,10 @@ roles:
   - name: comcast.sdkman
   - name: gikeymarcia.neovim
   - name: geerlingguy.nodejs
+  - src: https://gitlab.com/cbz-d-velop/public-ansible/ansible-role-labocbz-install-pihole/-/archive/develop/ansible-role-labocbz-install-pihole-develop.tar.gz
+    name: role.pihole
+  - src: https://github.com/gikeymarcia/ansible-role-neovim
+    name: role.neovim
 collections:
   - community.docker
   - community.general

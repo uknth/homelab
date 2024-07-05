@@ -31,7 +31,7 @@
     exit 0
   when: 
     - docker_command_result.rc == 1 
-    - ansible_facts['os_family'] == 'Ubuntu'
+    - ansible_facts['distribution'] == 'Ubuntu'
 
 - name: shell script to write keyring - debian
   become: true
@@ -45,7 +45,7 @@
     exit 0
   when: 
     - docker_command_result.rc == 1 
-    - ansible_facts['os_family'] == 'Debian'
+    - ansible_facts['distribution'] == 'Debian'
 
 - name: install docker using apt
   become: true
