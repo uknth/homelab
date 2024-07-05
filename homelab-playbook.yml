@@ -1,0 +1,102 @@
+# ALL INSTANCE ROLES
+- name: instance roles, run on all instances
+  hosts: all
+  roles:
+    - name: system/packages/apt
+      tags: ["system", "packages", "apt"]
+
+    - name: system/packages/ntp
+      tags: ["system", "ntp"]
+
+
+# Common Minis
+- name: common 'minis' roles
+  hosts: minis
+  roles:
+
+# pie-1
+- name: minis/pie-1 roles
+  hosts: pie-1
+  roles:
+    - role: system/network/pi-hole
+      tags: ["system", "network", "dns", "pi-hole", "pihole"]
+
+# pie-2
+# acts as network gateway for both, internal & tailscale requests for 10.0.2.0/24 IPs. 
+- name: minis/pie-2 roles
+  hosts: pie-2
+  roles:
+    - role: system/packages/docker
+      tags: ["packages", "docker"]
+
+    - role: system/network/tailscale
+      tags: ["network", "tailscale"]
+      vars:
+        tailscale_args: "--reset --advertise-routes=10.0.2.0/24,10.0.4.0/24"
+
+    - role: docker/network/blocky
+      tags: ["docker", "network", "dns", "blocky"]
+    
+    - role: system/network/nginx/pie-2/nginx
+      tags: ["system", "network", "pie-2", "reverse-proxy", "nginx" ]
+
+# sidekick-1
+- name: minis/sidekick-1 roles
+  hosts: sidekick-1
+  roles:
+    - role: system/network/samba
+      tags: ["sidekick-1" ,"system", "network", "samba", "file-sharing"]
+      vars:
+        samba_share_root: "/mnt/fast2"
+        samba_share_name: "fast-storage2"
+
+    - role: system/packages/docker
+      tags: ["system", "docker"]
+
+    - role: docker/gui/homer
+      tags: ["docker", "container", "homer"]
+
+    - role: system/network/nginx/sidekick-1/nginx
+      tags: ["system", "network", "sidekick-1", "reverse-proxy", "nginx" ]
+
+# Common Mega
+- name: Common 'mega' roles
+  hosts: megas
+  roles:
+    - role: system/packages/k3s
+      tags: ["system", "k3s", "kubernetes"] 
+
+# hero-1
+- name: megas/hero-1 roles
+  hosts: hero-1
+  roles:
+    - role: system/network/samba
+      tags: ["hero-1", "system", "network", "samba", "file-sharing"]
+      vars:
+          samba_share_root: "/mnt/databank"
+          samba_share_name: "fast-storage"
+
+    - role: system/packages/node_exporter
+      tags: ["monitor", "prometheus", "node_exporter"]
+
+    - role: k8s/packages/media/jellyfin
+      tags: ["k8s", "jellyfin", "k8s-app"]
+
+    - role: k8s/packages/media/navidrome
+      tags: ["k8s", "navidrome", "k8s-app"]
+
+# Common Workstation
+- name: common 'workstation' roles
+  hosts: workstation
+  gather_facts: true
+  roles:
+
+- name: workstation/workstation-1 roles
+  hosts: workstation-1
+  gather_facts: true
+  roles:
+    - role: system/packages/helm
+      tags: ["system", "helm", "installer"]
+
+    - role: "system/devel/neovim"
+      tags: ["system", "neovim", "installer"]

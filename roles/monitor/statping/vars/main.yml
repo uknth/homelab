@@ -1,6 +1,0 @@
-statping_hosts:
-  - { name: "home", url: "https://homelab.uknth.me" }
-  - { name: "navidrome", url: "https://music.homelab.uknth.me" }
-  - { name: "blocky", url: "https://blocky.homelab.uknth.me" }
-  - { name: "prometheus", url: "https://prometheus.homelab.uknth.me" }
-  - { name: "grafana", url: "https://grafana.homelab.uknth.me" }

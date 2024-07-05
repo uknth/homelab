@@ -1,8 +1,0 @@
-- name: Common plays for all hosts
-  hosts: all
-  roles:
-    - name: system/package
-      tags: ["packages", "apt"]
-
-    - name: system/ntp
-      tags: ["ntp"]

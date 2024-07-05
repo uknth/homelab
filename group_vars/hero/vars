@@ -1,2 +1,0 @@
-samba_user_password: "{{ vault_samba_user_password }}"
-smb_storage_host: "hero-1.homelab.uknth.me"

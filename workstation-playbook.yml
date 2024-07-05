@@ -1,12 +1,6 @@
 - name: Workstation Playbook for 'workstation' hosts
   hosts: workstation
   roles:
-    - role: system/docker
-      tags: ["docker"]
-
-    - role: system/portainer
-      tags: ["docker", "container", "portainer"]
-
     - role: monitor/node_exporter
       tags: ["monitor", "prometheus", "node_exporter"]
 

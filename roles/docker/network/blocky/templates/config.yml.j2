@@ -1,0 +1,64 @@
+# This is very hard-coded file, can't be used without major modification
+port: 53
+httpPort: 4000
+
+prometheus:
+  enable: true
+  path: /metrics
+
+upstream:
+  default:
+    - 10.0.2.7
+upstreamTimeout: 2s
+bootstrapDns: tcp+udp:1.1.1.1
+
+caching:
+  minTime: 10m
+  maxTime: 30m
+  maxItemsCount: 10000
+  prefetching: true
+  prefetchExpires: 3h
+  prefetchThreshold: 5
+  prefetchMaxItemsCount: 10000
+  cacheTimeNegative: 3m
+
+# We aren't doing any blocking here, it is handled by upstream dns server
+# running on pie-1.infra
+blocking:
+  blackLists:
+    ads: []
+  whiteLists:
+    ads: []
+  clientGroupsBlock:
+    default:
+      - ads
+      - special
+  blockTTL: 30m
+  refreshPeriod: 4h
+  downloadTimeout: 3m
+  downloadAttempts: 2
+  downloadCooldown: 30s
+  startStrategy: failOnError
+
+customDNS:
+  customTTL: 10m
+  filterUnmappedTypes: true
+  rewrite:
+    homelab.uknth.me: infra
+  mapping:
+    {% for name, var in hostvars.items() -%}
+    {{ name }}.infra: {{ hostvars[name]["ansible_host"] }}
+    {% endfor -%}  
+    router-1.infra: 10.0.2.1
+    nas-1.infra: 10.0.2.3
+    infra: 10.0.2.2
+#  zone: |
+#    $ORIGIN homelab.uknth.me. 
+#    $TTL 3600  
+#    @                   IN  A       10.0.2.2
+#    music               IN  CNAME   navidrome
+#    tv                  IN  CNAME   jellyfin
+#    video               IN  CNAME   jellyfin
+#    jellyfin            IN  A       10.0.2.2
+#    navidrome           IN  A       10.0.2.2
+

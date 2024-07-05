@@ -1,0 +1,24 @@
+- name: Setup nginx to run on sidekick-1, don't run on pie-2
+  become: true
+  ansible.builtin.import_role:
+    name: geerlingguy.nginx
+  vars:
+    nginx_remove_default_vhost: true
+    nginx_error_log: "/var/log/nginx/error.log warn"
+    nginx_access_log: "/var/log/nginx/access.log main buffer=16k flush=2m"
+    nginx_client_max_body_size: "1024m"
+    nginx_vhosts:
+      # Default Page
+      # redirect to https
+      - listen: "80 default_server"
+        server_name: "_"
+        extra_parameters: |
+          return       301 https://homelab.uknth.me;
+
+      # Homer 
+      - listen: "80"
+        server_name: "{{ domain  }}"
+        extra_parameters: |
+          location / {
+            proxy_pass http://127.0.0.1:8080/;
+          }
