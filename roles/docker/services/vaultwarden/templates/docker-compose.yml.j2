@@ -8,7 +8,7 @@ services:
     volumes:
       - ./data/:/data/
     ports:
-      - XXXX:80
+      - {{ vault_port }}:80
     environment:
       - DOMAIN=https://vault.{{ domain }}
       - LOGIN_RATELIMIT_MAX_BURST=10
@@ -23,11 +23,11 @@ services:
       - SIGNUPS_VERIFY=true
       - SIGNUPS_VERIFY_RESEND_TIME=3600
       - SIGNUPS_VERIFY_RESEND_LIMIT=5
-      - SIGNUPS_DOMAINS_WHITELIST=gmail.com,uknth.me,outlook.com
-      - SMTP_HOST=smtp-mail.outlook.com
-      - SMTP_PORT=587
-      - SMTP_SECURITY=starttls
+      - SIGNUPS_DOMAINS_WHITELIST={{ vault_signup_domains_whitelist }} 
+      - SMTP_HOST={{ vault_smtp_host }}
+      - SMTP_PORT={{ vault_smtp_port }}
+      - SMTP_SECURITY={{ vault_smtp_security }}
       - SMTP_FROM={{ vault_smtp_from }}
       - SMTP_USERNAME={{ vault_smtp_username }}
       - SMTP_PASSWORD={{ vault_smtp_password }}
-      - SMTP_AUTH_MECHANISM="Login"
+      - SMTP_AUTH_MECHANISM="{{ vault_smtp_auth_mechanism }}"

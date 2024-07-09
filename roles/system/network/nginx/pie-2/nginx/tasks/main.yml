@@ -52,7 +52,7 @@
       # proxy to sidekick-1
       - listen: "443 ssl http2"
         # add all domains for sidekick-1 here
-        server_name: "{{ domain  }}"
+        server_name: "{{ domain  }} vault.{{ domain }}"
         # sidekick-1 runs nginx reverse proxy
         extra_parameters: |
           location / {

@@ -1,0 +1,20 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/vaultwarden/data
+
+- name: Copy templates in place
+  ansible.builtin.template:
+    src: templates/{{ item.src }}
+    dest: "{{ config_dir }}/vaultwarden/{{ item.dest }}"
+    mode: 0644
+  loop:
+    - src: docker-compose.yml.j2
+      dest: docker-compose.yml
+  notify: Restart vaultwarden
+  become: false
+
+- name: Ensure vaultwarden-compose is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/vaultwarden/"
+    build: never
+  become: false

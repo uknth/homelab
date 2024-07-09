@@ -54,7 +54,10 @@
       tags: ["system", "docker"]
 
     - role: docker/gui/homer
-      tags: ["docker", "container", "homer"]
+      tags: ["docker", "container", "gui", "homer"]
+
+    - role: docker/services/vaultwarden
+      tags: ["docker", "container", "service", "vaultwarden" ]
 
     - role: system/network/nginx/sidekick-1/nginx
       tags: ["system", "network", "sidekick-1", "reverse-proxy", "nginx" ]

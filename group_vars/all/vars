@@ -1,13 +1,19 @@
+# General Ansible Configuration
+# -----------------------------------------------
 # ansible access config
-ansible_ssh_public_key: "{{ vault_ansible_ssh_public_key }}"
+ansible_ssh_public_key: "{{ secret_ansible_ssh_public_key }}"
 
 # homelab configuration
 timezone: Asia/Kolkata
+
+# Default config directory
 config_dir: "~/.config/homelab"
+
+# Domains
 domain_name: homelab.uknth.me
 domain: homelab.uknth.me
 
-# packages to install
+# packages to install on all nodes
 packages:
   - curl
   - zsh
@@ -21,16 +27,33 @@ packages:
   - python3-pip
   - kitty-terminfo
 
-# application passwords
-pihole_webpassword: "{{ vault_pihole_webpassword }}"
-samba_user_password: "{{ vault_samba_user_password }}"
-cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
-sudo_password: "{{ vault_sudo_password }}"
+# Secrets
+# -----------------------------------------------
+sudo_password: "{{ secret_sudo_password }}"
+
+# Applications
+pihole_webpassword: "{{ secret_pihole_webpassword }}"
+samba_user_password: "{{ secret_samba_user_password }}"
+vault_admin_token: "{{ secret_vault_admin_token }}"
+
+# SMTP Configurations
+# Vaultwarden
+vault_smtp_host: "{{ secret_smtp_host }}"
+vault_smtp_port: "{{ secret_smtp_port }}"
+vault_smtp_security: "{{ secret_smtp_security }}"
+vault_smtp_from: "{{ secret_smtp_from }}"
+vault_smtp_username: "{{ secret_smtp_username }}"
+vault_smtp_password: "{{ secret_smtp_password }}"
+
+
+# Third Party
+cloudflare_api_key: "{{ secret_cloudflare_api_key }}"
 
 # Common
 homelab_namespace: homelab
 homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"
 homelab_smb_nas_secret: "homelab.smb.nas.cred"
+
 
 # Shiori
 homelab_shiori_domain_name: "shiori.homelab.uknth.me"
