@@ -1,0 +1,22 @@
+#Fast Storage
+host_smb_fast: "hero-1.homelab.uknth.me"
+k8s_secret_smb_hero_1: "some-secret-name"
+
+# PV & PVC 
+vol_smb_fast: "smb.fast-storage.navidrome.pv"
+vol_smb_fast_capacity: 200Gi
+vol_claim_smb_fast: "smb.fast-storage.navidrome.pvc" # for different directories of navidrome
+
+
+# NAS storage
+host_smb_nas: "nas-1.homelab.uknth.me"
+k8s_secret_smb_nas_1: "some-nas-secret"
+
+vol_smb_nas: "smb.nas.navidrome.music.pv"
+vol_smb_nas_capacity: 500Gi
+vol_claim_smb_nas: "smb.nas.navidrome.music.pvc"
+
+
+jellyfin_name: "homelab-jellyfin"
+jellyfin_image: "jellyfin/jellyfin"
+jellyfin_image_version: "10.8.9"

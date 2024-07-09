@@ -21,4 +21,4 @@
     env:
       DB_CONN: sqlite
       API_SECRET: admin
-      DOMAIN: "{{ homelab_statping_domain_name }}"
+      DOMAIN: "statping.{{ domain }}"

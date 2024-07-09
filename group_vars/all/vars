@@ -33,7 +33,6 @@ sudo_password: "{{ secret_sudo_password }}"
 
 # Applications
 pihole_webpassword: "{{ secret_pihole_webpassword }}"
-samba_user_password: "{{ secret_samba_user_password }}"
 vault_admin_token: "{{ secret_vault_admin_token }}"
 
 # SMTP Configurations
@@ -49,26 +48,47 @@ vault_smtp_password: "{{ secret_smtp_password }}"
 # Third Party
 cloudflare_api_key: "{{ secret_cloudflare_api_key }}"
 
-# Common
-homelab_namespace: homelab
-homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"
-homelab_smb_nas_secret: "homelab.smb.nas.cred"
 
+# Nas Config
+nas_user: "{{ secret_nas_user }}"
+nas_password: "{{ secret_nas_password }}"
+
+# Fast Storage Samba Config
+samba_user: "samba-user"
+samba_user_password: "{{ secret_samba_user_password }}"
+
+# Kubernetes
+k8s_namespace: homelab
+
+# Storage Interface
+# nas
+k8s_secret_smb_nas_1: "homelab.smb.nas.cred"
+
+# samba servers
+k8s_secret_smb_hero_1: "homelab.smb.fast-storage.cred"
+k8s_secret_smb_sidekick_1: "homelab.smb.fast2-storage.cred"
+
+# Packages
+# navidrome
+navidrome_spotify_id: "{{ secret_navidrome_spotify_id }}"
+navidrome_spotify_secret: "{{ secret_navidrome_spotify_secret }}"
 
 # Shiori
-homelab_shiori_domain_name: "shiori.homelab.uknth.me"
-homelab_jellyfin_domain_name: "jellyfin.homelab.uknth.me"
-homelab_navidrome_domain_name: "navidrome.homelab.uknth.me"
-homelab_transmission_domain_name: "transmission.homelab.uknth.me"
-homelab_hound_domain_name: "hound.homelab.uknth.me"
-homelab_statping_domain_name: "statping.homelab.uknth.me"
-homelab_gotify_domain_name: "gotify.homelab.uknth.me"
+shiori_domain_name: "shiori.homelab.uknth.me"
+jellyfin_domain_name: "jellyfin.homelab.uknth.me"
+navidrome_domain_name: "navidrome.homelab.uknth.me"
+transmission_domain_name: "transmission.homelab.uknth.me"
+hound_domain_name: "hound.homelab.uknth.me"
+statping_domain_name: "statping.homelab.uknth.me"
+gotify_domain_name: "gotify.homelab.uknth.me"
 
 
 # Samba configuration
 
-# Extra Configuration
-smb_storage_host: "hero-1.homelab.uknth.me"
+# Host Configurations
+# Samba 
+host_smb_fast: "hero-1.infra"
+host_smb_nas: "nas-1.infra"
 
 statping_hosts:
   - { name: "home", url: "https://homelab.uknth.me" }

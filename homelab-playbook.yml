@@ -82,6 +82,10 @@
     - role: system/packages/node_exporter
       tags: ["monitor", "prometheus", "node_exporter"]
 
+      # CSI secrets
+    - role: k8s/csi/samba
+      tags: ["k8s", "csi", "samba" ]
+
     - role: k8s/packages/media/jellyfin
       tags: ["k8s", "jellyfin", "k8s-app"]
 

@@ -1,9 +1,110 @@
+# Persistent Volumes & Claims
+# Fast Storage
+# smb://@hero-1
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  annotations:
+    pv.kubernetes.io/provisioned-by: smb.csi.k8s.io
+  name: {{ vol_smb_fast }}
+  namespace: {{ k8s_namespace }}
+spec:
+  capacity:
+    storage: {{ vol_smb_fast_capacity }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: smb
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - uid=1000
+    - gid=1000
+    - nobrl
+  csi:
+    driver: smb.csi.k8s.io
+    readOnly: false
+    # volumeHandle format: {smb-server-address}#{sub-dir-name}#{share-name}
+    # make sure this value is unique for every share in the cluster
+    volumeHandle: {{ host_smb_fast }}/fast-storage/navidrome##
+    volumeAttributes:
+      source: "//{{ host_smb_fast }}/fast-storage"
+    nodeStageSecretRef:
+      name: {{ k8s_secret_smb_hero_1 }}
+      namespace: {{ k8s_namespace }}
+
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ vol_claim_smb_fast }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ vol_smb_fast_capacity }}
+  volumeName: {{ vol_smb_fast }}
+  storageClassName: smb
+
+
+# NAS
+# smb://@nas-1
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  annotations:
+    pv.kubernetes.io/provisioned-by: smb.csi.k8s.io
+  name: {{ vol_smb_nas }}
+  namespace: {{ k8s_namespace }}
+spec:
+  capacity:
+    storage: {{ vol_smb_nas_capacity }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: smb
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - uid=1000
+    - gid=1000
+    - nobrl
+  csi:
+    driver: smb.csi.k8s.io
+    readOnly: false
+    volumeHandle: {{ host_smb_nas }}/music/navidrome##
+    volumeAttributes:
+      source: "//{{ host_smb_nas }}/music"
+    nodeStageSecretRef:
+      name: {{ k8s_secret_smb_nas_1 }}
+      namespace: {{ k8s_namespace }}
+
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ vol_claim_smb_nas }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ vol_smb_nas_capacity }}
+  volumeName: {{ vol_smb_nas }}
+  storageClassName: smb
+
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ jellyfin_name }}"
-  namespace: "{{ homelab_namespace }}"
+  namespace: "{{ k8s_namespace }}"
   labels:
     app: jellyfin
     name: "{{ jellyfin_name }}"
@@ -33,7 +134,7 @@ spec:
         - name: "JELLYFIN_LOG_DIR"
           value: "/fast/jellyfin/log"
         - name: "JELLYFIN_PublishedServerUrl"
-          value: "{{ homelab_jellyfin_domain_name }}"
+          value: "jellyfin.{{ domain }}"
         ports:
         - containerPort: 8096
         volumeMounts:
@@ -46,17 +147,17 @@ spec:
       volumes:
       - name: fast-storage-data
         persistentVolumeClaim:
-          claimName: "{{ fast_pvc_name }}"
+          claimName: "{{ vol_claim_smb_fast }}"
       - name: nas-storage
         persistentVolumeClaim:
-          claimName: "{{ nas_pvc_name }}"
+          claimName: "{{ vol_claim_smb_nas }}"
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: "{{ jellyfin_name }}-service"
-  namespace: "{{ homelab_namespace }}"
+  namespace: "{{ k8s_namespace }}"
 spec:
   selector:
     app: jellyfin
@@ -71,10 +172,10 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ jellyfin_name }}-ingress"
-  namespace: "{{ homelab_namespace }}"
+  namespace: "{{ k8s_namespace }}"
 spec:
   rules:
-  - host: {{ homelab_jellyfin_domain_name }}
+  - host: jellyfin.{{ domain }}
     http:
       paths:
       - path: /
@@ -85,22 +186,3 @@ spec:
             port:
               number: 80
 
-
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: "{{ jellyfin_name }}-ingress-infra"
-  namespace: "{{ homelab_namespace }}"
-spec:
-  rules:
-  - host: "jf.homelab.hero"
-    http:
-      paths:
-      - path: /
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: "{{ jellyfin_name }}-service"
-            port:
-              number: 80

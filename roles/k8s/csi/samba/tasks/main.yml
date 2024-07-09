@@ -38,7 +38,7 @@
 
 - name: "Create namespace if it doesn't exist"
   kubernetes.core.k8s:
-    name: "{{ homelab_namespace }}"
+    name: "{{ k8s_namespace }}"
     api_version: v1
     kind: Namespace
     state: present
@@ -46,8 +46,8 @@
 - name: Create Secret
   kubernetes.core.k8s:
     state: present
-    template: "fast-storage.yml.j2"
+    template: "secrets.yml.j2"
 
 - name: waiting for 5 mins for deployment to stabilise
   ansible.builtin.pause:
-    minutes: 3
+    minutes: 5
