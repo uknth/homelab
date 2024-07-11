@@ -1,19 +1,24 @@
 # General Ansible Configuration
 # -----------------------------------------------
 # ansible access config
+# ===========
 ansible_ssh_public_key: "{{ secret_ansible_ssh_public_key }}"
 
 # homelab configuration
+# ===========
 timezone: Asia/Kolkata
 
 # Default config directory
+# ===========
 config_dir: "~/.config/homelab"
 
 # Domains
+# ===========
 domain_name: homelab.uknth.me
 domain: homelab.uknth.me
 
 # packages to install on all nodes
+# ===========
 packages:
   - curl
   - zsh
@@ -31,8 +36,36 @@ packages:
 # -----------------------------------------------
 sudo_password: "{{ secret_sudo_password }}"
 
-# Applications
+# System Packages
+# ----------------------------------------------------------------------------
+
+# pihole (pie-1)
+# ===========
 pihole_webpassword: "{{ secret_pihole_webpassword }}"
+
+# Nginx/Certbot
+# ===========
+cloudflare_api_key: "{{ secret_cloudflare_api_key }}"
+
+# Storage Configuration
+# ----------------------------------------------------------------------------
+# Nas Config
+# ===========
+nas_user: "{{ secret_nas_user }}"
+nas_password: "{{ secret_nas_password }}"
+# Fast & Fast2 Storage Samba Config
+# ===========
+samba_user: "samba-user"
+samba_user_password: "{{ secret_samba_user_password }}"
+# samba host configuration
+host_smb_fast: "hero-1.infra"
+host_smb_nas: "nas-1.infra"
+host_smb_fast2: "sidekick-1.infra"
+
+# Docker
+# ----------------------------------------------------------------------------
+# Vaultwarden
+# ===========
 vault_admin_token: "{{ secret_vault_admin_token }}"
 
 # SMTP Configurations
@@ -44,55 +77,30 @@ vault_smtp_from: "{{ secret_smtp_from }}"
 vault_smtp_username: "{{ secret_smtp_username }}"
 vault_smtp_password: "{{ secret_smtp_password }}"
 
+# Statping
+# ===========
+statping_hosts:
+  - { name: "home", url: "https://homelab.uknth.me" }
+  - { name: "navidrome", url: "https://navidrome.homelab.uknth.me" }
+  - { name: "jellyfin", url: "https://jellyfin.homelab.uknth.me" }
+  - { name: "blocky", url: "https://blocky.homelab.uknth.me" }
+  - { name: "vault", url: "https://vault.homelab.uknth.me" }
 
-# Third Party
-cloudflare_api_key: "{{ secret_cloudflare_api_key }}"
-
-
-# Nas Config
-nas_user: "{{ secret_nas_user }}"
-nas_password: "{{ secret_nas_password }}"
-
-# Fast Storage Samba Config
-samba_user: "samba-user"
-samba_user_password: "{{ secret_samba_user_password }}"
 
 # Kubernetes
+# ----------------------------------------------------------------------------
 k8s_namespace: homelab
 
-# Storage Interface
-# nas
+# CSI Secrets
+# ===========
 k8s_secret_smb_nas_1: "homelab.smb.nas.cred"
-
-# samba servers
 k8s_secret_smb_hero_1: "homelab.smb.fast-storage.cred"
 k8s_secret_smb_sidekick_1: "homelab.smb.fast2-storage.cred"
 
 # Packages
+# ===========
 # navidrome
+# ===========
 navidrome_spotify_id: "{{ secret_navidrome_spotify_id }}"
 navidrome_spotify_secret: "{{ secret_navidrome_spotify_secret }}"
 
-# Shiori
-shiori_domain_name: "shiori.homelab.uknth.me"
-jellyfin_domain_name: "jellyfin.homelab.uknth.me"
-navidrome_domain_name: "navidrome.homelab.uknth.me"
-transmission_domain_name: "transmission.homelab.uknth.me"
-hound_domain_name: "hound.homelab.uknth.me"
-statping_domain_name: "statping.homelab.uknth.me"
-gotify_domain_name: "gotify.homelab.uknth.me"
-
-
-# Samba configuration
-
-# Host Configurations
-# Samba 
-host_smb_fast: "hero-1.infra"
-host_smb_nas: "nas-1.infra"
-
-statping_hosts:
-  - { name: "home", url: "https://homelab.uknth.me" }
-  - { name: "navidrome", url: "https://music.homelab.uknth.me" }
-  - { name: "blocky", url: "https://blocky.homelab.uknth.me" }
-  - { name: "prometheus", url: "https://prometheus.homelab.uknth.me" }
-  - { name: "grafana", url: "https://grafana.homelab.uknth.me" }

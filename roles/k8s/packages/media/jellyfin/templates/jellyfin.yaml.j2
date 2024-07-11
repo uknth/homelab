@@ -27,7 +27,7 @@ spec:
     readOnly: false
     # volumeHandle format: {smb-server-address}#{sub-dir-name}#{share-name}
     # make sure this value is unique for every share in the cluster
-    volumeHandle: {{ host_smb_fast }}/fast-storage/navidrome##
+    volumeHandle: {{ host_smb_fast }}/fast-storage/jellyfin##
     volumeAttributes:
       source: "//{{ host_smb_fast }}/fast-storage"
     nodeStageSecretRef:
@@ -76,9 +76,9 @@ spec:
   csi:
     driver: smb.csi.k8s.io
     readOnly: false
-    volumeHandle: {{ host_smb_nas }}/music/navidrome##
+    volumeHandle: {{ host_smb_nas }}/video/jellyfin##
     volumeAttributes:
-      source: "//{{ host_smb_nas }}/music"
+      source: "//{{ host_smb_nas }}/video"
     nodeStageSecretRef:
       name: {{ k8s_secret_smb_nas_1 }}
       namespace: {{ k8s_namespace }}

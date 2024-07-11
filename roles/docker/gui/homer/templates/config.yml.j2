@@ -52,12 +52,6 @@ services:
   - name: "Media"
     icon: "fas fa-film"
     items:
-      - name: "Shiori"
-        logo: "assets/tools/shiori.png"
-        subtitle: "Bookmark Manager"
-        url: "https://shiori.{{ domain }}"
-        target: "_blank"
-
       - name: "Jellyfin"
         logo: "assets/tools/jellyfin.svg"
         subtitle: "Local Media Streaming"
@@ -69,6 +63,7 @@ services:
         subtitle: "Local Music Streaming"
         url: "https://music.{{ domain }}"
         target: "_blank"
+
 
   - name: "Networking & Storage"
     icon: "fas fa-network-wired"
@@ -98,22 +93,31 @@ services:
         url: "https://nas.{{ domain }}"
         target: "_blank"
 
+  - name: "Secret"
+    icon: "fas fa-lock"
+    items:
+      - name: "Vault"
+        logo: "assets/tools/vaultwarden.svg"
+        subtitle: "Password Vault [BitWarden]"
+        url: "https://vault.{{ domain }}"
+        target: "_blank"
+
   - name: "Monitoring & Alerting"
     icon: "fas fa-desktop"
     items:
-      - name: "Grafana"
-        logo: "assets/tools/grafana.svg"
-        subtitle: "Monitoring Visualisation"
-        url: "https://grafana.{{ domain }}"
-        target: "_blank"
-
-      - name: "Prometheus"
-        logo: "assets/tools/prometheus.svg"
-        subtitle: "Monitoring Data Source"
-        url: "https://prometheus.{{ domain }}"
-        target: "_blank"
-
-      - name: "Uptime Kuma"
+#      - name: "Grafana"
+#        logo: "assets/tools/grafana.svg"
+#        subtitle: "Monitoring Visualisation"
+#        url: "https://grafana.{{ domain }}"
+#        target: "_blank"
+#
+#      - name: "Prometheus"
+#        logo: "assets/tools/prometheus.svg"
+#        subtitle: "Monitoring Data Source"
+#        url: "https://prometheus.{{ domain }}"
+#        target: "_blank"
+#
+      - name: "Statping"
         logo: "assets/tools/statping.png"
         subtitle: "Endpoint Monitoring of Domains"
         url: "https://statping.{{ domain }}"
@@ -148,8 +152,3 @@ services:
         url: "https://portainer-workstation.{{ domain }}"
         target: "_blank"
 
-      - name: "Hound"
-        logo: "assets/tools/hound.svg"
-        subtitle: "Code Search"
-        url: "https://hound.{{ domain }}"
-        target: "_blank"

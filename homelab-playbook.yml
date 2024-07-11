@@ -36,6 +36,9 @@
 
     - role: docker/network/blocky
       tags: ["docker", "network", "dns", "blocky"]
+
+    - role: docker/monitor/statping
+      tags: ["docker", "monitor", "alerting", "statping" ]
     
     - role: system/network/nginx/pie-2/nginx
       tags: ["system", "network", "pie-2", "reverse-proxy", "nginx" ]

@@ -1,0 +1,41 @@
+x-tcpservice: &tcpservice
+  type: tcp
+  check_interval: 60
+  timeout: 15
+  allow_notifications: true
+  notify_after: 0
+  notify_all_changes: true
+  public: true
+  redirect: true
+
+x-httpservice: &httpservice
+  type: http
+  method: GET
+  check_interval: 45
+  timeout: 10
+  expected_status: 200
+  allow_notifications: true
+  notify_after: 2
+  notify_all_changes: true
+  public: true
+  redirect: true
+
+services:
+  - name: home
+    domain: https://homelab.uknth.me
+    <<: *httpservice
+  - name: navidrome
+    domain: https://navidrome.homelab.uknth.me
+    <<: *httpservice
+  - name: jellyfin
+    domain: https://jellyfin.homelab.uknth.me
+    <<: *httpservice
+  - name: blocky
+    domain: https://blocky.homelab.uknth.me
+    <<: *httpservice
+  - name: vault
+    domain: https://vault.homelab.uknth.me
+    <<: *httpservice
+  - name: homepage
+    domain: https://uknth.me
+    <<: *httpservice
