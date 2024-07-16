@@ -1,0 +1,21 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/joplin/db_data
+    mkdir -p {{ config_dir }}/joplin/joplin_data
+
+- name: Copy templates in place
+  ansible.builtin.template:
+    src: templates/{{ item.src }}
+    dest: "{{ config_dir }}/joplin/{{ item.dest }}"
+    mode: 0644
+  loop:
+    - src: docker-compose.yml.j2
+      dest: docker-compose.yml
+  notify: Restart joplin
+  become: false
+
+- name: Ensure joplin-docker-compose is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/joplin/"
+    build: never
+  become: false

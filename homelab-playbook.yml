@@ -62,6 +62,9 @@
     - role: docker/services/vaultwarden
       tags: ["docker", "container", "service", "vaultwarden" ]
 
+    - role: docker/services/joplin
+      tags: ["docker", "container", "service", "joplin" ]
+
     - role: system/network/nginx/sidekick-1/nginx
       tags: ["system", "network", "sidekick-1", "reverse-proxy", "nginx" ]
 

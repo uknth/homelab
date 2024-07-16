@@ -1,0 +1,24 @@
+# Persistence
+# PV & PVC 
+host_smb_fast: "hero-1.homelab.uknth.me"
+k8s_secret_smb_hero_1: "some-secret-name"
+vol_smb_fast: "smb.fast-storage.nextcloud.pv"
+vol_smb_fast_capacity: 200Gi
+vol_claim_smb_fast: "smb.fast-storage.nextcloud.pvc" 
+
+
+# General  Configuration
+nextcloud_chart_version: 5.2.0
+nextcloud_replica_count: 1
+nextcloud_user_name: some-user-name
+nextcloud_user_password: some-user-password
+
+# SMTP
+nextcloud_smtp_host: "smtp-mail.outlook.com"
+nextcloud_smtp_port: "587"
+nextcloud_smtp_from: "mail@example.com"
+nextcloud_smtp_username: "mail"
+nextcloud_smtp_domain: "some-example.com"
+nextcloud_smtp_password: "some-smtp-password"
+nextcloud_smtp_auth_mechanism: "Login"
+

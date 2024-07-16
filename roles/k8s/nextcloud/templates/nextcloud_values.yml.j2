@@ -1,0 +1,30 @@
+replicaCount: {{ nextcloud_replica_count }}
+
+ingress:
+    enabled: true
+
+nextcloud:
+    host: nextcloud.{{ domain }}
+    username: {{ nextcloud_user_name }}
+    password: {{ nextcloud_user_password }}
+    mail:
+        enabled: true
+        fromAddress: {{ nextcloud_smtp_from }}
+        domain: '{{ nextcloud_smtp_domain }}'
+        smtp:
+            host: {{ nextcloud_smtp_host }}
+            secure: 'ssl'
+            port: {{ nextcloud_smtp_port }}
+            authtype: {{ nextcloud_smtp_auth_mechanism }}
+            name: {{ nextcloud_smtp_username }}
+            password: {{ nextcloud_smtp_password }}
+
+redis:
+    enabled: true
+    auth:
+        enabled: false
+
+
+persistence:
+    enabled: true
+    existingClaim: {{ vol_claim_smb_fast }} 

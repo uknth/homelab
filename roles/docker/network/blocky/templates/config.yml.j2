@@ -23,7 +23,7 @@ caching:
   cacheTimeNegative: 3m
 
 # We aren't doing any blocking here, it is handled by upstream dns server
-# running on pie-1.infra
+# running on pie-1.hnet
 blocking:
   blackLists:
     ads: []
@@ -44,14 +44,14 @@ customDNS:
   customTTL: 10m
   filterUnmappedTypes: true
   rewrite:
-    homelab.uknth.me: infra
+    homelab.uknth.me: hnet
   mapping:
     {% for name, var in hostvars.items() -%}
-    {{ name }}.infra: {{ hostvars[name]["ansible_host"] }}
+    {{ name }}.hnet: {{ hostvars[name]["ansible_host"] }}
     {% endfor -%}  
-    router-1.infra: 10.0.2.1
-    nas-1.infra: 10.0.2.3
-    infra: 10.0.2.2
+    router-1.hnet: 10.0.2.1
+    nas-1.hnet: 10.0.2.3
+    hnet: 10.0.2.2
 #  zone: |
 #    $ORIGIN homelab.uknth.me. 
 #    $TTL 3600  

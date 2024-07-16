@@ -1,0 +1,3 @@
+joplin_postgres_user: some-random-user
+joplin_postgres_password: some-random-password
+joplin_postgres_database: joplin_dt

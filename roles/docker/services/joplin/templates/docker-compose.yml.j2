@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:13
+    volumes:
+      - ./db_data/:/var/lib/postgresql/data/
+    expose:
+      - "5432"
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD={{ joplin_postgres_password }}
+      - POSTGRES_USER={{ joplin_postgres_user }}
+      - POSTGRES_DB={{ joplin_postgres_database }}
+  app:
+    image: joplin/server:latest
+    container_name: joplin-server
+    depends_on:
+      - postgres
+    ports:
+      - "9002:9002"
+    restart: unless-stopped
+    volumes:
+      -  ./joplin_data/:/media/joplin_data/
+    environment:
+      - APP_PORT=9002
+      - APP_BASE_URL=https://joplin.{{ domain }}
+      - DB_CLIENT=pg
+      - POSTGRES_PASSWORD={{ joplin_postgres_password }}
+      - POSTGRES_DATABASE={{ joplin_postgres_database }}
+      - POSTGRES_USER={{ joplin_postgres_user }}
+      - POSTGRES_PORT=5432
+      - POSTGRES_HOST=postgress
+      - STORAGE_DRIVER=Type=Filesystem;Path=/media/joplin_data

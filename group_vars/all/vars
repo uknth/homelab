@@ -58,9 +58,9 @@ nas_password: "{{ secret_nas_password }}"
 samba_user: "samba-user"
 samba_user_password: "{{ secret_samba_user_password }}"
 # samba host configuration
-host_smb_fast: "hero-1.infra"
-host_smb_nas: "nas-1.infra"
-host_smb_fast2: "sidekick-1.infra"
+host_smb_fast: "hero-1.hnet"
+host_smb_nas: "nas-1.hnet"
+host_smb_fast2: "sidekick-1.hnet"
 
 # Docker
 # ----------------------------------------------------------------------------
@@ -76,6 +76,12 @@ vault_smtp_security: "{{ secret_smtp_security }}"
 vault_smtp_from: "{{ secret_smtp_from }}"
 vault_smtp_username: "{{ secret_smtp_username }}"
 vault_smtp_password: "{{ secret_smtp_password }}"
+
+# Joplin
+# ===========
+joplin_postgres_user: "{{ secret_joplin_db_user }}"
+joplin_postgres_password: "{{ secret_joplin_db_password }}"
+
 
 # Statping
 # ===========

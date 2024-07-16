@@ -56,7 +56,7 @@
         # sidekick-1 runs nginx reverse proxy
         extra_parameters: |
           location / {
-            proxy_pass http://sidekick-1.infra:80/;
+            proxy_pass http://sidekick-1.hnet:80/;
             proxy_set_header Host $http_host;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -75,7 +75,7 @@
         server_name: "jellyfin.{{ domain }} navidrome.{{domain}} music.{{ domain }}"
         extra_parameters: |
           location / {
-            proxy_pass http://hero-1.infra:80/;
+            proxy_pass http://hero-1.hnet:80/;
             proxy_set_header Host $http_host;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -92,7 +92,7 @@
         server_name: "pihole.homelab.uknth.me"
         extra_parameters: |
           location / {
-            proxy_pass http://pie-1.infra:80/;
+            proxy_pass http://pie-1.hnet:80/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
           ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
@@ -105,7 +105,7 @@
         server_name: "nas.{{ domain }}"
         extra_parameters: |
           location / {
-            proxy_pass http://nas-1.infra:5000/;
+            proxy_pass http://nas-1.hnet:5000/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
           ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
@@ -118,7 +118,7 @@
         server_name: "statping.{{ domain }}"
         extra_parameters: |
           location / {
-            proxy_pass http://pie-2.infra:9001/;
+            proxy_pass http://pie-2.hnet:9001/;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
           ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;

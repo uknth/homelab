@@ -1,0 +1,12 @@
+- name: Add 'nextcloud' helm repository
+  kubernetes.core.helm:
+    name: nextcloud
+    repo_url: https://nextcloud.github.io/helm/
+
+- name: Deploy 'nextcloud' using helm charts
+  kubernetes.core.helm:
+    name: nextcloud
+    chart_ref: nextcloud/nextcloud
+    release_namespace: {{ k8s_namespace }}
+    chart_version: {{ nextcloud_chart_version }}
+    values: "{{ lookup('templates', 'nextcloud_values.yaml.j2') | from_yaml }}"
