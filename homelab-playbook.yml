@@ -47,6 +47,9 @@
         samba_share_root: "/mnt/fast2"
         samba_share_name: "fast-storage2"
 
+    - role: system/network/syncthing
+      tags: ["sidekick-1", "system", "network", "syncthing", "file-sync"]
+
 # Common Mega
 - name: Common 'mega' roles
   hosts: mega
