@@ -1,0 +1,11 @@
+- name: Download kind binary
+  command: |
+    curl -Lo ./kind https://kind.sigs.k8s.io/dl/{{ kind_version }}/kind-linux-amd64
+- name: Change permission of binary
+  command: |
+    chmod +x kind
+
+- name: Install binary
+  become: true
+  command: |
+    sudo install kind /usr/local/bin

@@ -45,7 +45,12 @@ homelab_gotify_domain_name: "gotify.homelab.uknth.me"
 # Samba configuration
 
 # Extra Configuration
-smb_storage_host: "hero-1.homelab.uknth.me"
+fast_storage_host: "hero-1.hnet"
+nas_storage_host: "nas-1.hnet"
+
+# Spotify
+spotify_id: "{{ vault_spotify_id }}"
+spotify_secret: "{{ vault_spotify_secret }}"
 
 statping_hosts:
   - { name: "home", url: "https://homelab.uknth.me" }

@@ -1,0 +1,16 @@
+fast_pv_name: "smb.fast-storage.navidrome.pv"
+fast_storage_capacity: 200Gi
+fast_pvc_name: "smb.fast-storage.navidrome.pvc" # for different directories of navidrome
+fast_storage_host: "hero-1.homelab.uknth.me"
+
+nas_pv_name: "smb.nas.navidrome.music.pv"
+nas_pvc_name: "smb.nas.navidrome.music.pvc"
+nas_storage_capacity: 500Gi
+nas_storage_host: "nas-1.homelab.uknth.me"
+
+navidrome_name: "homelab-navidrome"
+navidrome_image: "deluan/navidrome"
+navidrome_image_version: "0.49.1"
+
+spotify_id: some-id
+spotify_secret: some-secret

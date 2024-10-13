@@ -51,8 +51,8 @@
       tags: ["sidekick-1", "system", "network", "syncthing", "file-sync"]
 
 # Common Mega
-- name: Common 'mega' roles
-  hosts: mega
+- name: Common 'hero' roles
+  hosts: heros
   roles:
     - role: system/packages/k3s
       tags: ["system", "k3s", "kubernetes"] 
@@ -67,6 +67,16 @@
           samba_share_root: "/mnt/databank"
           samba_share_name: "fast-storage"
 
+    - role: k8s/tools/samba
+      tags: ["k8s", "samba","secret" ,"samba-config", "csi"]
+
+    - role: k8s/media/jellyfin
+      tags: ["k8s", "jellyfin", "k8s-app"]
+
+    - role: k8s/media/navidrome
+      tags: ["k8s", "navidrome", "k8s-app"]
+ 
+
 
 # Common Workstation
 - name: common 'workstation' roles
@@ -78,8 +88,29 @@
   hosts: workstation-1
   gather_facts: true
   roles:
+    - role: system/packages/docker
+      tags: ["system", "docker"]
+
     - role: system/packages/helm
       tags: ["system", "helm", "installer"]
 
-    - role: "system/packages/neovim"
-      tags: ["system", "neovim", "installer"]
+    - role: system/packages/kind
+      tags: ["system", "kind", "installer"]
+
+    - role: system/packages/kubectl
+      tags: ["system", "kubectl", "installer"]
+
+    - role: dev/packages/go
+      tags: ["dev", "go", "golang", "installer" ]
+
+    - role: dev/packages/taskfile
+      tags: ["dev", "taskfile", "task", "installer" ]
+
+    - role: dev/packages/skaffold
+      tags: ["dev", "skaffold", "installer"]
+
+    - role: dev/packages/awscli
+      tags: ["dev", "awscli", "installer"]
+
+    - role: dev/packages/lazygit
+      tags: ["dev", "lazygit", "installer"]
