@@ -1,8 +1,0 @@
-- name: Setup neovim
-  become: true
-  ansible.builtin.import_role:
-    name: "role.neovim"
-  vars:
-    neovim_nightly: false
-    neovim_version: "0.10.0"
- 

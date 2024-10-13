@@ -1,3 +1,0 @@
-- name: Setup SDKman and install Java
-  ansible.builtin.import_role:
-    name: comcast.sdkman

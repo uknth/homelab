@@ -1,0 +1,3 @@
+# version is defined as `v0.44.1` but whats needed here is 
+# just the version number, after removing v
+lazygit_version: "0.44.1"

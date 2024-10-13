@@ -1,0 +1,12 @@
+- name: Setup Taskfile.dev on Server
+  command: |
+    curl -fsSL -o install_taskfile.sh https://taskfile.dev/install.sh
+
+- name: Change permission for script
+  command: |
+    chmod 700 install_taskfile.sh
+
+- name: Execute installer script
+  become: true
+  command: |
+    ./install_taskfile.sh -d -b /usr/local/bin

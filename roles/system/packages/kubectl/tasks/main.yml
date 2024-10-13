@@ -1,0 +1,12 @@
+- name: Download kind binary
+  command: |
+       curl -LO "https://dl.k8s.io/release/{{ kubectl_version}}/bin/linux/amd64/kubectl"
+
+- name: Change permission of binary
+  command: |
+    chmod +x kubectl
+
+- name: Install binary
+  become: true
+  command: |
+    sudo install kubectl /usr/local/bin

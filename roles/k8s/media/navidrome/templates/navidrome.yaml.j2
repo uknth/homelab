@@ -30,9 +30,9 @@ spec:
         - name: "ND_DATAFOLDER"
           value: "/data/navidrome"
         - name: "ND_SPOTIFY_ID"
-          value: "c076cf6a14844ff9b6f9c6392863fa46"
+          value: "{{ spotify_id }}"
         - name: "ND_SPOTIFY_SECRET"
-          value: "{{ nd_spotify_secret }}"
+          value: "{{ spotify_secret }}"
         ports:
         - containerPort: 4533
         securityContext:

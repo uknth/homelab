@@ -1,0 +1,12 @@
+- name: Download aws-cli binary from AWS
+  command: |
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+
+- name: Unzip aws-cli zip file
+  command: |
+    unzip awscliv2.zip
+
+- name: Install AWS CLI
+  become: true
+  command: |
+    ./aws/install

@@ -1,4 +1,4 @@
-# Basic configuration
+# This is very hard-coded file, can't be used without major modification
 port: 53
 httpPort: 4000
 
@@ -6,15 +6,17 @@ prometheus:
   enable: true
   path: /metrics
 
-# DNS Related Config
-upstream:
-  default:
-    - 10.0.2.7
+upstreams:
+  # use cloudflare's 1.1.1.1 if the upstream raspberry-pi (pi-hole) fails to respond
+  strategy: "strict"
+  timeout: 1s
+  groups: 
+    default:
+      - 10.0.2.7
+      - 1.1.1.1
 upstreamTimeout: 2s
-
 bootstrapDns: tcp+udp:1.1.1.1
 
-# Caching Related Config
 caching:
   minTime: 10m
   maxTime: 30m
@@ -24,10 +26,9 @@ caching:
   prefetchThreshold: 5
   prefetchMaxItemsCount: 10000
   cacheTimeNegative: 3m
-
-# Blocking Related Config
+  
 # We aren't doing any blocking here, it is handled by upstream dns server
-# running on pie-1.infra
+# running on pie-1.hnet
 blocking:
   blackLists:
     ads: []
@@ -44,22 +45,24 @@ blocking:
   downloadCooldown: 30s
   startStrategy: failOnError
 
-
-# optional: custom IP address(es) for domain name (with all sub-domains). Multiple addresses must be separated by a comma
-# example: query "printer.lan" or "my.printer.lan" will return 192.168.178.3
 customDNS:
   customTTL: 10m
-  # optional: if true (default), return empty result for unmapped query types (for example TXT, MX or AAAA if only IPv4 address is defined).
-  # if false, queries with unmapped types will be forwarded to the upstream resolver
   filterUnmappedTypes: true
-  # optional: replace domain in the query with other domain before resolver lookup in the mapping
-
   rewrite:
-    homelab.uknth.me: infra
+    homelab.uknth.me: hnet
   mapping:
     {% for name, var in hostvars.items() -%}
-    {{ name }}.infra: {{ hostvars[name]["ansible_host"] }}
+    {{ name }}.hnet: {{ hostvars[name]["ansible_host"] }}
     {% endfor -%}  
-    router-1.infra: 10.0.2.1
-    nas-1.infra: 10.0.2.3
-    infra: 10.0.2.2
+    router-1.hnet: 10.0.2.1
+    nas-1.hnet: 10.0.2.3
+    hnet: 10.0.2.2
+#  zone: |
+#    $ORIGIN homelab.uknth.me.
+#    $TTL 3600
+#    @                   IN  A       10.0.2.2
+#    music               IN  CNAME   navidrome
+#    tv                  IN  CNAME   jellyfin
+#    video               IN  CNAME   jellyfin
+#    jellyfin            IN  A       10.0.2.2
+#    navidrome           IN  A       10.0.2.2

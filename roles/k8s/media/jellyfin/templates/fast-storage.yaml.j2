@@ -24,9 +24,9 @@ spec:
     readOnly: false
     # volumeHandle format: {smb-server-address}#{sub-dir-name}#{share-name}
     # make sure this value is unique for every share in the cluster
-    volumeHandle: {{ smb_storage_host }}/fast-storage/jellyfin##
+    volumeHandle: {{ fast_storage_host }}/fast-storage/jellyfin##
     volumeAttributes:
-      source: "//{{ smb_storage_host }}/fast-storage"
+      source: "//{{ fast_storage_host }}/fast-storage"
     nodeStageSecretRef:
       name: {{ homelab_smb_fast_storage_secret }}
       namespace: {{ homelab_namespace }}

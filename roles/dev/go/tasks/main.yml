@@ -1,6 +1,0 @@
-- name: Setup Golang on Server
-  ansible.builtin.import_role:
-    name: gantsign.golang
-  vars:
-    golang_version: "1.21.1"
-    golang_redis_sha256sum: "b3075ae1ce5dab85f89bc7905d1632de23ca196bd8336afd93fa97434cfa55ae"
