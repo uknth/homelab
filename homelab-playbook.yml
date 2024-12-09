@@ -114,3 +114,6 @@
 
     - role: dev/packages/lazygit
       tags: ["dev", "lazygit", "installer"]
+
+    - role: dev/packages/node
+      tags: ["dev", "node", "installer"]
