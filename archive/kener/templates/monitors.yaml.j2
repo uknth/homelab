@@ -1,0 +1,8 @@
+{% for var in kerner_hosts %}
+- name: {{ var.name }}
+  description: {{ var.desc }}
+  image: {{ var.icon }}
+  api:
+    method: GET
+    url: {{ var.url }}
+{% endfor %}

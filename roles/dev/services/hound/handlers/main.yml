@@ -1,3 +1,0 @@
-- name: restart hound
-  service: name=hound state=restarted
-  become: true

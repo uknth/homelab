@@ -1,0 +1,37 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/kener/config && mkdir -p {{ config_dir }}/kener/data
+
+- name: Copy config files to 'config' directory
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  with_items:
+    - {
+      src: "templates/monitors.yaml.j2",
+      dest: "{{ config_dir }}/kener/config/monitors.yaml"
+    }
+
+    - {
+      src: "templates/server.yaml.j2",
+      dest: "{{ config_dir }}/kener/config/server.yaml"
+    }
+
+    - {
+      src: "templates/site.yaml.j2",
+      dest: "{{ config_dir }}/kener/config/site.yaml"
+    }
+
+- name: Deploy kener
+  community.docker.docker_container:
+    name: kener
+    image: rajnandan1/kener:latest 
+    ports:
+      - "3000:3000/tcp"
+    volumes:
+      - "{{ config_dir }}/kener/data:/app/database:rw"
+      - "{{ config_dir }}/kener/config:/app/config"
+    restart_policy: always
