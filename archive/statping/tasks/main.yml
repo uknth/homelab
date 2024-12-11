@@ -1,0 +1,27 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/statping
+- name: "Create service.yml for Default hosts"
+  ansible.builtin.template:
+    src: templates/{{ item.src }}
+    dest: "{{ config_dir }}/statping/{{ item.dest }}"
+    mode: 0644
+  loop:
+    - src: services.yml.j2
+      dest: services.yml
+  notify: Restart statping
+  become: false
+
+- name: "Start Statping Docker Image"
+  community.docker.docker_container:
+    name: statping-homelab
+    image: adamboutcher/statping-ng:latest
+    image_name_mismatch: recreate
+    env:
+      DB_CONN: sqlite
+      DOMAIN: "{{ homelab_statping_domain_name }}"
+    volumes:
+      - "{{ config_dir }}/statping/data:/app"
+      - "{{ config_dir }}/statping/services.yml:/app/services.yml"
+    published_ports:
+      - 0.0.0.0:8081:8080

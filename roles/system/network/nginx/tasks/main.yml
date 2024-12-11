@@ -1,7 +1,7 @@
 - name: Setup certificate using 'certbot'
   become: true
   ansible.builtin.import_role:
-    name: "network/certbot"
+    name: "system/network/certbot"
   vars:
     certbot_install_method: package
     certbot_create_if_missing: true
@@ -46,64 +46,6 @@
           ssl_ciphers         HIGH:!aNULL:!MD5;
 
       - listen: "443 ssl http2"
-        server_name: "grafana.homelab.uknth.me"
-        extra_parameters: |
-          location / {
-            proxy_pass http://sidekick-1.homelab.uknth.me:3030/;
-            proxy_set_header Host $http_host;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-
-      - listen: "443 ssl http2"
-        server_name: "prometheus.homelab.uknth.me"
-        extra_parameters: |
-          location / {
-            proxy_pass http://sidekick-1.homelab.uknth.me:9090/;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-
-      - listen: "443 ssl http2"
-        server_name: "portainer.homelab.uknth.me"
-        extra_parameters: |
-          location / {
-            proxy_pass http://sidekick-1.homelab.uknth.me:9000/;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-
-      - listen: "443 ssl http2"
-        server_name: "skooner.homelab.uknth.me"
-        extra_parameters: |
-          location / {
-            proxy_pass http://hero-1.homelab.uknth.me:80/;
-            proxy_set_header Host $http_host;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-
-      - listen: "443 ssl http2"
-        server_name: "{{ homelab_shiori_domain_name }}"
-        extra_parameters: |
-          location / {
-            proxy_pass http://hero-1.homelab.uknth.me:80/;
-            proxy_set_header Host $http_host;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-
-      - listen: "443 ssl http2"
         server_name: "blocky.homelab.uknth.me"
         extra_parameters: |
           location / {
@@ -138,45 +80,10 @@
           ssl_ciphers         HIGH:!aNULL:!MD5;
 
       - listen: "443 ssl"
-        server_name: "{{ homelab_navidrome_domain_name }}"
-        extra_parameters: |
-          location / {
-            proxy_pass http://hero-1.homelab.uknth.me:80/;
-            proxy_set_header Host $http_host;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-
-      - listen: "443 ssl"
         server_name: "music.homelab.uknth.me"
         extra_parameters: |
           location / {
             proxy_pass http://hero-1.homelab.uknth.me:80/;
-            proxy_set_header Host $http_host;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-      - listen: "443 ssl"
-        server_name: "portainer-workstation.homelab.uknth.me"
-        extra_parameters: |
-          location / {
-            proxy_pass http://workstation-1.homelab.uknth.me:9000/;
-            proxy_set_header Host $http_host;
-          }
-          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
-          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
-          ssl_protocols       TLSv1.1 TLSv1.2;
-          ssl_ciphers         HIGH:!aNULL:!MD5;
-
-      - listen: "443 ssl http2"
-        server_name: "{{ homelab_hound_domain_name }}"
-        extra_parameters: |
-          location / {
-            proxy_pass http://workstation-1.homelab.uknth.me:8301/;
             proxy_set_header Host $http_host;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -197,10 +104,10 @@
           ssl_ciphers         HIGH:!aNULL:!MD5;
 
       - listen: "443 ssl http2"
-        server_name: "{{ homelab_gotify_domain_name }}"
+        server_name: "pi-hole.homelab.uknth.me"
         extra_parameters: |
           location / {
-            proxy_pass http://sidekick-1.homelab.uknth.me:8082/;
+            proxy_pass http://pie-1.homelab.uknth.me:80/;
             proxy_set_header Host $http_host;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
@@ -209,11 +116,13 @@
           ssl_ciphers         HIGH:!aNULL:!MD5;
 
       - listen: "443 ssl http2"
-        server_name: "pi-hole.homelab.uknth.me"
+        server_name: "homeassistant.homelab.uknth.me"
         extra_parameters: |
           location / {
-            proxy_pass http://pie-1.homelab.uknth.me:80/;
+            proxy_pass http://pie-3.homelab.uknth.me:8123/;
             proxy_set_header Host $http_host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection “upgrade”;
           }
           ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
           ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;

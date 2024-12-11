@@ -4,6 +4,8 @@ ansible_ssh_public_key: "{{ vault_ansible_ssh_public_key }}"
 # homelab configuration
 timezone: Asia/Kolkata
 config_dir: "~/.config/homelab"
+
+# base domain
 domain_name: homelab.uknth.me
 domain: homelab.uknth.me
 
@@ -33,13 +35,9 @@ homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"
 homelab_smb_nas_secret: "homelab.smb.nas.cred"
 
 # Shiori
-homelab_shiori_domain_name: "shiori.homelab.uknth.me"
 homelab_jellyfin_domain_name: "jellyfin.homelab.uknth.me"
 homelab_navidrome_domain_name: "navidrome.homelab.uknth.me"
-homelab_transmission_domain_name: "transmission.homelab.uknth.me"
-homelab_hound_domain_name: "hound.homelab.uknth.me"
 homelab_statping_domain_name: "statping.homelab.uknth.me"
-homelab_gotify_domain_name: "gotify.homelab.uknth.me"
 
 
 # Samba configuration
@@ -51,10 +49,3 @@ nas_storage_host: "nas-1.hnet"
 # Spotify
 spotify_id: "{{ vault_spotify_id }}"
 spotify_secret: "{{ vault_spotify_secret }}"
-
-statping_hosts:
-  - { name: "home", url: "https://homelab.uknth.me" }
-  - { name: "navidrome", url: "https://music.homelab.uknth.me" }
-  - { name: "blocky", url: "https://blocky.homelab.uknth.me" }
-  - { name: "prometheus", url: "https://prometheus.homelab.uknth.me" }
-  - { name: "grafana", url: "https://grafana.homelab.uknth.me" }

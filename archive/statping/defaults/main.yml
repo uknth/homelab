@@ -1,0 +1,9 @@
+statping_hosts:
+  - { name: "home", url: "https://homelab.uknth.me" }
+  - { name: "navidrome", url: "https://music.homelab.uknth.me" }
+  - { name: "blocky", url: "https://blocky.homelab.uknth.me" }
+  - { name: "vault", url: "https://vault.homelab.uknth.me" }
+  - { name: "jellyfin", url: "https://jellyfin.homelab.uknth.me" }
+  - { name: "pi-hole", url: "https://pi-hole.homelab.uknth.me/admin" }
+  - { name: "nas", url: "https://nas.homelab.uknth.me" }
+

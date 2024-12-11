@@ -1,0 +1,6 @@
+kerner_hosts: 
+- { name: "Homelab", desc: "Homelab's Home Page", icon: "https://homelab.uknth.me/assets/tools/homer.svg", url: "https://homelab.uknth.me" }
+- { name: "Navidrome", desc: "Music Player", icon: "https://homelab.uknth.me/assets/tools/navidrome.svg", url: "https://music.homelab.uknth.me" }
+- { name: "Blocky", desc: "Local network DNS resolver", icon: "https://homelab.uknth.me/assets/tools/blocky.svg", url: "https://blocky.homelab.uknth.me"}
+- { name: "Jellyfin", desc: "Video Player", icon: "https://homelab.uknth.me/assets/tools/jellyfin.svg", url: "https://jellyfin.homelab.uknth.me"}
+- { name: "Pi-Hole", desc: "Local network DNS Ad-Blocker", icon: "https://homelab.uknth.me/assets/tools/pihole.svg", url: "https://pi-hole.homelab.uknth.me/admin"}

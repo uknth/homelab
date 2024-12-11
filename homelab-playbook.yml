@@ -1,6 +1,6 @@
-# ALL INSTANCE ROLES
-- name: instance roles, run on all instances
-  hosts: all
+# pie-1
+- name: minis/pie-1 roles
+  hosts: pie-1
   roles:
     - name: system/packages/apt
       tags: ["system", "packages", "apt"]
@@ -8,16 +8,6 @@
     - name: system/packages/ntp
       tags: ["system", "ntp"]
 
-
-# Common Minis
-- name: common 'minis' roles
-  hosts: minis
-  roles:
-
-# pie-1
-- name: minis/pie-1 roles
-  hosts: pie-1
-  roles:
     - role: docker/network/pi-hole
       tags: ["docker", "network", "dns", "pi-hole", "pihole"]
 
@@ -25,6 +15,12 @@
 - name: minis/pie-2 roles
   hosts: pie-2
   roles:
+    - name: system/packages/apt
+      tags: ["system", "packages", "apt"]
+
+    - name: system/packages/ntp
+      tags: ["system", "ntp"]
+
     - role: system/packages/docker
       tags: ["system", "docker"]
 
@@ -34,10 +30,29 @@
     - role: docker/network/blocky
       tags: ["docker", "network", "dns", "blocky"]
 
+    - role: docker/ui/homer
+      tags: ["ui", "homer"]
+
+##    This role is deprecated, use kener instead
+##    - role: docker/monitor/statping
+##      tags: ["monitoring", "monitor", "docker", "statping"]
+
+    - role: docker/monitor/kener
+      tags: ["monitoring", "monitor", "docker", "kener"]
+    
+    - role: system/network/nginx
+      tags: ["system" , "network", "nginx"]
+
 # sidekick-1
 - name: minis/sidekick-1 roles
   hosts: sidekick-1
   roles:
+    - name: system/packages/apt
+      tags: ["system", "packages", "apt"]
+
+    - name: system/packages/ntp
+      tags: ["system", "ntp"]
+
     - role: system/packages/docker
       tags: ["system", "docker"]
 
@@ -50,17 +65,19 @@
     - role: system/network/syncthing
       tags: ["sidekick-1", "system", "network", "syncthing", "file-sync"]
 
-# Common Mega
-- name: Common 'hero' roles
-  hosts: heros
-  roles:
-    - role: system/packages/k3s
-      tags: ["system", "k3s", "kubernetes"] 
-
 # hero-1
 - name: megas/hero-1 roles
   hosts: hero-1
   roles:
+    - name: system/packages/apt
+      tags: ["system", "packages", "apt"]
+
+    - name: system/packages/ntp
+      tags: ["system", "ntp"]
+
+    - role: system/packages/k3s
+      tags: ["system", "k3s", "kubernetes"] 
+
     - role: system/network/samba
       tags: ["hero-1", "system", "network", "samba", "file-sharing"]
       vars:
@@ -76,18 +93,16 @@
     - role: k8s/media/navidrome
       tags: ["k8s", "navidrome", "k8s-app"]
  
-
-
-# Common Workstation
-- name: common 'workstation' roles
-  hosts: workstation
-  gather_facts: true
-  roles:
-
 - name: workstation/workstation-1 roles
   hosts: workstation-1
   gather_facts: true
   roles:
+    - name: system/packages/apt
+      tags: ["system", "packages", "apt"]
+
+    - name: system/packages/ntp
+      tags: ["system", "ntp"]
+
     - role: system/packages/docker
       tags: ["system", "docker"]
 
