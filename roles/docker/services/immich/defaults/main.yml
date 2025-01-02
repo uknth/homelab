@@ -1,0 +1,4 @@
+immich_version: v1.123.0
+immich_storage_location: /mnt/fast2/immich/upload
+immich_db_data_location: "/mnt/fast2/immich/db/data"
+immich_db_password: some-password

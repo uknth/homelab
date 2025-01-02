@@ -52,16 +52,22 @@ services:
   - name: "Media"
     icon: "fas fa-film"
     items:
-      - name: "Jellyfin"
+      - name: "Video [Jellyfin]"
         logo: "assets/tools/jellyfin.svg"
         subtitle: "Local Media Streaming"
         url: "https://jellyfin.{{ domain_name }}"
         target: "_blank"
 
-      - name: "Navidrome"
+      - name: "Music [Navidrome]"
         logo: "assets/tools/navidrome.svg"
         subtitle: "Local Music Streaming"
         url: "https://music.{{ domain_name }}"
+        target: "_blank"
+
+      - name: "Photos [Immich]"
+        logo: "assets/tools/immich.svg"
+        subtitle: "Local Photos Viewer & Backup"
+        url: "https://photos.{{ domain_name }}"
         target: "_blank"
 
   - name: "IOT"
@@ -116,16 +122,7 @@ services:
         subtitle: "NAS, Synology"
         url: "https://nas.{{ domain_name }}"
         target: "_blank"
-
-  - name: "Monitoring & Alerting"
-    icon: "fas fa-desktop"
-    items:
-      - name: "Statping"
-        logo: "assets/tools/statping.png"
-        subtitle: "Endpoint Monitoring of Domains"
-        url: "https://statping.homelab.uknth.me"
-        target: "_blank"
-
+        
   - name: "File Sync" 
     icon: "fas fa-file"
     items:

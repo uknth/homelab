@@ -30,16 +30,12 @@
     - role: docker/network/blocky
       tags: ["docker", "network", "dns", "blocky"]
 
+    - role: docker/services/vaultwarden
+      tags: ["docker", "service", "vaultwarden"]
+
     - role: docker/ui/homer
       tags: ["ui", "homer"]
 
-##    This role is deprecated, use kener instead
-##    - role: docker/monitor/statping
-##      tags: ["monitoring", "monitor", "docker", "statping"]
-
-    - role: docker/monitor/kener
-      tags: ["monitoring", "monitor", "docker", "kener"]
-    
     - role: system/network/nginx
       tags: ["system" , "network", "nginx"]
 
@@ -64,6 +60,10 @@
 
     - role: system/network/syncthing
       tags: ["sidekick-1", "system", "network", "syncthing", "file-sync"]
+
+    - role: docker/services/immich
+      tags: ["sidekick-1", "docker", "immich"]
+
 
 # hero-1
 - name: megas/hero-1 roles
