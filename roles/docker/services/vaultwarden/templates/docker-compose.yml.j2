@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  vaultwarden:
+    container_name: vaultwarden
+    image: vaultwarden/server:{{ vw_server_version }}
+    restart: unless-stopped
+    volumes:
+      - ./data/:/data/
+    ports:
+      - 14001:80
+    environment:
+      - DOMAIN=https://{{ vw_host }}
+      - LOGIN_RATELIMIT_MAX_BURST=10
+      - LOGIN_RATELIMIT_SECONDS=60
+      - ADMIN_RATELIMIT_MAX_BURST=10
+      - ADMIN_RATELIMIT_SECONDS=60
+      - ADMIN_TOKEN={{ vw_admin_token }}
+      - SENDS_ALLOWED=true
+      - EMERGENCY_ACCESS_ALLOWED=true
+      - WEB_VAULT_ENABLED=true
+      - SIGNUPS_ALLOWED=true
+      - SIGNUPS_VERIFY=true
+      - SIGNUPS_VERIFY_RESEND_TIME=3600
+      - SIGNUPS_VERIFY_RESEND_LIMIT=5
+      - SIGNUPS_DOMAINS_WHITELIST=uknth.me,gmail.com,outlook.com
+      - SMTP_HOST=smtp-mail.outlook.com
+      - SMTP_PORT=587
+      - SMTP_SECURITY=starttls
+      - SMTP_FROM={{ vw_smtp_from }}
+      - SMTP_USERNAME={{ vw_smtp_user }}
+      - SMTP_PASSWORD={{ vw_smtp_password }}
+      - SMTP_AUTH_MECHANISM="Login"

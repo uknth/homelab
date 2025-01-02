@@ -29,6 +29,15 @@ samba_user_password: "{{ vault_samba_user_password }}"
 cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
 sudo_password: "{{ vault_sudo_password }}"
 
+# vaultwarden
+vw_admin_token: "{{ vault_vw_admin_token }}"
+vw_smtp_from: "{{ vault_vw_smtp_from }}"
+vw_smtp_user: "{{ vault_vw_smtp_user }}"
+vw_smtp_password: "{{ vault_vw_smtp_password }}"
+
+# immich
+immich_db_password: "{{ vault_immich_db_password }}"
+
 # Common
 homelab_namespace: homelab
 homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"

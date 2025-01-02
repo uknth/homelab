@@ -1,0 +1,6 @@
+vw_server_version: latest
+vw_host: vault.homelab.uknth.me
+vw_admin_token: some-token
+vw_smtp_from: some-from
+vw_smtp_user: some-user
+vw_smtp_password: some-password
