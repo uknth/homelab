@@ -67,6 +67,9 @@
     - role: docker/services/whoogle
       tags: ["sidekick-1", "docker", "whoogle"]
 
+    - role: docker/services/sourcebot
+      tags: ["sidekick-1", "docker", "sourcebot"]
+
 # hero-1
 - name: megas/hero-1 roles
   hosts: hero-1

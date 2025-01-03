@@ -1,0 +1,27 @@
+- name: Make directory for sourcebot workspace
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/sourcebot
+
+- name: Copy config file to sourcebot
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: "{{ config_dir }}/sourcebot/config.json"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  notify: Restart Sourcebot
+
+- name: Deploy sourcebot
+  community.docker.docker_container:
+    name: sourcebot
+    image: ghcr.io/sourcebot-dev/sourcebot:latest
+    ports:
+      - "3000:3000"
+    env:
+      CONFIG_PATH: /data/config.json
+      SOURCEBOT_TELEMETRY_DISABLED: "1"
+      SOURCEBOT_LOG_LEVEL: "{{ sb_log_level }}"
+    volumes:
+      - "{{ config_dir }}/sourcebot:/data"
+      - "{{ sb_local_repo_location }}:/repos"
+    restart_policy: always

@@ -165,3 +165,15 @@
           ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
           ssl_protocols       TLSv1.1 TLSv1.2;
           ssl_ciphers         HIGH:!aNULL:!MD5;
+
+      - listen: "443 ssl http2"
+        server_name: "sourcebot.homelab.uknth.me"
+        extra_parameters: |
+          location / {
+            proxy_pass http://sidekick-1.hnet:3000/;
+            proxy_set_header Host $http_host;
+          }
+          ssl_certificate     /etc/letsencrypt/live/homelab.uknth.me/fullchain.pem;
+          ssl_certificate_key /etc/letsencrypt/live/homelab.uknth.me/privkey.pem;
+          ssl_protocols       TLSv1.1 TLSv1.2;
+          ssl_ciphers         HIGH:!aNULL:!MD5;
