@@ -1,0 +1,6 @@
+- name: Restart websurfx
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/websurfx/"
+    build: never
+    state: restarted
+  become: false

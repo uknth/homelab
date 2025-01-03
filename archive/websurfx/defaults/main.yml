@@ -1,0 +1,3 @@
+ws_thread_count: 4
+ws_port: "8080"
+ws_colorscheme: "one-dark"

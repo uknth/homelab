@@ -1,0 +1,31 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/websurfx/websurfx
+
+- name: Create empty files in the directory
+  ansible.builtin.command: |
+    touch {{ config_dir }}/websurfx/websurfx/allowlist.txt && \
+      touch {{ config_dir }}/websurfx/websurfx/blocklist.txt
+
+
+- name: Copy docker compose template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ config_dir }}/websurfx/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  notify: Restart websurfx
+
+- name: Copy config.lua
+  ansible.builtin.template:
+    src: config.lua.j2
+    dest: "{{ config_dir }}/websurfx/websurfx/config.lua"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  notify: Restart websurfx
+
+- name: Deploy websurfx using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/websurfx"

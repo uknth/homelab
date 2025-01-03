@@ -64,6 +64,8 @@
     - role: docker/services/immich
       tags: ["sidekick-1", "docker", "immich"]
 
+    - role: docker/services/whoogle
+      tags: ["sidekick-1", "docker", "whoogle"]
 
 # hero-1
 - name: megas/hero-1 roles
