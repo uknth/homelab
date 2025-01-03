@@ -1,0 +1,20 @@
+logging = true 
+debug = false 
+threads = {{ ws_thread_count }} 
+port = "{{ ws_port }}" 
+binding_ip = "0.0.0.0" 
+production_use = false 
+request_timeout = 30 
+rate_limiter = {
+	number_of_requests = 20, 
+	time_limit = 3, 
+}
+safe_search = 1
+colorscheme = "{{ ws_colorscheme }}" 
+theme = "simple" 
+redis_url = "redis://redis:6379" 
+upstream_search_engines = {
+    Google = true,
+	DuckDuckGo = true,
+	Searx = true,
+} 

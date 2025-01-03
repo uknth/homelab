@@ -1,0 +1,15 @@
+---
+version: '3.9'
+services:
+  app:
+    image: neonmmd/websurfx:latest
+    ports:
+      - {{ ws_port }}:{{ ws_port }}
+    depends_on:
+      - redis
+    links:
+      - redis
+    volumes:
+      - ./websurfx/:/etc/xdg/websurfx/
+  redis:
+    image: redis:latest

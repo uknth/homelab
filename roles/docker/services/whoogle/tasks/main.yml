@@ -1,0 +1,11 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/whoogle
+
+- name: Deploy whoogle
+  community.docker.docker_container:
+    name: whoogle
+    image: benbusby/whoogle-search:0.9.1
+    ports:
+      - "5000:5000"
+    restart_policy: always
