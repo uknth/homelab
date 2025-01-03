@@ -38,6 +38,43 @@ vw_smtp_password: "{{ vault_vw_smtp_password }}"
 # immich
 immich_db_password: "{{ vault_immich_db_password }}"
 
+# sourcebot
+sb_local_repos:
+- {name: "fork/albus", exclude_paths: []}
+- {name: "fork/arbor", exclude_paths: []}
+- {name: "fork/asterix", exclude_paths: []}
+- {name: "fork/autobots", exclude_paths: []}
+- {name: "fork/banshee", exclude_paths: []}
+- {name: "fork/blackpearl", exclude_paths: []}
+- {name: "fork/cloudflare-workers", exclude_paths: []}
+- {name: "fork/ether", exclude_paths: []}
+- {name: "fork/faker", exclude_paths: []}
+- {name: "fork/go-base", exclude_paths: []}
+- {name: "fork/go-starter", exclude_paths: []}
+- {name: "fork/groot", exclude_paths: []}
+- {name: "fork/hagrid", exclude_paths: []}
+- {name: "fork/irene", exclude_paths: []}
+- {name: "fork/java-starter", exclude_paths: []}
+- {name: "fork/marvin", exclude_paths: []}
+- {name: "fork/mozart", exclude_paths: []}
+- {name: "fork/nats-bridge", exclude_paths: []}
+- {name: "fork/odin", exclude_paths: []}
+- {name: "fork/overpass", exclude_paths: []}
+- {name: "fork/platform-github-action", exclude_paths: []}
+- {name: "fork/protodep", exclude_paths: []}
+- {name: "fork/search-brewer", exclude_paths: []}
+- {name: "fork/search-configurator", exclude_paths: []}
+- {name: "fork/segment-data-aggregator", exclude_paths: []}
+- {name: "fork/solr-plugin", exclude_paths: []}
+- {name: "fork/solr-zero", exclude_paths: []}
+- {name: "fork/sputnik", exclude_paths: []}
+- {name: "fork/watson", exclude_paths: []}
+- {name: "fork/wingman", exclude_paths: []}
+- {name: "orig/solr", exclude_paths: []}
+- {name: "orig/homelab", exclude_paths: []}
+- {name: "orig/uknth.github.io", exclude_paths: []}
+
+
 # Common
 homelab_namespace: homelab
 homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"

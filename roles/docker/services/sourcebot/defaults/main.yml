@@ -1,0 +1,12 @@
+# only public repositories
+sb_github_repos:
+- "unbxd/go-base"
+
+sb_local_repo_location: "/mnt/fast2/syncthing/Workspace"
+
+# local clone
+sb_local_repos:
+- { name: "fork/wingman", exclude_paths: []}
+
+# log level - debug, info
+sb_log_level: "info"
