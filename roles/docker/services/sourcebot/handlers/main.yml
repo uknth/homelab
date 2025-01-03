@@ -1,0 +1,5 @@
+- name: Restart Sourcebot
+  community.docker.docker_container:
+    name: sourcebot
+    state: started
+    restart: true

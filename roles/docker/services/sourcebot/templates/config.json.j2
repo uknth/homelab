@@ -1,0 +1,37 @@
+{
+    "$schema": "https://raw.githubusercontent.com/sourcebot-dev/sourcebot/main/schemas/v2/index.json",
+    "repos": [
+        {
+            "type": "github",
+            "repos": [
+                {% for r in sb_github_repos %}
+                "{{ r }}",
+                {% endfor %}
+                "ggerganov/llama.cpp"
+            ]
+        },
+        {% for r in sb_local_repos %}
+        {
+            "type": "local",
+            "path": "/repos/{{ r.name }}",
+            "watch": true,
+            "exclude": {
+                "paths": [
+                    {% for e in r.exclude_paths %}
+                    "{{ e }}",
+                    {% endfor %}
+                    "node_modules",
+                    "target",
+                    "bin",
+                    "docs",
+                    "build",
+                    "*sync-conflict*"
+                ]
+            }
+        }
+        {%- if not loop.last -%}
+        ,
+        {% endif %}
+        {% endfor %}
+    ]
+}
