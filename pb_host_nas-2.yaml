@@ -1,5 +1,5 @@
 - name: nases/nas-2 roles
-  hosts: nas-2.puhome.net
+  hosts: nas-2.host
   roles:
     - role: docker/services/vaultwarden
       tags: ["docker", "service", "vaultwarden"]

@@ -1,12 +1,13 @@
 - name: "Download latest version of LazyGit"
-  command: |
-    curl -fsSL -o lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v0.44.1/lazygit_{{lazygit_version}}_Linux_x86_64.tar.gz"
-
-- name: "Extract lazygit"
-  command: |
-    tar -xf lazygit.tar.gz lazygit
+  unarchive:
+    url: "https://github.com/jesseduffield/lazygit/releases/download/v0.44.1/lazygit_{{lazygit_version}}_Linux_x86_64.tar.gz"
+    dest: "{{ data_dir }}/downloads/lazygit"
+    remote_src: true
+    creates: "{{ data_dir }}/downloads/lazygit.tar.gz"
+    mode: 0755
 
 - name: "Install lazygit"
   become: true
   command: |
-    sudo install lazygit /usr/local/bin
+    sudo install {{ data_dir }}/downloads/lazygit/lazygit /usr/local/bin
+    creates: /usr/local/bin/lazygit

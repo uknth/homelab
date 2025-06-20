@@ -2,3 +2,5 @@
   become: true
   ansible.builtin.import_role:
     name: geerlingguy.nodejs
+  vars:
+    nodejs_version: "20.x"

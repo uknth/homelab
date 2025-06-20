@@ -1,12 +1,27 @@
-- name: Download kind binary
-  command: |
-       curl -LO "https://dl.k8s.io/release/{{ kubectl_version}}/bin/linux/amd64/kubectl"
+- name: Check current kubectl version
+  ansible.builtin.command: /usr/local/bin/kubectl version --client --short
+  register: kubectl_version_result
+  changed_when: false
+  failed_when: false
 
-- name: Change permission of binary
-  command: |
-    chmod +x kubectl
+- name: Set installed_kubectl_version fact
+  ansible.builtin.set_fact:
+    installed_kubectl_version: "{{ kubectl_version_result.stdout | regex_search('v[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+  when: kubectl_version_result.rc == 0
 
-- name: Install binary
-  become: true
-  command: |
-    sudo install kubectl /usr/local/bin
+- name: Install/Update kubectl
+  when: installed_kubectl_version | default('') != kubectl_version
+  block:
+    - name: Download kubectl binary ({{ kubectl_version }})
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+        dest: "{{ data_dir }}/downloads/kubectl-{{ kubectl_version }}"
+        mode: '0755'
+
+    - name: Install kubectl binary
+      become: true
+      ansible.builtin.copy:
+        src: "{{ data_dir }}/downloads/kubectl-{{ kubectl_version }}"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+        remote_src: true

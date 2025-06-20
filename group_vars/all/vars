@@ -4,8 +4,8 @@ user: "ansible"
 public_key: "{{ vault_public_key }}"
 sudo_password: "{{ vault_sudo_password }}"
 base_domain: "puhome.net"
-config_dir: "~/.config/homelab"
-data_dir: "~/.local/share/homelab"
+config_dir: "/home/{{user}}/.config/homelab"
+data_dir: "/home/{{user}}/.local/share/homelab"
 timezone: Asia/Kolkata
 #---------------------------------------------------------------
 

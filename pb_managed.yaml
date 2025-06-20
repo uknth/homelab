@@ -3,7 +3,15 @@
   tasks:
     - name: set hostname
       ansible.builtin.hostname:
-        name: "{{ inventory_hostname }}"
+        name: "{{ inventory_hostname }}.{{ base_domain }}"
+      vars:
+        use: "debian"
+      become: true
+    - name: set hostname in hosts file
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "127.0.0.1  {{ inventory_hostname }} {{ inventory_hostname }}.{{ base_domain }}"
+        create: yes
       become: true
 
 - name: housekeeping & system packages
@@ -11,6 +19,20 @@
   roles:
     - role: packages/system/apt
       tags: ["system", "packages", "apt"]
+      vars:
+        packages:
+          - curl
+          - zsh
+          - htop
+          - tree
+          - wget
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - dnsutils
+          - python3-pip
+          - kitty-terminfo
+          - cifs-utils 
 
     - role: packages/system/ntp
       tags: ["system", "ntp"]

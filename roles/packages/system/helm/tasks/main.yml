@@ -1,12 +1,34 @@
-- name: Download fast installer script for Helm
-  command: |
-    curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+- name: Check current helm version
+  ansible.builtin.command: /usr/local/bin/helm version --short
+  register: helm_version_result
+  changed_when: false
+  failed_when: false
 
-- name: Change permission for Helm script
-  command: |
-    chmod 700 get_helm.sh
+- name: Set installed_helm_version fact
+  ansible.builtin.set_fact:
+    installed_helm_version: "{{ helm_version_result.stdout | regex_search('v[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+  when: helm_version_result.rc == 0
 
-- name: Execute helm installer script
-  become: true
-  command: |
-    ./get_helm.sh
+- name: Install/Update helm
+  when: installed_helm_version | default('') != helm_version
+  block:
+    - name: Download helm binary ({{ helm_version }})
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: "{{ data_dir }}/downloads/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        mode: '0755'
+
+    - name: Unarchive helm binary
+      ansible.builtin.unarchive:
+        src: "{{ data_dir }}/downloads/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: "{{ data_dir }}/downloads/"
+        remote_src: true
+
+    - name: Install helm binary
+      become: true
+      ansible.builtin.copy:
+        src: "{{ data_dir }}/downloads/linux-amd64/helm"
+        dest: /usr/local/bin/helm
+        mode: '0755'
+        remote_src: true
+

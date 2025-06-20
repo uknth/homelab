@@ -1,12 +1,15 @@
 - name: Setup Taskfile.dev on Server
-  command: |
-    curl -fsSL -o install_taskfile.sh https://taskfile.dev/install.sh
+  get_url:
+    url: "https://taskfile.dev/install.sh"
+    dest: "{{ data_dir }}/downloads/taskfile.sh"
+    creates: "{{ data_dir }}/downloads/taskfile.sh"
+    mode: 0755
 
 - name: Change permission for script
-  command: |
-    chmod 700 install_taskfile.sh
+  command:
+    chmod 700 {{ data_dir }}/downloads/taskfile.sh
 
 - name: Execute installer script
   become: true
   command: |
-    ./install_taskfile.sh -d -b /usr/local/bin
+    sh {{ data_dir }}/downloads/taskfile.sh -d -b /usr/local/bin

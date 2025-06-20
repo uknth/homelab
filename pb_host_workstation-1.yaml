@@ -1,5 +1,5 @@
 - name: workstations/workstation-1 roles
-  hosts: workstation-1.puhome.net
+  hosts: workstation-1.host
   roles:
     # System Packages
     - role: packages/system/helm
@@ -27,5 +27,5 @@
     - role: packages/dev/lazygit
       tags: ["dev", "lazygit", "installer"]
 
-    - role: packages/dev/node
-      tags: ["dev", "node", "installer"]
+    # - role: packages/dev/node
+    #   tags: ["dev", "node", "installer"]

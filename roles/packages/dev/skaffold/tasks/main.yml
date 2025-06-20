@@ -1,8 +1,12 @@
 - name: Download skaffold
-  command: |
-    curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+  get_url:
+    url: "https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64"
+    dest: "{{ data_dir }}/downloads/skaffold"
+    creates: "{{ data_dir }}/downloads/skaffold"
+    mode: 0755
 
 - name: Install Skaffold
   become: true
   command: |
-    sudo install skaffold /usr/local/bin
+    sudo install {{ data_dir }}/downloads/skaffold /usr/local/bin
+    creates: /usr/local/bin/skaffold
