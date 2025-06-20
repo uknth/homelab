@@ -3,7 +3,6 @@ roles:
     name: artis3n.tailscale
   - src: https://github.com/Oefenweb/ansible-dnsmasq
     name: dnsmasq
-  - name: geerlingguy.node_exporter
   - name: geerlingguy.ntp
   - name: geerlingguy.nginx
   - name: geerlingguy.certbot
@@ -16,10 +15,10 @@ roles:
   - name: comcast.sdkman
   - name: gikeymarcia.neovim
   - name: geerlingguy.nodejs
-  - src: https://gitlab.com/cbz-d-velop/public-ansible/ansible-role-labocbz-install-pihole/-/archive/develop/ansible-role-labocbz-install-pihole-develop.tar.gz
-    name: role.pihole
+  - name: dbrennand.beszel
   - src: https://github.com/gikeymarcia/ansible-role-neovim
     name: role.neovim
+  - name: deekayen.awscli2
 collections:
   - community.docker
   - community.general

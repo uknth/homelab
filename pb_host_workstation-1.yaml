@@ -1,0 +1,31 @@
+- name: workstations/workstation-1 roles
+  hosts: workstation-1.puhome.net
+  roles:
+    # System Packages
+    - role: packages/system/helm
+      tags: ["system", "helm", "installer"]
+
+    - role: packages/system/kind
+      tags: ["system", "kind", "installer"]
+
+    - role: packages/system/kubectl
+      tags: ["system", "kubectl", "installer"]
+
+    # Dev Packages
+    - role: packages/dev/go
+      tags: ["dev", "go", "golang", "installer" ]
+
+    - role: packages/dev/taskfile
+      tags: ["dev", "taskfile", "task", "installer" ]
+
+    - role: packages/dev/skaffold
+      tags: ["dev", "skaffold", "installer"]
+
+    - role: packages/dev/awscli
+      tags: ["dev", "awscli", "installer"]
+
+    - role: packages/dev/lazygit
+      tags: ["dev", "lazygit", "installer"]
+
+    - role: packages/dev/node
+      tags: ["dev", "node", "installer"]

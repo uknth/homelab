@@ -1,0 +1,4 @@
+miniflux_postgres_password: "secret"
+miniflux_admin_password: "admin"
+miniflux_admin_user: "admin"
+miniflux_ext_port: 14002

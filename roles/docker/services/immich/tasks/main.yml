@@ -2,7 +2,8 @@
   ansible.builtin.command: |
     mkdir -p {{ config_dir }}/immich && \
       mkdir -p {{ immich_storage_location }} && \
-      mkdir -p {{ immich_db_data_location }}
+      mkdir -p {{ immich_db_data_location }} && \
+      mkdir -p {{ immich_backup_location }}
 
 - name: Copy docker compose template
   ansible.builtin.template:
@@ -24,3 +25,36 @@
 - name: Deploy immich using docker compose
   community.docker.docker_compose_v2:
     project_src: "{{ config_dir }}/immich"
+
+- name: Setup Borg for Backup
+  ansible.builtin.package:
+    pkg:
+      - "borgbackup"
+    state: present
+
+- name: Borg Repository
+  stat: 
+    path: "{{ immich_backup_location }}/immich-borg"
+  register: borg_repo
+
+- name: Init Borg Backup, if doesn't exist
+  ansible.builtin.command: |
+    borg init --encryption=none "{{ immich_backup_location }}/immich-borg"
+  when: not borg_repo.stat.exists
+
+- name: Copy backup shell script
+  become: true
+  ansible.builtin.template:
+    src: immich_backup.sh.j2
+    dest: "/usr/local/bin/immich_backup.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Daily Cron for Backup
+  ansible.builtin.cron:
+    name: "Daily Shell Script"
+    special_time: "daily"
+    job: "/usr/local/bin/immich_backup.sh"
+    state: present
+

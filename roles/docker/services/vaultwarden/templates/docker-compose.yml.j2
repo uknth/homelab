@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   vaultwarden:
     container_name: vaultwarden
@@ -8,7 +6,7 @@ services:
     volumes:
       - ./data/:/data/
     ports:
-      - 14001:80
+      - {{ vw_ext_port }}:80
     environment:
       - DOMAIN=https://{{ vw_host }}
       - LOGIN_RATELIMIT_MAX_BURST=10

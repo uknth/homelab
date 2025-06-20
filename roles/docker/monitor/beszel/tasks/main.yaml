@@ -1,0 +1,24 @@
+- name: Create beszel directory
+  ansible.builtin.file:
+    path: "{{ config_dir }}/{{ item }}"
+    state: directory
+    mode: 0755
+  become: false
+  loop:
+    - beszel
+    - beszel/data
+    - beszel/socket
+
+- name: Copy templated beszel compose file
+  ansible.builtin.template:
+    src: templates/docker-compose.yaml.j2
+    dest: "{{ config_dir }}/beszel/docker-compose.yaml"
+    mode: 0644
+  become: false
+  notify: Restart beszel
+
+- name: Ensure beszel-compose is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/beszel/"
+    build: never
+  become: false

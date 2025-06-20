@@ -1,0 +1,5 @@
+- name: install beszel-hub
+  hosts: control-1.puhome.net
+  roles:
+    - name: docker/monitor/beszel
+      tags: ["docker", "monitor", "beszel"]

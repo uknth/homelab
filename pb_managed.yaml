@@ -1,0 +1,22 @@
+- name: set hostname
+  hosts: managed_hosts
+  tasks:
+    - name: set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      become: true
+
+- name: housekeeping & system packages
+  hosts: managed_hosts
+  roles:
+    - role: packages/system/apt
+      tags: ["system", "packages", "apt"]
+
+    - role: packages/system/ntp
+      tags: ["system", "ntp"]
+
+    - role: packages/system/docker
+      tags: ["system", "docker"]
+      
+    - role: packages/system/beszel-agent
+      tags: ["system", "beszel-agent"]

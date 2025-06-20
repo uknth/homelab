@@ -1,0 +1,20 @@
+- name: Make directory for copying files
+  ansible.builtin.command: |
+    mkdir -p {{ config_dir }}/miniflux/data
+
+- name: Copy docker compose template
+  ansible.builtin.template:
+    src: templates/{{ item.src }}
+    dest: "{{ config_dir }}/miniflux/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - src: docker-compose.yml.j2
+      dest: docker-compose.yml
+    - src: miniflux.env.j2
+      dest: miniflux.env
+  notify: Restart miniflux
+
+- name: Deploy miniflux using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/miniflux"
+    state: present

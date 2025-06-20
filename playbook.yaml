@@ -1,0 +1,11 @@
+- name: install managed packages & services
+  ansible.builtin.import_playbook: pb_managed.yaml
+
+- name: install monitoring & control panel services
+  ansible.builtin.import_playbook: pb_control.yaml
+
+- name: install media, image, & password services in nas-2
+  ansible.builtin.import_playbook: pb_host_nas-2.yaml
+
+- name: install development tools & services in workstation-1
+  ansible.builtin.import_playbook: pb_host_workstation-1.yaml

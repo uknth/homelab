@@ -1,0 +1,11 @@
+- name: create awscli2 directory
+  ansible.builtin.file:
+    path: "{{ data_dir }}/awscli2"
+    state: directory
+    mode: 0755
+
+- name: Download aws-cli binary from AWS
+  ansible.builtin.import_role:
+    name: deekayen.awscli2
+  vars:
+    executable_temp_dir: "{{ data_dir }}/awscli2"

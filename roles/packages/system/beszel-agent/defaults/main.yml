@@ -1,0 +1,4 @@
+ba_version: "latest"
+ba_port: 45876
+ba_public_key: "some-key"
+ba_install_dir: "/usr/local/bin/"

@@ -1,0 +1,24 @@
+#!/bin/bash
+
+echo "Running backup script - $(date)" >> {{ config_dir }}/immich/backup.log
+
+UPLOAD_LOCATION="{{ immich_storage_location }}"       # Immich database location, as set in your .env file
+BACKUP_PATH="{{ immich_backup_location }}"
+
+### Append to local Borg repository
+borg create \
+    "$BACKUP_PATH/immich-borg::{now}" \
+    "$UPLOAD_LOCATION" \
+    --exclude "$UPLOAD_LOCATION"/thumbs/ \
+    --exclude "$UPLOAD_LOCATION"/encoded-video/
+
+
+borg prune \
+    --keep-weekly=4 \
+    --keep-monthly=3 \
+    "$BACKUP_PATH"/immich-borg
+
+
+borg compact "$BACKUP_PATH"/immich-borg
+
+

@@ -1,0 +1,6 @@
+- name: Restart beszel
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/beszel/"
+    build: never
+    state: restarted
+  become: false

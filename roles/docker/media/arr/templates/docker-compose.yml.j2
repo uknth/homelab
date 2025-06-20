@@ -1,0 +1,234 @@
+networks:
+  servarrnetwork:
+    name: servarrnetwork
+    ipam:
+      config:
+        - subnet: 172.39.0.0/24
+
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    hostname: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun # If running on an LXC see readme for more info.
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.2
+    ports:
+      - {{ arr_qbittorrent_ext_port }}:{{ arr_qbittorrent_ext_port }} # qbittorrent web interface
+      - {{ arr_nzbget_ext_port }}:6789 # nzbget web interface
+      - {{ arr_prowlarr_ext_port }}:9696 # prowlarr web interface
+    volumes:
+      - {{ arr_base_dir }}/service/gluetun:/gluetun
+      - {{ arr_base_dir }}/config:/config
+    # Make a '.env' file in the same directory.
+    env_file:
+      - .env
+    healthcheck:
+      test: ping -c 1 www.google.com || exit 1
+      interval: 20s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    labels:
+      - deunhealth.restart.on.unhealthy=true
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT={{ arr_qbittorrent_ext_port }} # must match "qbittorrent web interface" port number in gluetun's service above
+    volumes:
+      - {{ arr_base_dir }}/service/qbittorrent:/config
+      - {{ arr_base_dir }}/data/qbittorrent:/data
+      - {{ arr_out_dir }}/data:/downloads
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
+    network_mode: service:gluetun
+    healthcheck:
+      test: ping -c 1 www.google.com || exit 1
+      interval: 60s
+      retries: 3
+      start_period: 20s
+      timeout: 10s
+
+  qbittorrent-port:
+    image: charlocharlie/qbittorrent-port-forward-file:latest
+    container_name: gluetun-qbittorrent-portfw
+    environment:
+      - QBT_USERNAME={{ arr_qbittorrent_user }}
+      - QBT_PASSWORD={{ arr_qbittorrent_password }}
+      - QBT_ADDR=http://gluetun:{{ arr_qbittorrent_ext_port }}
+      - PORT_FILE=/config/port-forwarding-status.txt
+    volumes:
+      - {{ arr_base_dir }}/config:/config:ro
+    restart: unless-stopped
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+      qbittorrent:
+        condition: service_healthy
+
+  # See the 'qBittorrent Stalls with VPN Timeout' section for more information.
+  deunhealth:
+    image: qmcgaw/deunhealth
+    container_name: deunhealth
+    network_mode: "none"
+    environment:
+      - LOG_LEVEL=info
+      - HEALTH_SERVER_ADDRESS=127.0.0.1:9999
+      - TZ=${TZ}
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  nzbget:
+    image: lscr.io/linuxserver/nzbget:latest
+    container_name: nzbget
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - {{ arr_base_dir }}/service/nzbget:/config
+      - {{ arr_base_dir }}/data/nzbget:/data
+      - {{ arr_out_dir }}/data:/downloads
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
+    network_mode: service:gluetun
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - {{ arr_base_dir }}/service/prowlarr:/config
+    restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
+    network_mode: service:gluetun
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - {{ arr_base_dir }}/service/sonarr:/config
+      - {{ arr_base_dir }}/data/sonarr:/data
+    ports:
+      - {{ arr_sonarr_ext_port }}:8989
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.3
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - {{ arr_base_dir }}/service/radarr:/config
+      - {{ arr_base_dir }}/data/radarr:/data
+    ports:
+      - {{ arr_radarr_ext_port }}:7878
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.4
+
+  lidarr:
+    container_name: lidarr
+    image: lscr.io/linuxserver/lidarr:latest
+    restart: unless-stopped
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - {{ arr_base_dir }}/service/lidarr:/config
+      - {{ arr_base_dir }}/data/lidarr:/data
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - {{ arr_lidarr_ext_port }}:8686
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.5
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - {{ arr_base_dir }}/service/bazarr:/config
+      - {{ arr_base_dir }}/data/bazarr:/data
+    ports:
+      - {{ arr_bazarr_ext_port }}:6767
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.6
+
+  ytdl-sub:
+    image: ghcr.io/jmbannon/ytdl-sub:latest
+    container_name: ytdl-sub
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - DOCKER_MODS=linuxserver/mods:universal-cron
+    volumes:
+      - {{ arr_base_dir }}/service/ytdl-sub:/config
+      - {{ arr_base_dir }}/data/ytdl-sub:/data
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.8
+    restart: unless-stopped
+
+  jellyseerr:
+    container_name: jellyseerr
+    image: fallenbagel/jellyseerr:latest
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - {{ arr_base_dir }}/service/jellyseerr:/app/config
+    ports:
+      - {{ arr_jellyseerr_ext_port }}:5055
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.9
+    restart: unless-stopped

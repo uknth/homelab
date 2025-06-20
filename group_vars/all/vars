@@ -1,13 +1,52 @@
-# ansible access config
-ansible_ssh_public_key: "{{ vault_ansible_ssh_public_key }}"
-
-# homelab configuration
-timezone: Asia/Kolkata
+# Ansible Global Config
+#---------------------------------------------------------------
+user: "ansible"
+public_key: "{{ vault_public_key }}"
+sudo_password: "{{ vault_sudo_password }}"
+base_domain: "puhome.net"
 config_dir: "~/.config/homelab"
+data_dir: "~/.local/share/homelab"
+timezone: Asia/Kolkata
+#---------------------------------------------------------------
+
+# nas-2
+#---------------------------------------------------------------
+# Host Configurations
+#-------------------------
+host_nas_2: "nas-2.inet"
+#-------------------------
+# Services
+#-------------------------
+# beszel
+ba_public_key: "{{ vault_ba_public_key }}"
+
+# vaultwarden
+vw_ext_port: 14001
+
+# fusion
+fusion_password: "{{ vault_fusion_password }}"
+fusion_ext_port: 14002
+
+# media (arr stack)
+arr_base_dir: "/mnt/databank/media"
+arr_out_dir: "/mnt/databank/storage"
+arr_vpn_user: "{{ vault_arr_vpn_user }}"
+arr_vpn_password: "{{ vault_arr_vpn_password }}"
+arr_vpn_regions: "{{ vault_arr_vpn_regions }}"
+arr_qbittorrent_user: "{{ vault_arr_qbittorrent_user }}"
+arr_qbittorrent_password: "{{ vault_arr_qbittorrent_password }}"
+arr_qbittorrent_ext_port: 14013
+arr_nzbget_ext_port: 14014
+arr_prowlarr_ext_port: 14015
+arr_sonarr_ext_port: 14016 
+arr_radarr_ext_port: 14017
+arr_lidarr_ext_port: 14018
+arr_bazarr_ext_port: 14019
+arr_jellyseerr_ext_port: 14020
+#-------------------------
 
 # base domain
 domain_name: homelab.uknth.me
-domain: homelab.uknth.me
 
 # packages to install
 packages:
@@ -22,12 +61,12 @@ packages:
   - dnsutils
   - python3-pip
   - kitty-terminfo
+  - cifs-utils 
 
 # application passwords
 pihole_webpassword: "{{ vault_pihole_webpassword }}"
 samba_user_password: "{{ vault_samba_user_password }}"
 cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
-sudo_password: "{{ vault_sudo_password }}"
 
 # vaultwarden
 vw_admin_token: "{{ vault_vw_admin_token }}"

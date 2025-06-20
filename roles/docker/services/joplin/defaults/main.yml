@@ -1,0 +1,5 @@
+joplin_postgres_user: "joplin-user"
+joplin_postgres_password: "some-random-password"
+joplin_postgres_database: "joplin"
+joplin_app_base_url: "joplin.homelab.uknth.me"
+joplin_app_port: "22300"

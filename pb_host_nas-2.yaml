@@ -1,0 +1,12 @@
+- name: nases/nas-2 roles
+  hosts: nas-2.puhome.net
+  roles:
+    - role: docker/services/vaultwarden
+      tags: ["docker", "service", "vaultwarden"]
+
+    - role: docker/services/fusion
+      tags: ["docker", "service", "fusion"]
+    
+    - role: docker/media/arr
+      tags: ["docker", "media", "arr"]
+
