@@ -5,7 +5,6 @@ networks:
       config:
         - subnet: 172.39.0.0/24
 
-
 services:
   gluetun:
     image: qmcgaw/gluetun
@@ -23,8 +22,8 @@ services:
       - {{ arr_nzbget_ext_port }}:6789 # nzbget web interface
       - {{ arr_prowlarr_ext_port }}:9696 # prowlarr web interface
     volumes:
-      - {{ arr_base_dir }}/service/gluetun:/gluetun
-      - {{ arr_base_dir }}/config:/config
+      - {{ media_base_dir }}/config/gluetun:/config
+      - {{ media_base_dir }}/service/gluetun:/gluetun
     # Make a '.env' file in the same directory.
     env_file:
       - .env
@@ -42,14 +41,14 @@ services:
     labels:
       - deunhealth.restart.on.unhealthy=true
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
       - WEBUI_PORT={{ arr_qbittorrent_ext_port }} # must match "qbittorrent web interface" port number in gluetun's service above
     volumes:
-      - {{ arr_base_dir }}/service/qbittorrent:/config
-      - {{ arr_base_dir }}/data/qbittorrent:/data
-      - {{ arr_out_dir }}/data:/downloads
+      - {{ media_base_dir }}/config/qbittorrent:/config
+      - {{ media_base_dir }}/service/qbittorrent:/data
+      - {{ media_out_dir }}/data/downloads:/data/downloads
     depends_on:
       gluetun:
         condition: service_healthy
@@ -65,13 +64,15 @@ services:
   qbittorrent-port:
     image: charlocharlie/qbittorrent-port-forward-file:latest
     container_name: gluetun-qbittorrent-portfw
+    labels:
+      - deunhealth.restart.on.unhealthy=true
     environment:
       - QBT_USERNAME={{ arr_qbittorrent_user }}
       - QBT_PASSWORD={{ arr_qbittorrent_password }}
       - QBT_ADDR=http://gluetun:{{ arr_qbittorrent_ext_port }}
       - PORT_FILE=/config/port-forwarding-status.txt
     volumes:
-      - {{ arr_base_dir }}/config:/config:ro
+      - {{ media_base_dir }}/config/gluetun:/config
     restart: unless-stopped
     network_mode: service:gluetun
     depends_on:
@@ -97,14 +98,17 @@ services:
     image: lscr.io/linuxserver/nzbget:latest
     container_name: nzbget
     environment:
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - {{ arr_base_dir }}/service/nzbget:/config
-      - {{ arr_base_dir }}/data/nzbget:/data
-      - {{ arr_out_dir }}/data:/downloads
+      - {{ media_base_dir }}/config/nzbget:/config
+      - {{ media_base_dir }}/service/nzbget:/data
+      - {{ media_out_dir }}/data/downloads:/downloads
     depends_on:
       gluetun:
         condition: service_healthy
@@ -116,12 +120,12 @@ services:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - {{ arr_base_dir }}/service/prowlarr:/config
+      - {{ media_base_dir }}/config/prowlarr:/config
     restart: unless-stopped
     depends_on:
       gluetun:
@@ -134,13 +138,13 @@ services:
     container_name: sonarr
     restart: unless-stopped
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - {{ arr_base_dir }}/service/sonarr:/config
-      - {{ arr_base_dir }}/data/sonarr:/data
+      - {{ media_base_dir }}/config/sonarr:/config
+      - {{ media_out_dir }}/data:/data # output directory of qbittorrent should be same as sonarr's data directory
     ports:
       - {{ arr_sonarr_ext_port }}:8989
     networks:
@@ -152,13 +156,13 @@ services:
     container_name: radarr
     restart: unless-stopped
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - {{ arr_base_dir }}/service/radarr:/config
-      - {{ arr_base_dir }}/data/radarr:/data
+      - {{ media_base_dir }}/config/radarr:/config
+      - {{ media_out_dir }}/data:/data # output directory of qbittorrent should be same as radarr's data directory
     ports:
       - {{ arr_radarr_ext_port }}:7878
     networks:
@@ -171,12 +175,12 @@ services:
     restart: unless-stopped
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - {{ arr_base_dir }}/service/lidarr:/config
-      - {{ arr_base_dir }}/data/lidarr:/data
+      - {{ media_base_dir }}/config/lidarr:/config
+      - {{ media_out_dir }}/data:/data # output directory of qbittorrent should be same as lidarr's data directory
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
     ports:
       - {{ arr_lidarr_ext_port }}:8686
     networks:
@@ -188,47 +192,52 @@ services:
     container_name: bazarr
     restart: unless-stopped
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - {{ arr_base_dir }}/service/bazarr:/config
-      - {{ arr_base_dir }}/data/bazarr:/data
+      - {{ media_base_dir }}/config/bazarr:/config
+      - {{ media_out_dir }}/data:/data # output directory of qbittorrent should be same as bazarr's data directory
     ports:
       - {{ arr_bazarr_ext_port }}:6767
     networks:
       servarrnetwork:
         ipv4_address: 172.39.0.6
 
+
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    restart: unless-stopped
+    environment:
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - {{ media_base_dir }}/config/readarr:/config
+      - {{ media_out_dir }}/data:/data # output directory of qbittorrent should be same as readarr's data directory
+    ports:
+      - {{ arr_readarr_ext_port }}:8787
+    networks:
+      servarrnetwork:
+        ipv4_address: 172.39.0.7
+
+
   ytdl-sub:
-    image: ghcr.io/jmbannon/ytdl-sub:latest
+    image: ghcr.io/jmbannon/ytdl-sub-gui:latest
     container_name: ytdl-sub
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=linuxserver/mods:universal-cron
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
     volumes:
-      - {{ arr_base_dir }}/service/ytdl-sub:/config
-      - {{ arr_base_dir }}/data/ytdl-sub:/data
+      - {{ media_base_dir }}/config/ytdl-sub:/config
+      - {{ media_out_dir }}/data/yt:/data 
+    ports:
+      - {{ arr_ytdl_sub_ext_port }}:8443
     networks:
       servarrnetwork:
         ipv4_address: 172.39.0.8
-    restart: unless-stopped
-
-  jellyseerr:
-    container_name: jellyseerr
-    image: fallenbagel/jellyseerr:latest
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - {{ arr_base_dir }}/service/jellyseerr:/app/config
-    ports:
-      - {{ arr_jellyseerr_ext_port }}:5055
-    networks:
-      servarrnetwork:
-        ipv4_address: 172.39.0.9
     restart: unless-stopped

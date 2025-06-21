@@ -1,5 +1,5 @@
 - name: Restart arr
   community.docker.docker_compose_v2:
-    project_src: "{{ arr_base_dir }}/compose"
+    project_src: "{{ media_base_dir }}/compose/arr"
     build: never
     state: restarted

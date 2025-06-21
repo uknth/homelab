@@ -1,6 +1,20 @@
 - name: nases/nas-2 roles
   hosts: nas-2.host
+  tasks:
+    - name: Change owner of media base dir
+      ansible.builtin.command: |
+        chown -R {{ ansible_user }}:{{ ansible_user }} {{ media_base_dir }}
+      become: true
+
+    - name: Change owner of media storage dir
+      ansible.builtin.command: |
+        chown -R {{ ansible_user }}:{{ ansible_user }} {{ media_out_dir }}
+      become: true
+
   roles:
+    - role: packages/ops/mount-nas1
+      tags: ["ops", "mount", "nas1"]
+
     - role: docker/services/vaultwarden
       tags: ["docker", "service", "vaultwarden"]
 
@@ -9,4 +23,7 @@
     
     - role: docker/media/arr
       tags: ["docker", "media", "arr"]
+
+    - role: docker/media/jellyfin
+      tags: ["docker", "media", "jellyfin"]
 

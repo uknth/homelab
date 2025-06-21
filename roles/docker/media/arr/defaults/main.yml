@@ -1,5 +1,3 @@
-arr_base_dir: "/media"
-arr_out_dir: "/storage"
 arr_vpn_user: "some-user"
 arr_vpn_password: "some-password"
 arr_vpn_regions: "Netherlands"

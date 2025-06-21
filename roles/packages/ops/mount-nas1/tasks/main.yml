@@ -1,0 +1,25 @@
+- name: Get user information
+  ansible.builtin.user:
+    name: "{{ user }}"
+  register: user_info
+
+- name: Create mount directories for NAS shares
+  ansible.builtin.file:
+    path: "{{ nas1_mount_point }}/{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ user_info.uid }}"
+    group: "{{ user_info.group }}"
+  become: true
+  loop: "{{ nas1_mount_dirs }}"
+
+- name: Mount SMB volumes on corresponding directories
+  ansible.posix.mount:
+    src: "//{{ nas1_host }}/{{ item }}"
+    path: "{{ nas1_mount_point }}/{{ item }}"
+    opts: "rw,vers=3,uid={{ user_info.uid }},gid={{ user_info.group }},file_mode=0600,dir_mode=0700,username={{ nas1_username }},password={{ nas1_password }}"
+    opts_no_log: true
+    fstype: cifs
+    state: mounted
+  become: true
+  loop: "{{ nas1_mount_dirs }}"

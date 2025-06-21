@@ -1,0 +1,40 @@
+- name: Get user info for ansible_user
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+  register: user_info
+
+- name: Make directory for copying files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user_info.uid }}"
+    group: "{{ user_info.group }}"
+  loop:
+    - "{{ media_base_dir }}/compose/jellyfin"
+    - "{{ media_base_dir }}/config/jellyfin"
+    - "{{ media_base_dir }}/service/jellyfin/cache"
+  become: true
+
+
+- name: Copy docker compose template
+  ansible.builtin.template:
+    src: "templates/{{ item.src }}"
+    dest: "{{ media_base_dir }}/compose/jellyfin/{{ item.dest }}"
+    owner: "{{ user_info.uid }}"
+    group: "{{ user_info.group }}"
+    mode: "0644"
+  loop:
+    - src: docker-compose.yml.j2
+      dest: "docker-compose.yml"
+  vars:
+    puid: "{{ user_info.uid }}"
+    pgid: "{{ user_info.group }}"
+  notify: Restart jellyfin
+
+
+
+- name: Ensure jellyfin-compose is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ media_base_dir }}/compose/jellyfin"
+    build: never
+  become: false

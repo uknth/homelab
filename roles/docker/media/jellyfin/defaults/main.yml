@@ -1,0 +1,3 @@
+jellyfin_published_server_url: "jellyfin.{{ base_domain }}"
+jellyfin_nas_dir: "/mnt/nas1"
+jellyfin_ext_port: 8096

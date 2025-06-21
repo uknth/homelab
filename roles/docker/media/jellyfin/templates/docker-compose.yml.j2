@@ -1,0 +1,38 @@
+services:
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - JELLYFIN_PublishedServerUrl={{ jellyfin_published_server_url }}
+    volumes:
+      - {{ media_base_dir }}/config/jellyfin:/config
+      - {{ media_base_dir }}/services/jellyfin/cache:/cache
+      - type: bind
+        source: {{ media_out_dir }}/data
+        target: /media/nas2
+      - type: bind
+        source: {{ jellyfin_nas1_dir }}
+        target: /media/nas1
+    devices:
+      - /dev/dri:/dev/dri #Use for Intel QuickSync
+    ports:
+      - {{ jellyfin_ext_port }}:8096
+      - 7359:7359/udp #Service Discovery
+      - 1900:1900/udp #Client Discovery
+    restart: unless-stopped
+
+  jellyseerr:
+    container_name: jellyseerr
+    image: fallenbagel/jellyseerr:latest
+    environment:
+      - PUID={{puid}}
+      - PGID={{pgid}}
+      - TZ={{timezone}}
+    volumes:
+      - {{ media_base_dir }}/config/jellyseerr:/app/config
+    ports:
+      - {{ jellyfin_jellyseerr_ext_port }}:5055
+    restart: unless-stopped

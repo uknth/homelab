@@ -12,8 +12,18 @@ timezone: Asia/Kolkata
 # nas-2
 #---------------------------------------------------------------
 # Host Configurations
+media_base_dir: "/mnt/databank/media"
+media_out_dir: "/mnt/databank/storage"
 #-------------------------
-host_nas_2: "nas-2.inet"
+# Operations
+#-------------------------
+nas1_host: "10.0.2.3"
+nas1_username: "{{ vault_nas1_user }}"
+nas1_password: "{{ vault_nas1_password }}"
+nas1_mount_point: "/mnt/nas1"
+nas1_mount_dirs:
+  - music
+  - video
 #-------------------------
 # Services
 #-------------------------
@@ -28,8 +38,6 @@ fusion_password: "{{ vault_fusion_password }}"
 fusion_ext_port: 14002
 
 # media (arr stack)
-arr_base_dir: "/mnt/databank/media"
-arr_out_dir: "/mnt/databank/storage"
 arr_vpn_user: "{{ vault_arr_vpn_user }}"
 arr_vpn_password: "{{ vault_arr_vpn_password }}"
 arr_vpn_regions: "{{ vault_arr_vpn_regions }}"
@@ -42,26 +50,21 @@ arr_sonarr_ext_port: 14016
 arr_radarr_ext_port: 14017
 arr_lidarr_ext_port: 14018
 arr_bazarr_ext_port: 14019
-arr_jellyseerr_ext_port: 14020
+arr_ytdl_sub_ext_port: 14022
+arr_readarr_ext_port: 14023
 #-------------------------
+
+# media (jellyfin)
+jellyfin_nas1_dir: "{{ nas1_mount_point }}"
+jellyfin_jellyseerr_ext_port: 14020
+jellyfin_ext_port: 14021
 
 # base domain
 domain_name: homelab.uknth.me
 
 # packages to install
 packages:
-  - curl
-  - zsh
-  - htop
-  - tree
-  - wget
-  - ca-certificates
-  - gnupg
-  - lsb-release
-  - dnsutils
-  - python3-pip
-  - kitty-terminfo
-  - cifs-utils 
+
 
 # application passwords
 pihole_webpassword: "{{ vault_pihole_webpassword }}"
