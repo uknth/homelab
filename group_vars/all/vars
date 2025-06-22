@@ -65,26 +65,33 @@ blocky_domain_mapping:
 nginx_certbot_admin_email: "{{ vault_certbot_admin_email }}"
 nginx_certbot_cloudflare_email: "{{ vault_certbot_cloudflare_email }}"
 nginx_certbot_cloudflare_api_key: "{{ vault_certbot_cloudflare_api_key }}"
+nginx_resolver: "10.0.2.2"
 
 #---------------------------------------------------------------
 # SERVICE MAPPING
 #---------------------------------------------------------------
 service_mapping:
   # media services in nas-2
-  - {name: "qbittorrent.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_qbittorrent_ext_port }}"}
-  - {name: "nzbget.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_nzbget_ext_port }}"}
-  - {name: "prowlarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_prowlarr_ext_port }}"}
-  - {name: "sonarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_sonarr_ext_port }}"}
-  - {name: "radarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_radarr_ext_port }}"}
-  - {name: "lidarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_lidarr_ext_port }}"}
-  - {name: "bazarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_bazarr_ext_port }}"}
-  - {name: "readarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_readarr_ext_port }}"}
-  - {name: "jellyfin.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ jellyfin_ext_port }}"} 
-  - {name: "jellyseerr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ jellyfin_jellyseerr_ext_port }}"} 
+  - {name: "qbittorrent", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_qbittorrent_ext_port }}"}
+  - {name: "torrent", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_qbittorrent_ext_port }}"} # alias
+  - {name: "nzbget", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_nzbget_ext_port }}"}
+  - {name: "prowlarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_prowlarr_ext_port }}"}
+  - {name: "sonarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_sonarr_ext_port }}"}
+  - {name: "radarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_radarr_ext_port }}"}
+  - {name: "lidarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_lidarr_ext_port }}"}
+  - {name: "bazarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_bazarr_ext_port }}"}
+  - {name: "readarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_readarr_ext_port }}"}
+  - {name: "jellyfin", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} 
+  - {name: "video", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
+  - {name: "jellyseerr", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"} 
+  - {name: "seer", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"} #alias
   # fusion on nas-2
-  - {name: "fusion.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ fusion_ext_port }}"}
+  - {name: "fusion", ip: "10.0.2.2", host: "nas-2", port: "{{ fusion_ext_port }}"}
   # vault on nas-2
-  - {name: "vault.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ vw_ext_port }}"}
+  - {name: "vault", ip: "10.0.2.2", host: "nas-2", port: "{{ vw_ext_port }}"}
   # beszel monitoring server on control-1 
-  - {name: "beszel.puhome.net", ip: "10.0.2.2", host: "control-1.host.puhome.net", port: "{{ beszel_ext_port }}"}
+  - {name: "beszel", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"}
+  - {name: "monitor", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"} # alias
+  # extra services on unmanaged hosts
+  - {name: "homeassistant", ip: "10.0.2.2", host: "iot-1", port: "8123"}
 #---------------------------------------------------------------

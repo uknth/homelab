@@ -37,11 +37,11 @@ customDNS:
     {% endfor -%}
 
     {% for item in blocky_domain_mapping -%}
-    {{ item.name }}: {{ item.ip }}
+    {{ item.name }}.{{ base_domain }}: {{ item.ip }}
     {% endfor -%}
   
     {% for item in service_mapping -%}
-    {{ item.name }}: {{ item.ip }}
+    {{ item.name }}.{{ base_domain }}: {{ item.ip }}
     {% endfor %}
 
 blocking:
