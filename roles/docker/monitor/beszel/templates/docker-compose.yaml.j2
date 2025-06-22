@@ -4,7 +4,7 @@ services:
     container_name: {{ beszel_container_name }}
     restart: unless-stopped
     ports:
-      - 8090:8090
+      - {{ beszel_ext_port }}:8090
     volumes:
       - {{ beszel_data_dir }}:/beszel_data
       - {{ beszel_socket_dir }}:/beszel_socket

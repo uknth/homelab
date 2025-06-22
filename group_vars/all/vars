@@ -7,16 +7,20 @@ base_domain: "puhome.net"
 config_dir: "/home/{{user}}/.config/homelab"
 data_dir: "/home/{{user}}/.local/share/homelab"
 timezone: Asia/Kolkata
+
+# control-1
 #---------------------------------------------------------------
+# beszel
+ba_public_key: "{{ vault_ba_public_key }}"
+beszel_ext_port: 8090
+# glance
+# uptimekuma
 
 # nas-2
 #---------------------------------------------------------------
-# Host Configurations
+# host config
 media_base_dir: "/mnt/databank/media"
 media_out_dir: "/mnt/databank/storage"
-#-------------------------
-# Operations
-#-------------------------
 nas1_host: "10.0.2.3"
 nas1_username: "{{ vault_nas1_user }}"
 nas1_password: "{{ vault_nas1_password }}"
@@ -24,19 +28,11 @@ nas1_mount_point: "/mnt/nas1"
 nas1_mount_dirs:
   - music
   - video
-#-------------------------
-# Services
-#-------------------------
-# beszel
-ba_public_key: "{{ vault_ba_public_key }}"
-
 # vaultwarden
 vw_ext_port: 14001
-
 # fusion
 fusion_password: "{{ vault_fusion_password }}"
 fusion_ext_port: 14002
-
 # media (arr stack)
 arr_vpn_user: "{{ vault_arr_vpn_user }}"
 arr_vpn_password: "{{ vault_arr_vpn_password }}"
@@ -52,88 +48,43 @@ arr_lidarr_ext_port: 14018
 arr_bazarr_ext_port: 14019
 arr_ytdl_sub_ext_port: 14022
 arr_readarr_ext_port: 14023
-#-------------------------
-
 # media (jellyfin)
 jellyfin_nas1_dir: "{{ nas1_mount_point }}"
 jellyfin_jellyseerr_ext_port: 14020
 jellyfin_ext_port: 14021
 
-# base domain
-domain_name: homelab.uknth.me
+# gateway-1
+#---------------------------------------------------------------
+blocky_ext_port: 14011
+blocky_ui_ext_port: 14012
+blocky_domain_mapping:
+  - {name: "router-1.host.puhome.net", ip: "10.0.2.1"}
+  - {name: "puhome.net", ip: "10.0.2.2"} # for backwards compatibility with *.homelab.uknth.me
 
-# packages to install
-packages:
+# certbot & nginx
+nginx_certbot_admin_email: "{{ vault_certbot_admin_email }}"
+nginx_certbot_cloudflare_email: "{{ vault_certbot_cloudflare_email }}"
+nginx_certbot_cloudflare_api_key: "{{ vault_certbot_cloudflare_api_key }}"
 
-
-# application passwords
-pihole_webpassword: "{{ vault_pihole_webpassword }}"
-samba_user_password: "{{ vault_samba_user_password }}"
-cloudflare_api_key: "{{ vault_cloudflare_api_key }}"
-
-# vaultwarden
-vw_admin_token: "{{ vault_vw_admin_token }}"
-vw_smtp_from: "{{ vault_vw_smtp_from }}"
-vw_smtp_user: "{{ vault_vw_smtp_user }}"
-vw_smtp_password: "{{ vault_vw_smtp_password }}"
-
-# immich
-immich_db_password: "{{ vault_immich_db_password }}"
-
-# sourcebot
-sb_local_repos:
-- {name: "fork/albus", exclude_paths: []}
-- {name: "fork/arbor", exclude_paths: []}
-- {name: "fork/asterix", exclude_paths: []}
-- {name: "fork/autobots", exclude_paths: []}
-- {name: "fork/banshee", exclude_paths: []}
-- {name: "fork/blackpearl", exclude_paths: []}
-- {name: "fork/cloudflare-workers", exclude_paths: []}
-- {name: "fork/ether", exclude_paths: []}
-- {name: "fork/faker", exclude_paths: []}
-- {name: "fork/go-base", exclude_paths: []}
-- {name: "fork/go-starter", exclude_paths: []}
-- {name: "fork/groot", exclude_paths: []}
-- {name: "fork/hagrid", exclude_paths: []}
-- {name: "fork/irene", exclude_paths: []}
-- {name: "fork/java-starter", exclude_paths: []}
-- {name: "fork/marvin", exclude_paths: []}
-- {name: "fork/mozart", exclude_paths: []}
-- {name: "fork/nats-bridge", exclude_paths: []}
-- {name: "fork/odin", exclude_paths: []}
-- {name: "fork/overpass", exclude_paths: []}
-- {name: "fork/platform-github-action", exclude_paths: []}
-- {name: "fork/protodep", exclude_paths: []}
-- {name: "fork/search-brewer", exclude_paths: []}
-- {name: "fork/search-configurator", exclude_paths: []}
-- {name: "fork/segment-data-aggregator", exclude_paths: []}
-- {name: "fork/solr-plugin", exclude_paths: []}
-- {name: "fork/solr-zero", exclude_paths: []}
-- {name: "fork/sputnik", exclude_paths: []}
-- {name: "fork/watson", exclude_paths: []}
-- {name: "fork/wingman", exclude_paths: []}
-- {name: "orig/solr", exclude_paths: []}
-- {name: "orig/homelab", exclude_paths: []}
-- {name: "orig/uknth.github.io", exclude_paths: []}
-
-
-# Common
-homelab_namespace: homelab
-homelab_smb_fast_storage_secret: "homelab.smb.fast-storage.cred"
-homelab_smb_nas_secret: "homelab.smb.nas.cred"
-
-# Shiori
-homelab_jellyfin_domain_name: "jellyfin.homelab.uknth.me"
-homelab_navidrome_domain_name: "navidrome.homelab.uknth.me"
-homelab_statping_domain_name: "statping.homelab.uknth.me"
-
-
-# Samba configuration
-
-# Extra Configuration
-fast_storage_host: "hero-1.hnet"
-nas_storage_host: "nas-1.hnet"
-
-# Spotify
-spotify_id: "{{ vault_spotify_id }}"
-spotify_secret: "{{ vault_spotify_secret }}"
+#---------------------------------------------------------------
+# SERVICE MAPPING
+#---------------------------------------------------------------
+service_mapping:
+  # media services in nas-2
+  - {name: "qbittorrent.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_qbittorrent_ext_port }}"}
+  - {name: "nzbget.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_nzbget_ext_port }}"}
+  - {name: "prowlarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_prowlarr_ext_port }}"}
+  - {name: "sonarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_sonarr_ext_port }}"}
+  - {name: "radarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_radarr_ext_port }}"}
+  - {name: "lidarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_lidarr_ext_port }}"}
+  - {name: "bazarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_bazarr_ext_port }}"}
+  - {name: "readarr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ arr_readarr_ext_port }}"}
+  - {name: "jellyfin.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ jellyfin_ext_port }}"} 
+  - {name: "jellyseerr.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ jellyfin_jellyseerr_ext_port }}"} 
+  # fusion on nas-2
+  - {name: "fusion.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ fusion_ext_port }}"}
+  # vault on nas-2
+  - {name: "vault.puhome.net", ip: "10.0.2.2", host: "nas-2.host.puhome.net", port: "{{ vw_ext_port }}"}
+  # beszel monitoring server on control-1 
+  - {name: "beszel.puhome.net", ip: "10.0.2.2", host: "control-1.host.puhome.net", port: "{{ beszel_ext_port }}"}
+#---------------------------------------------------------------

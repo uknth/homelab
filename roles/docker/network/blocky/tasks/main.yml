@@ -1,11 +1,20 @@
-- name: Synchronize blocky directory.
-  ansible.posix.synchronize:
-    src: files/blocky
-    dest: "{{ config_dir }}/"
-    delete: false
-    recursive: true
-    perms: false
-  become: false
+- name: Display all hosts and their IP
+  ansible.builtin.debug:
+    msg: |
+      {% for name, var in hostvars.items() %}
+      {% if name != 'localhost' -%}
+      - {{ name }}.puhome.net: {{ var.ansible_host | default(name) }}
+      {% endif -%}
+      {% endfor %}
+
+- name: Create blocky directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  loop:
+    - "{{ config_dir }}/blocky/compose"
+    - "{{ config_dir }}/blocky/config"
 
 - name: Copy templated blocky files into place.
   ansible.builtin.template:
@@ -14,11 +23,10 @@
     mode: 0644
   loop:
     - src: docker-compose.yml.j2
-      dest: docker-compose.yml
+      dest: compose/docker-compose.yml
     - src: config.yml.j2
       dest: config/config.yml
   notify: Restart blocky
-  become: false
 
 - name: Replace string in resolve file
   become: true
@@ -38,6 +46,6 @@
 
 - name: Ensure blocky-compose is running
   community.docker.docker_compose_v2:
-    project_src: "{{ config_dir }}/blocky/"
+    project_src: "{{ config_dir }}/blocky/compose"
     build: never
   become: false

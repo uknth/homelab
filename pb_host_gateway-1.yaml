@@ -1,0 +1,11 @@
+- name: install network services on gateway-1
+  hosts: gateway-1.host
+  roles:
+    - role: packages/network/tailscale
+      tags: ["system", "network", "tailscale"]
+
+    - role: packages/network/nginx
+      tags: ["system", "network", "nginx"]
+
+    - role: docker/network/blocky
+      tags: ["docker", "network", "dns", "blocky"]
