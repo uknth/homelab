@@ -1,0 +1,101 @@
+- name: Home
+  head-widgets:
+    - type: search
+      search-engine: google
+      autofocus: true
+      bangs:
+        - title: YouTube
+          shortcut: "!yt"
+          url: https://www.youtube.com/results?search_query={QUERY}
+
+        - title: Google
+          shortcut: "!g"
+          url: https://www.google.com/search?q={QUERY}
+
+  columns:
+    - size: small
+      widgets:
+        - type: calendar
+          first-day-of-week: monday
+
+        - type: rss
+          limit: 10
+          collapse-after: 3
+          cache: 12h
+          feeds:
+          # this is stupid, it is because of jinja2, beware of the tab shift
+          # in the title line
+          {% for feed in glance_rss_feeds -%}
+            - url: "{{ feed.url }}"
+            title: "{{ feed.title }}"
+          {% endfor %}
+
+
+    - size: full
+      widgets:
+        - type: videos
+          channels:
+          {% for channel in glance_youtube_channels -%}
+            - {{ channel.id }} # {{ channel.name }}
+          {% endfor %}
+
+        - type: group
+          widgets:
+            - type: hacker-news
+
+        - type: group
+          widgets:
+            - type: reddit
+              subreddit: technology
+              show-thumbnails: true
+            - type: reddit
+              subreddit: selfhosted
+              show-thumbnails: true
+
+    - size: small
+      widgets:
+        - type: weather
+          location: {{ glance_weather_location }}
+          units: {{ glance_weather_units }}
+          hour-format: {{ glance_weather_hour_format }}
+          # Optionally hide the location from being displayed in the widget
+          # hide-location: true
+
+        - type: bookmarks
+          groups:
+            - title: Media
+              color: 10 70 50
+              links:
+                - title: Jellyfin
+                  url: https://jellyfin.{{ base_domain }}
+                  icon: sh:jellyfin
+
+                - title: JellySeerr
+                  url: https://jellyseerr.{{ base_domain }}
+                  icon: sh:jellyseerr
+
+                - title: Immich
+                  url: https://immich.{{ base_domain }}
+                  icon: sh:immich
+                  
+                - title: Fusion (Feed Reader)
+                  url: https://fusion.{{ base_domain }}
+                  icon: sh:fusion-rss
+                
+                - title: Home Assistant
+                  url: https://homeassistant.{{ base_domain }}
+                  icon: sh:home-assistant
+
+                - title: Bitwarden Vault
+                  url: https://vault.{{ base_domain }}
+                  icon: sh:vaultwarden
+
+        - type: releases
+          cache: 1d
+          # Without authentication the Github API allows for up to 60 requests per hour. You can create a
+          # read-only token from your Github account settings and use it here to increase the limit.
+          # token: ...
+          repositories:
+          {% for repo in glance_repositories %}
+          - {{ repo }}
+          {% endfor %}

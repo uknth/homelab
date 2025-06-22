@@ -1,0 +1,143 @@
+- name: Network
+  head-widgets:
+    - type: search
+      search-engine: kagi
+      autofocus: true
+      bangs:
+        - title: YouTube
+          shortcut: "!yt"
+          url: https://www.youtube.com/results?search_query={QUERY}
+
+        - title: Google
+          shortcut: "!g"
+          url: https://www.google.com/search?q={QUERY}
+
+  columns:
+    - size: small
+      widgets:
+        - type: custom-api
+          title: Hosts
+          url: https://monitor.{{ base_domain }}/api/collections/systems/records
+          headers:
+            Authorization: "${GLANCES_AUTH_TOKEN}"
+            Content-Type: application/json
+            Accept: application/json
+            User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+{% raw %}
+          template: |
+                <div class="widget-content">
+                  <ul class="dynamic-columns list-gap-20 list-with-separator">
+                    {{ range .JSON.Array "items" }}
+                    {{ $status := .String "status" }}
+                    <div class="monitor-site flex items-center gap-15">
+                        <img class="monitor-site-icon loaded finished-transition" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/rancher-desktop.svg" alt="" loading="lazy">
+                        <div class="grow min-width-0">
+                            <a class="size-h3 color-highlight text-truncate block" href="ssh://uknth@{{ .String "info.h" }}" target="_blank" rel="noreferrer" title="{{ .String "info.h" }}">{{ .String "info.h" }}</a>
+                            <ul class="list-horizontal-text">            
+                                <li title="IP">{{ .String "host" }}</li>
+                                <li title="Status" style="text-transform: uppercase;" >{{ $status }}</li>
+                            </ul>
+                        </div>
+                        <div class="monitor-site-status-icon">
+                            {{ if eq $status "up" }}
+                            <!-- up -->
+                            <svg fill="var(--color-positive)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"></path>
+                            </svg>
+                            {{ else }}
+                            <!-- down -->
+                            <svg fill="var(--color-negative)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd"></path>
+                            </svg>
+                            {{ end }}
+                        </div>
+                    </div>
+                  {{ end }}
+                  </ul>
+                </div>
+{% endraw %}
+
+    - size: full
+      widgets:
+        - type: monitor
+          title: Services
+          cache: 2m
+          sites: 
+            - title: Jellyfin
+              url: https://jellyfin.{{ base_domain }}
+              icon: sh:jellyfin
+
+            - title: JellySeerr
+              url: https://jellyseerr.{{ base_domain }}
+              icon: sh:jellyseerr
+
+            - title: Immich
+              url: https://immich.{{ base_domain }}
+              icon: sh:immich
+
+            - title: Fusion (Feed Reader)
+              url: https://fusion.{{ base_domain }}
+              icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/fusion-rss.png
+
+            - title: Bitwarden Vault
+              url: https://vault.{{ base_domain }}
+              icon: sh:vaultwarden
+
+        - type: monitor
+          title: IOT
+          sites:
+            - title: Home Assistant
+              url: https://homeassistant.{{ base_domain }}
+              icon: sh:home-assistant
+
+        - type: monitor 
+          title: ARR stack
+          cache: 10m
+          sites:
+            - title: qBittorrent
+              url: https://qbittorrent.{{ base_domain }}
+              icon: sh:qbittorrent
+            - title: NZBGet
+              url: https://nzbget.{{ base_domain }}
+              icon: sh:nzbget
+            - title: Prowlarr
+              url: https://prowlarr.{{ base_domain }}
+              icon: sh:prowlarr
+            - title: Sonarr
+              url: https://sonarr.{{ base_domain }}
+              icon: sh:sonarr
+            - title: Radarr
+              url: https://radarr.{{ base_domain }}
+              icon: sh:radarr
+            - title: Lidarr
+              url: https://lidarr.{{ base_domain }}
+              icon: sh:lidarr
+            - title: Bazarr
+              url: https://bazarr.{{ base_domain }}
+              icon: sh:bazarr
+            - title: Readarr
+              url: https://readarr.{{ base_domain }}
+              icon: sh:readarr
+
+        - type: monitor
+          title: DNS
+          cache: 1m
+          sites:
+            - title: Pi-hole
+              url: https://pi-hole.{{ base_domain }}
+              icon: sh:pi-hole
+            - title: Blocky UI
+              url: https://blocky.{{ base_domain }}
+              icon: sh:blocky
+            - title: Blocky DNS
+              url: https://blocky-dns.{{ base_domain }}
+              icon: sh:blocky
+
+        - type: monitor
+          title: Monitor
+          cache: 2m
+          sites:
+            - title: Beszel Hub
+              url: https://monitor.{{ base_domain }}
+              icon: sh:beszel
+        

@@ -1,0 +1,35 @@
+- name: Create glance directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  loop:
+    - "{{ config_dir }}/glance/compose"
+    - "{{ config_dir }}/glance/config"
+    - "{{ config_dir }}/glance/assets"
+
+- name: Copy templated glance files into place.
+  ansible.builtin.template:
+    src: templates/{{ item.src }}
+    dest: "{{ config_dir }}/glance/{{ item.dest }}"
+    mode: 0644
+  loop:
+    - src: docker-compose.yml.j2
+      dest: compose/docker-compose.yml
+    - src: env.j2
+      dest: compose/.env
+    - src: config/glance.yml.j2
+      dest: config/glance.yml
+    - src: config/home.yml.j2
+      dest: config/home.yml
+    - src: config/network.yml.j2
+      dest: config/network.yml
+    - src: assets/user.css.j2
+      dest: assets/user.css
+  notify: Restart glance
+
+- name: Ensure glance-compose is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ config_dir }}/glance/compose"
+    build: never
+  become: false

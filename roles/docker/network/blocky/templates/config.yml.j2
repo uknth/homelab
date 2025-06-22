@@ -30,6 +30,8 @@ customDNS:
   rewrite:
     homelab.uknth.me: puhome.net
   mapping:
+    pie-1.host.puhome.net: 10.0.2.7
+
     {% for name, var in hostvars.items() -%}
     {% if name != 'localhost' -%}
     {{ name }}.puhome.net: {{ var.ansible_host | default(name) }}

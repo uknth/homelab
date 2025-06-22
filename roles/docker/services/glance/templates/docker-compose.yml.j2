@@ -1,0 +1,13 @@
+services:
+  glance:
+    container_name: glance
+    image: glanceapp/glance
+    restart: unless-stopped
+    volumes:
+      - {{ config_dir }}/glance/config:/app/config
+      - {{ config_dir }}/glance/assets:/app/assets
+      # Optionally, also mount docker socket if you want to use the docker containers widget
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - {{ glance_ext_port }}:8080
+    env_file: {{ config_dir }}/glance/compose/.env

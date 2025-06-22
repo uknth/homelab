@@ -42,3 +42,11 @@
       
     - role: packages/system/beszel-agent
       tags: ["system", "beszel-agent"]
+
+    - role: dns
+      tags: ["system", "dns"]
+      vars:
+        dns_servers:
+          - 10.0.2.2
+      when: not dns_host | default(false)
+      become: true

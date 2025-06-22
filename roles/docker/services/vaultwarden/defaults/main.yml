@@ -1,6 +1,11 @@
 vw_server_version: latest
-vw_host: vault.homelab.uknth.me
-vw_admin_token: some-token
-vw_smtp_from: some-from
-vw_smtp_user: some-user
-vw_smtp_password: some-password
+vw_ext_port: 14001
+vw_host: "vault.some-domain.com"
+vw_admin_token: "some-random-token"
+vw_smtp_host: "mail.smtp2go.com"
+vw_smtp_port: 587
+vw_smtp_security: "starttls"
+vw_smtp_from: "smtp-from"
+vw_smtp_user: "smtp-user"
+vw_smtp_password: "smtp-password"
+vw_signups_domains_whitelist: "some-domain.me,gmail.com,outlook.com"

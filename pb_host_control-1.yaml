@@ -3,3 +3,6 @@
   roles:
     - name: docker/monitor/beszel
       tags: ["docker", "monitor", "beszel"]
+
+    - name: docker/services/glance
+      tags: ["docker", "services", "glance"]

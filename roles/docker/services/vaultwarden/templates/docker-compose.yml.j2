@@ -21,10 +21,10 @@ services:
       - SIGNUPS_VERIFY=true
       - SIGNUPS_VERIFY_RESEND_TIME=3600
       - SIGNUPS_VERIFY_RESEND_LIMIT=5
-      - SIGNUPS_DOMAINS_WHITELIST=uknth.me,gmail.com,outlook.com
-      - SMTP_HOST=smtp-mail.outlook.com
-      - SMTP_PORT=587
-      - SMTP_SECURITY=starttls
+      - SIGNUPS_DOMAINS_WHITELIST={{ vw_signups_domains_whitelist }}
+      - SMTP_HOST={{ vw_smtp_host }}
+      - SMTP_PORT={{ vw_smtp_port }}
+      - SMTP_SECURITY={{ vw_smtp_security }}
       - SMTP_FROM={{ vw_smtp_from }}
       - SMTP_USERNAME={{ vw_smtp_user }}
       - SMTP_PASSWORD={{ vw_smtp_password }}

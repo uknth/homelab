@@ -20,11 +20,7 @@
 
 - name: Initialize vhosts list with default redirect
   ansible.builtin.set_fact:
-    nginx_vhosts_list:
-      - listen: "80 default_server"
-        server_name: "_"
-        extra_parameters: |
-          return 301 https://$host$request_uri;
+    nginx_vhosts_list: []
 
 - name: Add dynamic vhosts for each service
   ansible.builtin.set_fact:

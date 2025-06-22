@@ -1,0 +1,14 @@
+glance_ext_port: 14031
+glance_rss_feeds:
+  - {url: "https://selfh.st/rss/selfhosted", title: "selfh.st"}
+  - {url: "https://ishadeed.com/feed.xml", title: "Ahmad Shadeed"}
+
+glance_youtube_channels:
+  - {name: "Linus Tech Tips", id: "UCXuqSBlHAE6Xw-yeJA0Tunw"}
+  - {name: "Jeff Geerling", id: "UCR-DXc1voovS8nhAvccRZhg"}
+
+glance_weather_location: "Bangalore, India"
+glance_weather_units: "metric"
+glance_weather_hour_format: "12h"
+glance_repositories:
+  - "glanceapp/glance"

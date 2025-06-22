@@ -8,12 +8,43 @@ config_dir: "/home/{{user}}/.config/homelab"
 data_dir: "/home/{{user}}/.local/share/homelab"
 timezone: Asia/Kolkata
 
+# smtp configuration
+smtp_host: "mail.smtp2go.com"
+smtp_port: 587
+smtp_security: "starttls"
+smtp_from: "{{ vault_smtp_from }}"
+smtp_user: "{{ vault_smtp_user }}"
+smtp_password: "{{ vault_smtp_password }}"
+
 # control-1
 #---------------------------------------------------------------
 # beszel
 ba_public_key: "{{ vault_ba_public_key }}"
 beszel_ext_port: 8090
 # glance
+glance_ext_port: 14031
+glance_rss_feeds:
+  - {url: "https://selfh.st/rss/selfhosted", title: "selfh.st"}
+  - {url: "https://ciechanow.ski/atom.xml", title: "Ciechanow.ski"}
+  - {url: "https://www.joshwcomeau.com/rss.xml", title: "Josh Comeau"}
+  - {url: "https://samwho.dev/rss.xml", title: "Sam Who"}
+  - {url: "https://ishadeed.com/feed.xml", title: "Ahmad Shadeed"}
+
+glance_youtube_channels:
+  - {name: "Linus Tech Tips", id: "UCXuqSBlHAE6Xw-yeJA0Tunw"}
+  - {name: "Jeff Geerling", id: "UCR-DXc1voovS8nhAvccRZhg"}
+  - {name: "Fireship", id: "UCsBjURrPoezykLs9EqgamOA"}
+  - {name: "Marques Brownlee", id: "UCXuqSBlHAE6Xw-yeJA0Tunw"}
+  - {name: "Veritasium", id: "UCUHnyfMqiRRG1u-2MsSQLbXA"}
+
+glance_weather_location: "Bangalore, India"
+glance_weather_units: "metric"
+glance_weather_hour_format: "12h"
+glance_repositories:
+  - "glanceapp/glance"
+  - "immich-app/immich"
+glance_auth_token: "{{ vault_glance_auth_token }}"
+
 # uptimekuma
 
 # nas-2
@@ -21,6 +52,7 @@ beszel_ext_port: 8090
 # host config
 media_base_dir: "/mnt/databank/media"
 media_out_dir: "/mnt/databank/storage"
+
 nas1_host: "10.0.2.3"
 nas1_username: "{{ vault_nas1_user }}"
 nas1_password: "{{ vault_nas1_password }}"
@@ -30,6 +62,15 @@ nas1_mount_dirs:
   - video
 # vaultwarden
 vw_ext_port: 14001
+vw_host: "vault.puhome.net"
+vw_admin_token: "{{ vault_vw_admin_token }}"
+vw_smtp_host: "{{ smtp_host }}"
+vw_smtp_port: "{{ smtp_port }}"
+vw_smtp_security: "{{ smtp_security }}"
+vw_smtp_from: "{{ smtp_from }}"
+vw_smtp_user: "{{ smtp_user }}"
+vw_smtp_password: "{{ smtp_password }}"
+vw_signups_domains_whitelist: "uknth.me,gmail.com,outlook.com"
 # fusion
 fusion_password: "{{ vault_fusion_password }}"
 fusion_ext_port: 14002
@@ -59,7 +100,6 @@ blocky_ext_port: 14011
 blocky_ui_ext_port: 14012
 blocky_domain_mapping:
   - {name: "router-1.host.puhome.net", ip: "10.0.2.1"}
-  - {name: "puhome.net", ip: "10.0.2.2"} # for backwards compatibility with *.homelab.uknth.me
 
 # certbot & nginx
 nginx_certbot_admin_email: "{{ vault_certbot_admin_email }}"
@@ -89,9 +129,18 @@ service_mapping:
   - {name: "fusion", ip: "10.0.2.2", host: "nas-2", port: "{{ fusion_ext_port }}"}
   # vault on nas-2
   - {name: "vault", ip: "10.0.2.2", host: "nas-2", port: "{{ vw_ext_port }}"}
+  # blocky on gateway-1
+  - {name: "blocky-dns", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ext_port }}"}
+  - {name: "blocky", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ui_ext_port }}"}
   # beszel monitoring server on control-1 
   - {name: "beszel", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"}
   - {name: "monitor", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"} # alias
+  # glance on control-1
+  - { name: "glance", ip: "10.0.2.2", host: "control-1", port: "{{ glance_ext_port }}"}
+  - { name: "dash", ip: "10.0.2.2", host: "control-1", port: "{{ glance_ext_port }}"} # alias
   # extra services on unmanaged hosts
   - {name: "homeassistant", ip: "10.0.2.2", host: "iot-1", port: "8123"}
+  - {name: "pi-hole", ip: "10.0.2.2", host: "pie-1", port: "80"}
+  # TODO: immich to nas-2 when NAS is ready
+  - {name: "immich", ip: "10.0.2.2", host: "control-1", port: "2283"}
 #---------------------------------------------------------------
