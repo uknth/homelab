@@ -1,4 +1,4 @@
 - name: Restart fusion
   community.docker.docker_compose_v2:
-    project_src: "{{ config_dir }}/fusion"
+    project_src: "{{ fusion_root_dir }}/compose"
     state: restarted

@@ -4,7 +4,7 @@ services:
     image: vaultwarden/server:{{ vw_server_version }}
     restart: unless-stopped
     volumes:
-      - ./data/:/data/
+      - {{ vw_data_dir }}:/data/
     ports:
       - {{ vw_ext_port }}:80
     environment:

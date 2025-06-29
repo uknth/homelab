@@ -27,3 +27,6 @@
     - role: docker/media/jellyfin
       tags: ["docker", "media", "jellyfin"]
 
+    - role: docker/services/immich
+      tags: ["docker", "service", "immich"]
+

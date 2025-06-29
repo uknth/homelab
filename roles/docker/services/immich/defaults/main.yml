@@ -1,5 +1,5 @@
 immich_version: v1.123.0
-immich_storage_location: /mnt/fast2/immich/upload
-immich_db_data_location: "/mnt/fast2/immich/db/data"
-immich_backup_location: "/mnt/fast2/immich/backup"
+immich_storage_location: /mnt/databank/immich/upload
+immich_db_data_location: "/mnt/databank/immich/db/data"
+immich_backup_location: "/mnt/databank/immich/backup"
 immich_db_password: some-password

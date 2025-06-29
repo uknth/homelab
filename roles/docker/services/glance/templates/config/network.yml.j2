@@ -102,22 +102,25 @@
               icon: sh:nzbget
             - title: Prowlarr
               url: https://prowlarr.{{ base_domain }}
+              check-url: https://prowlarr.{{ base_domain }}/ping
               icon: sh:prowlarr
             - title: Sonarr
               url: https://sonarr.{{ base_domain }}
+              check-url: https://sonarr.{{ base_domain }}/ping
               icon: sh:sonarr
             - title: Radarr
               url: https://radarr.{{ base_domain }}
+              check-url: https://radarr.{{ base_domain }}/ping
               icon: sh:radarr
             - title: Lidarr
               url: https://lidarr.{{ base_domain }}
+              check-url: https://lidarr.{{ base_domain }}/ping
               icon: sh:lidarr
             - title: Bazarr
               url: https://bazarr.{{ base_domain }}
+              check-url: https://bazarr.{{ base_domain }}/ping
               icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/bazarr.png
-            - title: Readarr
-              url: https://readarr.{{ base_domain }}
-              icon: sh:readarr
+
 
         - type: monitor
           title: DNS

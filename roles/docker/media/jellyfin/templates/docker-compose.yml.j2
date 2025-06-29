@@ -13,11 +13,13 @@ services:
       - type: bind
         source: {{ media_out_dir }}/data
         target: /media/nas2
-      - type: bind
-        source: {{ jellyfin_nas1_dir }}
-        target: /media/nas1
-    devices:
-      - /dev/dri:/dev/dri #Use for Intel QuickSync
+      # uncomment this if we need nas1 added to the jellyfin
+      # all data has already been moved to nas2
+      # - type: bind
+      #  source: {{ jellyfin_nas1_dir }}
+      #  target: /media/nas1
+    # devices: 
+      # - /dev/dri:/dev/dri #Use for Intel QuickSync
     ports:
       - {{ jellyfin_ext_port }}:8096
       - 7359:7359/udp #Service Discovery

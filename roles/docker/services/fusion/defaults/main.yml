@@ -1,3 +1,4 @@
 fusion_ext_port: 14002
 fusion_password: "some-password"
-fusion_data_dir: "{{config_dir}}/fusion/data"
+fusion_root_dir: "{{ config_dir }}/fusion"
+fusion_data_dir: "{{ fusion_root_dir }}/data"

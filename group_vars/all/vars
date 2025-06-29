@@ -50,8 +50,9 @@ glance_auth_token: "{{ vault_glance_auth_token }}"
 # nas-2
 #---------------------------------------------------------------
 # host config
-media_base_dir: "/mnt/databank/media"
-media_out_dir: "/mnt/databank/storage"
+media_base_dir: "/mnt/media"
+media_out_dir: "/mnt/storage"
+service_dir: "/mnt/service"
 
 nas1_host: "10.0.2.3"
 nas1_username: "{{ vault_nas1_user }}"
@@ -61,6 +62,7 @@ nas1_mount_dirs:
   - music
   - video
 # vaultwarden
+vw_root_dir: "{{ service_dir }}/vaultwarden"
 vw_ext_port: 14001
 vw_host: "vault.puhome.net"
 vw_admin_token: "{{ vault_vw_admin_token }}"
@@ -72,6 +74,7 @@ vw_smtp_user: "{{ smtp_user }}"
 vw_smtp_password: "{{ smtp_password }}"
 vw_signups_domains_whitelist: "uknth.me,gmail.com,outlook.com"
 # fusion
+fusion_root_dir: "{{ service_dir }}/fusion"
 fusion_password: "{{ vault_fusion_password }}"
 fusion_ext_port: 14002
 # media (arr stack)
@@ -88,11 +91,17 @@ arr_radarr_ext_port: 14017
 arr_lidarr_ext_port: 14018
 arr_bazarr_ext_port: 14019
 arr_ytdl_sub_ext_port: 14022
-arr_readarr_ext_port: 14023
+arr_whisparr_ext_port: 14023
 # media (jellyfin)
 jellyfin_nas1_dir: "{{ nas1_mount_point }}"
 jellyfin_jellyseerr_ext_port: 14020
 jellyfin_ext_port: 14021
+# photos
+immich_root_dir: "{{ service_dir }}/immich"
+immich_storage_location: /mnt/images/upload
+immich_db_data_location: "/mnt/images/db/data"
+immich_backup_location: "/mnt/images/backup"
+immich_db_password: "{{ vault_immich_db_password }}"
 
 # gateway-1
 #---------------------------------------------------------------
@@ -106,6 +115,7 @@ nginx_certbot_admin_email: "{{ vault_certbot_admin_email }}"
 nginx_certbot_cloudflare_email: "{{ vault_certbot_cloudflare_email }}"
 nginx_certbot_cloudflare_api_key: "{{ vault_certbot_cloudflare_api_key }}"
 nginx_resolver: "10.0.2.2"
+nginx_cockpit_hosts: "{{ groups['managed_hosts'] | default([]) }}"
 
 #---------------------------------------------------------------
 # SERVICE MAPPING
@@ -120,15 +130,18 @@ service_mapping:
   - {name: "radarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_radarr_ext_port }}"}
   - {name: "lidarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_lidarr_ext_port }}"}
   - {name: "bazarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_bazarr_ext_port }}"}
-  - {name: "readarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_readarr_ext_port }}"}
   - {name: "jellyfin", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} 
   - {name: "video", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
   - {name: "jellyseerr", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"} 
   - {name: "seer", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"} #alias
+  - {name: "whisparr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_whisparr_ext_port }}"}
   # fusion on nas-2
   - {name: "fusion", ip: "10.0.2.2", host: "nas-2", port: "{{ fusion_ext_port }}"}
   # vault on nas-2
   - {name: "vault", ip: "10.0.2.2", host: "nas-2", port: "{{ vw_ext_port }}"}
+  # photos on nas-2
+  - {name: "immich", ip: "10.0.2.2", host: "nas-2", port: "2283"}
+  - {name: "photos", ip: "10.0.2.2", host: "nas-2", port: "2283"}
   # blocky on gateway-1
   - {name: "blocky-dns", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ext_port }}"}
   - {name: "blocky", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ui_ext_port }}"}
@@ -141,6 +154,4 @@ service_mapping:
   # extra services on unmanaged hosts
   - {name: "homeassistant", ip: "10.0.2.2", host: "iot-1", port: "8123"}
   - {name: "pi-hole", ip: "10.0.2.2", host: "pie-1", port: "80"}
-  # TODO: immich to nas-2 when NAS is ready
-  - {name: "immich", ip: "10.0.2.2", host: "control-1", port: "2283"}
 #---------------------------------------------------------------

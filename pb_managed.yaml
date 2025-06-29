@@ -14,6 +14,13 @@
         create: yes
       become: true
 
+- name: Debug OS family
+  hosts: managed_hosts
+  tasks:
+    - name: Print os_family from ansible_facts
+      debug:
+        msg: "os_family for {{ inventory_hostname }} is {{ ansible_facts['os_family'] }}"
+
 - name: housekeeping & system packages
   hosts: managed_hosts
   roles:
@@ -32,21 +39,35 @@
           - dnsutils
           - python3-pip
           - kitty-terminfo
-          - cifs-utils 
+          - cifs-utils
+          - cockpit
 
     - role: packages/system/ntp
       tags: ["system", "ntp"]
 
     - role: packages/system/docker
       tags: ["system", "docker"]
+      when: not no_docker| default(false)
       
     - role: packages/system/beszel-agent
       tags: ["system", "beszel-agent"]
 
     - role: dns
+      tags: ["system", "ubuntu", "dns"]
+      vars:
+        dns_nameservers:
+          - 10.0.2.2
+      when:
+        - not no_dns | default(false)
+        - ansible_facts['distribution'] == 'Ubuntu'
+      become: true
+
+    - role: oefenweb.dns
       tags: ["system", "dns"]
       vars:
-        dns_servers:
+        dns_nameservers:
           - 10.0.2.2
-      when: not dns_host | default(false)
+      when: 
+        - not no_dns | default(false)
+        - ansible_facts['distribution'] == 'Debian'
       become: true

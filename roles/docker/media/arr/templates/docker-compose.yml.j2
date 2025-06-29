@@ -21,6 +21,7 @@ services:
       - {{ arr_qbittorrent_ext_port }}:{{ arr_qbittorrent_ext_port }} # qbittorrent web interface
       - {{ arr_nzbget_ext_port }}:6789 # nzbget web interface
       - {{ arr_prowlarr_ext_port }}:9696 # prowlarr web interface
+      - {{ arr_whisparr_ext_port }}:6969 # whisparr web interface
     volumes:
       - {{ media_base_dir }}/config/gluetun:/config
       - {{ media_base_dir }}/service/gluetun:/gluetun
@@ -205,25 +206,23 @@ services:
       servarrnetwork:
         ipv4_address: 172.39.0.6
 
-
-  readarr:
-    image: lscr.io/linuxserver/readarr:develop
-    container_name: readarr
+  whisparr:
+    image: ghcr.io/hotio/whisparr:v3
+    container_name: whisparr
     restart: unless-stopped
     environment:
       - PUID={{puid}}
       - PGID={{pgid}}
       - TZ={{timezone}}
+      - VPN_ENABLED=false
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - {{ media_base_dir }}/config/readarr:/config
-      - {{ media_out_dir }}/data:/data # output directory of qbittorrent should be same as readarr's data directory
-    ports:
-      - {{ arr_readarr_ext_port }}:8787
-    networks:
-      servarrnetwork:
-        ipv4_address: 172.39.0.7
-
+      - {{ media_base_dir }}/config/whisparr:/config
+      - {{ media_out_dir }}/data:/data 
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
+    network_mode: service:gluetun
 
   ytdl-sub:
     image: ghcr.io/jmbannon/ytdl-sub-gui:latest

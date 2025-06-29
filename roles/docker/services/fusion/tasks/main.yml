@@ -1,12 +1,16 @@
-- name: Make directory for copying files
-  ansible.builtin.command: |
-    mkdir -p {{ config_dir }}/fusion/data
-
+- name: Ensure fusion data and compose directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ fusion_root_dir }}/data"
+    - "{{ fusion_root_dir }}/compose"
 
 - name: Copy docker compose template
   ansible.builtin.template:
     src: docker-compose.yml.j2
-    dest: "{{ config_dir }}/fusion/docker-compose.yml"
+    dest: "{{ fusion_root_dir }}/compose/docker-compose.yml"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0644"
@@ -14,6 +18,6 @@
 
 - name: Deploy fusion using docker compose
   community.docker.docker_compose_v2:
-    project_src: "{{ config_dir }}/fusion"
+    project_src: "{{ fusion_root_dir }}/compose"
     
 

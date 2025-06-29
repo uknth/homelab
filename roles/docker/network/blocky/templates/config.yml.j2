@@ -31,6 +31,7 @@ customDNS:
     homelab.uknth.me: puhome.net
   mapping:
     pie-1.host.puhome.net: 10.0.2.7
+    cockpit.puhome.net: 10.0.2.2
 
     {% for name, var in hostvars.items() -%}
     {% if name != 'localhost' -%}

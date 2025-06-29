@@ -21,6 +21,8 @@ roles:
   - name: deekayen.awscli2
   - name: dns
     src: https://github.com/metno/ansible-role-dns
+  - name: oefenweb.dns
+    src: https://github.com/Oefenweb/ansible-dns
 collections:
   - community.docker
   - community.general

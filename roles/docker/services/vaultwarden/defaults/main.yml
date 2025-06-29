@@ -1,3 +1,5 @@
+vw_root_dir: "{{ config_dir }}/vaultwarden"
+vw_data_dir: "{{ vw_root_dir }}/data"
 vw_server_version: latest
 vw_ext_port: 14001
 vw_host: "vault.some-domain.com"
