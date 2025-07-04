@@ -1,0 +1,35 @@
+- name: Get user info for ansible_user
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+  register: user_info
+
+- name: Make directory for copying files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user_info.uid }}"
+    group: "{{ user_info.group }}"
+  loop:
+    - "{{ music_root_dir }}"
+    - "{{ music_root_dir }}/compose"
+    - "{{ music_root_dir }}/navidrome/data"
+    - "{{ music_root_dir }}/headphones/config"
+
+
+- name: Copy docker compose template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ music_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  vars:
+    puid: "{{ user_info.uid }}"
+    pgid: "{{ user_info.group }}"
+  notify: Restart music
+
+- name: Deploy music services using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ music_root_dir }}/compose"
+    
+

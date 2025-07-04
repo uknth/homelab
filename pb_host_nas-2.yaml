@@ -30,3 +30,6 @@
     - role: docker/services/immich
       tags: ["docker", "service", "immich"]
 
+    - role: docker/media/music
+      tags: ["docker", "media", "music"]
+
