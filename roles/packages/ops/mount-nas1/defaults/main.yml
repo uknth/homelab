@@ -3,6 +3,7 @@ nas1_mount_point: /mnt/nas1
 nas1_mount_dirs:
   - music
   - video 
+  - backup
 nas1_username: "some-random-user"
 nas1_password: "some-random-password"
 

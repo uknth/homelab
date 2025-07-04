@@ -1,0 +1,10 @@
+silverbullet_root_dir: "{{ service_dir }}/silverbullet"
+silverbullet_username: "admin"
+silverbullet_password: "admin"
+silverbullet_index_page: "home.md"
+silverbullet_shell_backend: "off"
+silverbullet_ext_port: 14027
+silverbullet_data_dir: "/data/space"
+silverbullet_apt_packages:
+  - git
+  - curl

@@ -1,0 +1,27 @@
+services:
+  silverbullet:
+    image: ghcr.io/silverbulletmd/silverbullet:v2
+    restart: unless-stopped
+    environment:
+    - SB_USER={{ silverbullet_username }}:{{ silverbullet_password }}
+    - SB_INDEX_PAGE={{ silverbullet_index_page }}
+    - SB_SHELL_BACKEND={{ silverbullet_shell_backend }}
+    - PUID={{ puid }}
+    - PGID={{ pgid }}
+    - SB_APT_SYNC=true
+    - SB_APT_PACKAGES={{ silverbullet_apt_packages | join(' ') }}
+    volumes:
+      - {{ silverbullet_data_dir }}:/space
+    ports:
+      - "{{ silverbullet_ext_port }}:3000"
+    networks:
+      - notes
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - notes
+networks:
+  notes: {}

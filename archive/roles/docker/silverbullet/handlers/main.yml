@@ -1,0 +1,6 @@
+- name: Restart notes
+  community.docker.docker_compose_v2:
+    project_src: "{{ silverbullet_root_dir }}/compose"
+    build: never
+    state: restarted
+  become: false

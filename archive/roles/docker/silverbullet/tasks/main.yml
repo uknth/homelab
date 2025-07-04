@@ -1,0 +1,32 @@
+- name: Get user info for ansible_user
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+  register: user_info
+
+- name: Make directory for copying files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user_info.uid }}"
+    group: "{{ user_info.group }}"
+  loop:
+    - "{{ silverbullet_root_dir }}"
+    - "{{ silverbullet_root_dir }}/compose"
+    - "{{ silverbullet_data_dir }}"
+
+- name: Copy docker compose template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ silverbullet_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  vars:
+    puid: "{{ user_info.uid }}"
+    pgid: "{{ user_info.group }}"
+  notify: Restart notes
+
+- name: Deploy silverbullet-notes services using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ silverbullet_root_dir }}/compose"
+    

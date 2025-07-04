@@ -93,7 +93,7 @@ arr_bazarr_ext_port: 14019
 arr_ytdl_sub_ext_port: 14022
 arr_whisparr_ext_port: 14023
 arr_unpackerr_ext_port: 14024
-# media (music)
+# music (navidrome)
 music_root_dir: "{{ service_dir }}/music"
 music_navidrome_ext_port: 14025
 music_navidrome_data_dir: "{{ music_root_dir }}/navidrome/data"
