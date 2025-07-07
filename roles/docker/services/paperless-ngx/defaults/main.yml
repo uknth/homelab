@@ -1,0 +1,6 @@
+paperless_ext_port: 8000
+paperless_root_dir: "{{ service_dir }}/paperless"
+paperless_data_dir: "{{ user_data_dir }}/paperless"
+paperless_db_name: "paperless"
+paperless_db_user: "paperless"
+paperless_db_password: "some-db-password"

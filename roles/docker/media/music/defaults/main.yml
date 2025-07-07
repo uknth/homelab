@@ -4,3 +4,5 @@ music_navidrome_data_dir: "{{ music_root_dir }}/navidrome/data"
 music_headphones_ext_port: 14026
 music_headphones_data_dir: "{{ media_out_dir }}/data"
 music_headphones_config_dir: "{{ music_root_dir }}/headphones/config"
+music_picard_ext_port: 14027
+music_picard_config_dir: "{{ music_root_dir }}/picard/config"

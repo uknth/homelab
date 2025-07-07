@@ -1,3 +1,4 @@
+name: music
 services:
   navidrome:
     image: deluan/navidrome:latest
@@ -10,7 +11,7 @@ services:
       # ND_LOGLEVEL: debug
     volumes:
       - "{{ music_navidrome_data_dir }}:/data"
-      - "{{ media_out_dir }}/data/music:/music:ro"
+      - "{{ media_out_dir }}/data/music:/music:rw"
     networks:
       - music
 
@@ -27,6 +28,21 @@ services:
     ports:
       - "{{ music_headphones_ext_port }}:8181"
     restart: unless-stopped
+    networks:
+      - music
+
+  picard:
+    image: mikenye/picard:latest
+    ports:
+      - "{{ music_picard_ext_port }}:5800"
+    volumes:
+      - "{{ music_picard_config_dir }}:/config:rw"
+      - "{{ media_out_dir }}/data/music:/storage:rw"
+    environment:
+      - USER_ID={{ puid }}
+      - GROUP_ID={{ pgid }}
+      - TZ={{ timezone }}
+      - KEEP_APP_RUNNING=1
     networks:
       - music
 

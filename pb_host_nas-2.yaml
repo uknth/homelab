@@ -32,3 +32,6 @@
 
     - role: docker/media/music
       tags: ["docker", "media", "music"]
+
+    - role: docker/services/paperless-ngx
+      tags: ["docker", "service", "paperless-ngx", "paperless"]

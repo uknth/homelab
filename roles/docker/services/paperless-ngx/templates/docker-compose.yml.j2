@@ -1,0 +1,67 @@
+name: paperless-ngx
+
+services:
+  broker:
+    image: docker.io/library/redis:8
+    restart: unless-stopped
+    volumes:
+      - {{ paperless_data_dir }}/redis:/data
+    networks:
+      - paperless
+  db:
+    image: docker.io/library/postgres:17
+    restart: unless-stopped
+    volumes:
+      - {{ paperless_data_dir }}/pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: {{ paperless_db_name }}
+      POSTGRES_USER: {{ paperless_db_user }}
+      POSTGRES_PASSWORD: {{ paperless_db_password }}
+    networks:
+      - paperless 
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+      - broker
+      - gotenberg
+      - tika
+    ports:
+      - "{{ paperless_ext_port }}:8000"
+    volumes:
+      - {{ paperless_data_dir }}/data:/usr/src/paperless/data
+      - {{ paperless_data_dir }}/media:/usr/src/paperless/media
+      - {{ paperless_root_dir }}/export:/usr/src/paperless/export
+      - {{ paperless_root_dir }}/consume:/usr/src/paperless/consume
+    env_file: .env
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_TIKA_ENABLED: 1
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_DBUSER: {{ paperless_db_user }}
+      PAPERLESS_DBPASS: {{ paperless_db_password }}
+      PAPERLESS_DBNAME: {{ paperless_db_name }}
+    networks:
+      - paperless
+  gotenberg:
+    image: docker.io/gotenberg/gotenberg:8.20
+    restart: unless-stopped
+    # The gotenberg chromium route is used to convert .eml files. We do not
+    # want to allow external content like tracking pixels or even javascript.
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+    networks:
+      - paperless
+  tika:
+    image: docker.io/apache/tika:latest
+    restart: unless-stopped
+    networks:
+      - paperless
+
+networks:
+  paperless: {}

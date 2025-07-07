@@ -30,6 +30,7 @@
   ansible.builtin.set_fact:
     nginx_vhosts_list: "{{ nginx_vhosts_list + [vhost_item] }}"
   loop: "{{ service_mapping }}"
+  when: item.nginx is not defined or item.nginx | bool
   vars:
     vhost_item:
       listen: "443 ssl http2"

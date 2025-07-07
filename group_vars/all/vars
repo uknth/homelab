@@ -53,6 +53,7 @@ glance_auth_token: "{{ vault_glance_auth_token }}"
 media_base_dir: "/mnt/media"
 media_out_dir: "/mnt/storage"
 service_dir: "/mnt/service"
+user_data_dir: "/mnt/user-data"
 
 nas1_host: "10.0.2.3"
 nas1_username: "{{ vault_nas1_user }}"
@@ -102,7 +103,8 @@ music_headphones_downloads_dir: "{{ media_out_dir }}/data/usenet/music"
 music_headphones_music_dir: "{{ media_out_dir }}/data/music"
 music_headphones_config_dir: "{{ music_root_dir }}/headphones/config"
 music_headphones_data_dir: "{{ music_root_dir }}/headphones/data"
-# API Keys
+music_picard_ext_port: 14028
+# Arr API Keys
 arr_sonarr_api_key: "{{ vault_arr_sonarr_api_key }}"
 arr_radarr_api_key: "{{ vault_arr_radarr_api_key }}"
 arr_lidarr_api_key: "{{ vault_arr_lidarr_api_key }}"
@@ -117,6 +119,18 @@ immich_storage_location: /mnt/images/upload
 immich_db_data_location: "/mnt/images/db/data"
 immich_backup_location: "/mnt/images/backup"
 immich_db_password: "{{ vault_immich_db_password }}"
+# File sync (seafile)
+seafile_root_dir: "{{ service_dir }}/seafile"
+seafile_data_dir: "{{ user_data_dir }}/seafile"
+
+# Paperless
+paperless_root_dir: "{{ service_dir }}/paperless"
+paperless_ext_port: 14027
+paperless_ext_url: "https://docs.{{ base_domain }}"
+paperless_secret_key: "{{ vault_paperless_secret_key }}"
+paperless_db_name: "paperless"
+paperless_db_user: "{{ vault_paperless_db_user }}"
+paperless_db_password: "{{ vault_paperless_db_password }}"
 
 # gateway-1
 #---------------------------------------------------------------
@@ -161,6 +175,8 @@ service_mapping:
   # photos on nas-2
   - {name: "immich", ip: "10.0.2.2", host: "nas-2", port: "2283"}
   - {name: "photos", ip: "10.0.2.2", host: "nas-2", port: "2283"}
+  # paperless on nas-2
+  - {name: "docs", ip: "10.0.2.2", host: "nas-2", port: "{{ paperless_ext_port }}"}
   # blocky on gateway-1
   - {name: "blocky-dns", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ext_port }}"}
   - {name: "blocky", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ui_ext_port }}"}

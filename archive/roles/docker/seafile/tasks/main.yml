@@ -1,0 +1,35 @@
+- name: Get user info for ansible_user
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+  register: user_info
+
+- name: Make directory for copying files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user_info.uid }}"
+    group: "{{ user_info.group }}"
+  loop:
+    - "{{ seafile_root_dir }}"
+    - "{{ seafile_root_dir }}/compose"
+    - "{{ seafile_root_dir }}/config"
+
+- name: Copy docker compose template
+  ansible.builtin.template:
+    src: templates/{{ item.src }}
+    dest: "{{ seafile_root_dir }}/{{ item.dest }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  loop:
+    - src: docker-compose.yml.j2
+      dest: compose/docker-compose.yml
+    - src: seafdav.conf.j2
+      dest: config/seafdav.conf
+  notify: Restart seafile
+
+- name: Ensure seafile-compose is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ seafile_root_dir }}/compose"
+    build: never
+  become: false

@@ -1,0 +1,10 @@
+seafile_root_dir: /opt/seafile-data
+seafile_data_dir: "{{ seafile_root_dir }}/data"
+seafile_config_dir: "{{ seafile_root_dir }}/config"
+seafile_db_root_password: "some-random-password"
+seafile_ext_port: 10000
+seafile_ext_https_port: 10001
+seafile_admin_email: "admin@example.com"
+seafile_admin_password: "some-random-password"
+seafile_server_hostname: "seafile.example.com"
+seafile_ext_webdav_port: 8080

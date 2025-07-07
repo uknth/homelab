@@ -1,0 +1,5 @@
+- name: Restart paperless
+  community.docker.docker_compose_v2:
+    project_src: "{{ paperless_root_dir }}/compose"
+    build: never
+    state: restarted

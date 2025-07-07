@@ -7,13 +7,12 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ user_info.uid }}"
-    group: "{{ user_info.group }}"
   loop:
     - "{{ music_root_dir }}"
     - "{{ music_root_dir }}/compose"
     - "{{ music_root_dir }}/navidrome/data"
     - "{{ music_root_dir }}/headphones/config"
+    - "{{ music_root_dir }}/picard/config"
 
 
 - name: Copy docker compose template

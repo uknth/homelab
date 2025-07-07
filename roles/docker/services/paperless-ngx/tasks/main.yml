@@ -1,0 +1,40 @@
+- name: Get user info for ansible_user
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+  register: user_info
+
+- name: Create paperless directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ paperless_root_dir}}"
+    - "{{ paperless_data_dir }}"
+    - "{{ paperless_root_dir }}/export"
+    - "{{ paperless_root_dir }}/consume"
+    - "{{ paperless_root_dir }}/compose"
+    - "{{ paperless_data_dir }}/redis"
+    - "{{ paperless_data_dir }}/pgdata"
+    - "{{ paperless_data_dir }}/data"
+    - "{{ paperless_data_dir }}/media"
+  
+
+- name: Copy template files to destination
+  ansible.builtin.template:
+    src: "templates/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ user_info.uid }}"
+    group: "{{ user_info.group }}"
+    mode: "0644"
+  loop:
+    - {src: "docker-compose.yml.j2", dest: "{{ paperless_root_dir }}/compose/docker-compose.yml"}
+    - {src: "env.j2", dest: "{{ paperless_root_dir }}/compose/.env"}
+  vars:
+    puid: "{{ user_info.uid }}"
+    pgid: "{{ user_info.group }}"
+
+  notify: Restart paperless
+
+- name: Deploy paperless services using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ paperless_root_dir }}/compose"
