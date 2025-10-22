@@ -1,0 +1,33 @@
+- name: Get user info for ansible_user
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+  register: user_info
+
+- name: Create affine directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ affine_root_dir }}"
+    - "{{ affine_root_dir }}/compose"
+    - "{{ affine_root_dir }}/postgres/pgdata"
+    - "{{ affine_root_dir }}/storage"
+    - "{{ affine_root_dir }}/config"
+
+- name: Copy template files to destination
+  ansible.builtin.template:
+    src: "templates/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - {src: "docker-compose.yml.j2", dest: "{{ affine_root_dir }}/compose/docker-compose.yml"}
+    - {src: "env.j2", dest: "{{ affine_root_dir }}/compose/.env"}
+    - {src: "config.json.j2", dest: "{{ affine_root_dir }}/config/config.json"}
+  vars:
+    puid: "{{ user_info.uid }}"
+    pgid: "{{ user_info.group }}"
+  notify: Restart affine
+
+- name: Deploy affine services using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ affine_root_dir }}/compose"

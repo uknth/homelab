@@ -1,0 +1,7 @@
+affine_revision: "stable"
+affine_ext_port: 14029
+affine_ext_domain: "affine.{{ base_domain }}"
+affine_root_dir: "{{ service_dir }}/affine"
+affine_db_name: "affine"
+affine_db_user: "affine"
+affine_db_password: "some-random-password"

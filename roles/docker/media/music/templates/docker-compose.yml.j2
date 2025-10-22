@@ -1,19 +1,19 @@
 name: music
 services:
-  navidrome:
-    image: deluan/navidrome:latest
-    user: "{{ puid }}:{{ pgid }}" # should be owner of volumes
-    ports:
-      - "{{ music_navidrome_ext_port }}:4533"
-    restart: unless-stopped
+#  navidrome:
+#    image: deluan/navidrome:latest
+#    user: "{{ puid }}:{{ pgid }}" # should be owner of volumes
+#    ports:
+#      - "{{ music_navidrome_ext_port }}:4533"
+#    restart: unless-stopped
     # environment:
       # Optional: put your config options customization here. Examples:
       # ND_LOGLEVEL: debug
-    volumes:
-      - "{{ music_navidrome_data_dir }}:/data"
-      - "{{ media_out_dir }}/data/music:/music:rw"
-    networks:
-      - music
+#    volumes:
+#      - "{{ music_navidrome_data_dir }}:/data"
+#      - "{{ media_out_dir }}/data/music:/music:rw"
+#    networks:
+#      - music
 
   headphones:
     image: lscr.io/linuxserver/headphones:latest

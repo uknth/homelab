@@ -1,0 +1,27 @@
+- name: Get user info for ansible_user
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+  register: user_info
+
+- name: Create trillium directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ trillium_root_dir }}"
+    - "{{ trillium_data_dir }}"
+    - "{{ trillium_root_dir }}/compose"
+
+- name: Copy template files to destination
+  ansible.builtin.template:
+    src: "templates/docker-compose.yml.j2"
+    dest: "{{ trillium_root_dir }}/compose/docker-compose.yml"
+    mode: "0644"
+  vars:
+    puid: "{{ user_info.uid }}"
+    pgid: "{{ user_info.group }}"
+  notify: Restart trillium
+
+- name: Deploy trillium services using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ trillium_root_dir }}/compose"

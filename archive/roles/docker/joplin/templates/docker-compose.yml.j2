@@ -1,0 +1,39 @@
+name: joplin
+services:
+    db:
+        image: postgres:15
+        volumes:
+            - {{ joplin_root_dir }}/db:/var/lib/postgresql/data
+        ports:
+            - "5432:5432"
+        restart: unless-stopped
+        environment:
+            - POSTGRES_PASSWORD={{ joplin_postgres_password }}
+            - POSTGRES_USER={{ joplin_postgres_user }}
+            - POSTGRES_DB={{ joplin_postgres_database }}
+
+    app:
+        image: joplin/server:latest
+        depends_on:
+            - db
+        ports:
+            - "{{ joplin_ext_port }}:22300"
+        restart: unless-stopped
+        environment:
+            - APP_PORT=22300
+            - APP_BASE_URL=https://{{ joplin_app_base_url }}
+            - DB_CLIENT=pg
+            - POSTGRES_PASSWORD={{ joplin_postgres_password }}
+            - POSTGRES_DATABASE={{ joplin_postgres_database }}
+            - POSTGRES_USER={{ joplin_postgres_user }}
+            - POSTGRES_PORT=5432
+            - POSTGRES_HOST=db
+            - MAILER_ENABLED=1
+            - MAILER_HOST={{ joplin_mailer_host }}
+            - MAILER_PORT={{ joplin_mailer_port }}
+            - MAILER_SECURE=1
+            - MAILER_AUTH_USER={{ joplin_mailer_auth_user }}
+            - MAILER_AUTH_PASSWORD={{ joplin_mailer_auth_password }}
+            - MAILER_NOREPLY_NAME={{ joplin_mailer_noreply_name }}
+            - MAILER_NOREPLY_EMAIL={{ joplin_mailer_noreply_email }}
+            

@@ -1,0 +1,19 @@
+- name: Create joplin directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ joplin_root_dir }}"
+    - "{{ joplin_root_dir }}/compose"
+    - "{{ joplin_root_dir }}/db"
+
+- name: Copy template files to destination
+  ansible.builtin.template:
+    src: "templates/docker-compose.yml.j2"
+    dest: "{{ joplin_root_dir }}/compose/docker-compose.yml"
+    mode: "0644"
+  notify: Restart joplin
+
+- name: Deploy joplin services using docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ joplin_root_dir }}/compose"

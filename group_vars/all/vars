@@ -62,6 +62,8 @@ nas1_mount_point: "/mnt/nas1"
 nas1_mount_dirs:
   - music
   - video
+  - home
+  - homes
 # vaultwarden
 vw_root_dir: "{{ service_dir }}/vaultwarden"
 vw_ext_port: 14001
@@ -132,6 +134,9 @@ paperless_db_name: "paperless"
 paperless_db_user: "{{ vault_paperless_db_user }}"
 paperless_db_password: "{{ vault_paperless_db_password }}"
 
+# webdav
+webdav_ext_port: 5005
+
 # gateway-1
 #---------------------------------------------------------------
 blocky_ext_port: 14011
@@ -161,12 +166,10 @@ service_mapping:
   - {name: "bazarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_bazarr_ext_port }}"}
   - {name: "jellyfin", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} 
   - {name: "video", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
+  - {name: "media", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
   - {name: "jellyseerr", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"} 
-  - {name: "seer", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"} #alias
   - {name: "whisparr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_whisparr_ext_port }}"}
   # music on nas-2
-  - {name: "navidrome", ip: "10.0.2.2", host: "nas-2", port: "{{ music_navidrome_ext_port }}"}
-  - {name: "music", ip: "10.0.2.2", host: "nas-2", port: "{{ music_navidrome_ext_port }}"}
   - {name: "headphones", ip: "10.0.2.2", host: "nas-2", port: "{{ music_headphones_ext_port }}"}
   # fusion on nas-2
   - {name: "fusion", ip: "10.0.2.2", host: "nas-2", port: "{{ fusion_ext_port }}"}
@@ -177,6 +180,8 @@ service_mapping:
   - {name: "photos", ip: "10.0.2.2", host: "nas-2", port: "2283"}
   # paperless on nas-2
   - {name: "docs", ip: "10.0.2.2", host: "nas-2", port: "{{ paperless_ext_port }}"}
+  # webdav on nas-2
+  - {name: "webdav", ip: "10.0.2.2", host: "nas-1", port: "{{ webdav_ext_port }}"}
   # blocky on gateway-1
   - {name: "blocky-dns", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ext_port }}"}
   - {name: "blocky", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ui_ext_port }}"}

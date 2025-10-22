@@ -1,0 +1,6 @@
+- name: Restart trillium
+  community.docker.docker_compose_v2:
+    project_src: "{{ trillium_root_dir }}/compose"
+    build: never
+    state: restarted
+  become: false

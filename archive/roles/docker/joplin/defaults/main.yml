@@ -1,5 +1,25 @@
-joplin_postgres_user: "joplin-user"
+joplin_root_dir: "{{ service_dir }}/joplin"
+joplin_ext_port: 22300
+joplin_app_base_url: "https://notes.{{ base_domain }}"
 joplin_postgres_password: "some-random-password"
+joplin_postgres_user: "joplin"
 joplin_postgres_database: "joplin"
-joplin_app_base_url: "joplin.homelab.uknth.me"
-joplin_app_port: "22300"
+joplin_mailer_host: "smtp.example.com"
+joplin_mailer_port: "465"
+joplin_mailer_auth_user: "some-random-user"
+joplin_mailer_noreply_name: "Joplin"
+joplin_mailer_noreply_email: "joplin@example.com"
+
+
+# joplin_root_dir: "{{ service_dir }}/joplin"
+# joplin_ext_port: 14030
+# joplin_app_base_url: "joplin.{{ base_domain }}"
+# joplin_postgres_password: "{{ vault_joplin_db_password }}"
+# joplin_postgres_user: "{{ vault_joplin_db_user }}"
+# joplin_postgres_database: "joplin"
+# joplin_mailer_host: "{{ smtp_host }}"
+# joplin_mailer_port: "{{ smtp_port }}"
+# joplin_mailer_auth_user: "{{ smtp_user }}"
+# joplin_mailer_auth_password: "{{ smtp_password }}"
+# joplin_mailer_noreply_name: "Joplin (noreply)"
+# joplin_mailer_noreply_email: "{{ smtp_from }}"

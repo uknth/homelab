@@ -1,0 +1,4 @@
+trillium_root_dir: "{{ service_dir }}/trillium"
+trillium_ext_port: 8080
+trillium_version: "v0.96.0"
+trillium_data_dir: "{{ trillium_root_dir }}/data"

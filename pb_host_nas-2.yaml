@@ -35,3 +35,4 @@
 
     - role: docker/services/paperless-ngx
       tags: ["docker", "service", "paperless-ngx", "paperless"]
+
