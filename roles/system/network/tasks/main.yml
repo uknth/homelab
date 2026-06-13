@@ -1,0 +1,17 @@
+---
+# Entry point — dispatches to the OS-specific task file.
+# Supports: Debian/Ubuntu (Linux) and macOS (Darwin).
+#
+# The target static IP is read from the inventory's ansible_host for each host.
+# Run with a temporary dynamic IP override when the machine is still on DHCP:
+#
+#   ansible-playbook site.yml --limit <host> --tags network \
+#     -e "ansible_host=<current-dhcp-ip>" --ask-become-pass
+
+- name: Configure static IP (Linux)
+  ansible.builtin.import_tasks: linux.yml
+  when: ansible_system == "Linux"
+
+- name: Configure static IP (macOS)
+  ansible.builtin.import_tasks: macos.yml
+  when: ansible_system == "Darwin"

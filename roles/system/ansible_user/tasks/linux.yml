@@ -1,0 +1,42 @@
+---
+# Linux (Debian/Ubuntu) user creation.
+# Uses the standard 'user' module — fully idempotent.
+
+- name: Create ansible system user
+  become: true
+  block:
+    - name: Create user account
+      ansible.builtin.user:
+        name: "{{ ansible_user_name }}"
+        comment: "{{ ansible_user_realname }}"
+        shell: "{{ ansible_user_shell }}"
+        create_home: true
+        state: present
+
+    - name: Grant passwordless sudo
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/{{ ansible_user_name }}
+        line: "{{ ansible_user_name }} ALL=(ALL) NOPASSWD: ALL"
+        create: true
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: Add SSH authorized key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user_name }}"
+        key: "{{ ansible_user_public_key }}"
+        state: present
+
+    - name: Ensure PubkeyAuthentication is enabled in sshd_config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PubkeyAuthentication"
+        line: "PubkeyAuthentication yes"
+        state: present
+      notify: Restart sshd
+
+    - name: Ensure sshd is enabled and running
+      ansible.builtin.service:
+        name: ssh
+        state: started
+        enabled: true

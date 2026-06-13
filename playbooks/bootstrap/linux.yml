@@ -1,0 +1,24 @@
+---
+# Bootstrap all Linux (Debian/Ubuntu) managed hosts.
+- name: Bootstrap Linux hosts
+  hosts: linux
+  become: true
+  tags: [bootstrap, linux]
+  roles:
+    - role: system/hostname
+      tags: [hostname, system]
+
+    - role: system/apt
+      tags: [apt, packages, system]
+
+    - role: system/ntp
+      tags: [ntp, system]
+
+    - role: system/docker
+      tags: [docker, system]
+
+    - role: system/tailscale
+      tags: [tailscale, vpn, system]
+
+    - role: system/beszel_agent
+      tags: [beszel-agent, monitoring, system]

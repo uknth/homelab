@@ -1,0 +1,6 @@
+---
+# FQDN pattern: <inventory_hostname>.host.<base_domain>
+# base_domain is defined in group_vars/all/vars.yml (puhome.net)
+base_domain: "puhome.net"
+hostname_fqdn: "{{ inventory_hostname }}.host.{{ base_domain }}"
+hostname_short: "{{ inventory_hostname }}"

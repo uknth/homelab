@@ -1,0 +1,29 @@
+---
+# util01 — Utility / observability node (Mini PC, Debian)
+#
+# Services:
+#   - beszel      : monitoring hub  (metrics.puhome.net)
+#   - uptime-kuma : synthetic monitoring / status page  (synthetics.puhome.net)
+#   - glance      : home dashboard  (dash.puhome.net)
+#   - portainer   : Docker management UI  (docker.puhome.net)
+#   - n8n         : workflow automation  (n8n.puhome.net)
+
+- name: Deploy utility services on util01
+  hosts: util01
+  become: true
+  tags: [util01, utility]
+  roles:
+    - role: services/monitoring/beszel_hub
+      tags: [beszel, beszel-hub, monitoring]
+
+    - role: services/monitoring/uptime_kuma
+      tags: [uptime-kuma, synthetics, monitoring]
+
+    - role: services/dashboard/glance
+      tags: [glance, dashboard]
+
+    - role: services/dashboard/portainer
+      tags: [portainer, dashboard]
+
+    - role: services/productivity/n8n
+      tags: [n8n, automation]

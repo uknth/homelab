@@ -1,0 +1,65 @@
+---
+# Sets a static IP on the Ethernet interface of a macOS host.
+# Uses networksetup (built into macOS) — no extra packages required.
+#
+# Run with a temporary dynamic IP override when the machine is still on DHCP:
+#   ansible-playbook site.yml --limit <host> --tags network \
+#     -e "ansible_host=<current-dhcp-ip>" --ask-become-pass
+
+- name: List all network services
+  ansible.builtin.command: networksetup -listallnetworkservices
+  register: _network_services
+  changed_when: false
+
+- name: Show available network services
+  ansible.builtin.debug:
+    msg: "{{ _network_services.stdout_lines }}"
+
+- name: Auto-detect Ethernet service name
+  ansible.builtin.set_fact:
+    _ethernet_service: >-
+      {{ _network_services.stdout_lines
+         | reject('match', '.*\\*.*')
+         | select('search', '(?i)ethernet|lan|usb|thunderbolt')
+         | list | first | default('') }}
+  when: network_ethernet_service == ""
+
+- name: Use explicit Ethernet service name
+  ansible.builtin.set_fact:
+    _ethernet_service: "{{ network_ethernet_service }}"
+  when: network_ethernet_service != ""
+
+- name: Fail if no Ethernet service found
+  ansible.builtin.fail:
+    msg: >
+      Could not auto-detect an Ethernet service on {{ inventory_hostname }}.
+      Available services: {{ _network_services.stdout_lines | join(', ') }}
+      Set network_ethernet_service in host_vars/{{ inventory_hostname }}/vars.yml
+  when: _ethernet_service | length == 0
+
+- name: Get current IP configuration
+  ansible.builtin.command: networksetup -getinfo "{{ _ethernet_service }}"
+  register: _current_net_info
+  changed_when: false
+
+- name: Set static IP address
+  ansible.builtin.command: >
+    networksetup -setmanual
+    "{{ _ethernet_service }}"
+    {{ hostvars[inventory_hostname]['ansible_host'] }}
+    {{ network_subnet_mask }}
+    {{ network_gateway }}
+  become: true
+  when: >
+    'IP address: ' + hostvars[inventory_hostname]['ansible_host']
+    not in _current_net_info.stdout
+
+- name: Set DNS servers
+  ansible.builtin.command: >
+    networksetup -setdnsservers
+    "{{ _ethernet_service }}"
+    {{ network_dns_servers | join(' ') }}
+  become: true
+  when: >
+    (network_dns_servers | join(' '))
+    not in _current_net_info.stdout

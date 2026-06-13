@@ -1,0 +1,4 @@
+---
+ansible_user_name: ansible
+ansible_user_shell: /bin/bash
+ansible_user_realname: Ansible

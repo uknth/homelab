@@ -1,0 +1,17 @@
+---
+# ai01 — AI workloads node (Mac Mini M4 Pro, macOS)
+#
+# Services:
+#   - ollama  : local LLM inference engine
+#   - hermes  : local agent / automation
+
+- name: Deploy AI workloads on ai01
+  hosts: ai01
+  become: false
+  tags: [ai01, ai, macos]
+  roles:
+    - role: services/ai/ollama
+      tags: [ollama, llm, ai]
+
+    - role: services/ai/hermes
+      tags: [hermes, agent, ai]

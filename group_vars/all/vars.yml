@@ -1,0 +1,21 @@
+# Ansible Global Config
+#---------------------------------------------------------------
+
+# role/ansible_user
+ansible_user_name: "ansible"
+ansible_user_shell: "/bin/bash"
+ansible_user_realname: "Ansible"
+ansible_user_public_key: "{{ vault_public_key }}"
+ansible_user_sudo_password: "{{ vault_sudo_password }}"
+
+# Connection settings — applied to all hosts
+# ansible builtin variables
+ansible_user: "{{ ansible_user_name }}"
+ansible_ssh_private_key_file: keys/ansible_rsa.private
+ansible_become_password: "{{ vault_sudo_password }}"
+
+base_domain: "puhome.net"
+
+config_dir: "/home/{{user}}/.config/homelab"
+data_dir: "/home/{{user}}/.local/share/homelab"
+timezone: Asia/Kolkata

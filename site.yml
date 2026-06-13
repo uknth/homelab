@@ -1,0 +1,29 @@
+---
+# site.yml — master playbook
+#
+# Usage:
+#   ansible-playbook site.yml                          # full run
+#   ansible-playbook site.yml --tags "bootstrap,linux" # bootstrap linux only
+#   ansible-playbook site.yml --tags "c01"             # c01 services only
+#   ansible-playbook site.yml --tags "arr,jellyfin"    # specific services only
+
+#- name: Bootstrap Linux hosts
+#  ansible.builtin.import_playbook: playbooks/bootstrap/linux.yml
+
+- name: Bootstrap macOS hosts
+  ansible.builtin.import_playbook: playbooks/bootstrap/macos.yml
+
+#- name: Gateway services (gw01)
+#  ansible.builtin.import_playbook: playbooks/hosts/gw01.yml
+
+#- name: Compute services (c01)
+#  ansible.builtin.import_playbook: playbooks/hosts/c01.yml
+
+#- name: Utility services (util01)
+#  ansible.builtin.import_playbook: playbooks/hosts/util01.yml
+
+#- name: Admin workstation (admin01)
+#  ansible.builtin.import_playbook: playbooks/hosts/admin01.yml
+
+#- name: AI workloads (ai01)
+#k  ansible.builtin.import_playbook: playbooks/hosts/ai01.yml

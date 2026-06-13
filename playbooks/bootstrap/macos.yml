@@ -1,0 +1,29 @@
+---
+# Bootstrap all macOS managed hosts.
+#
+# Play 1 — ansible-user setup
+#   Connects as the admin user (prompted at runtime), creates the 'ansible'
+#   service account if it doesn't already exist. Run once per machine.
+#   Skip after first run with: --skip-tags ansible-user
+#
+#   ansible-playbook playbooks/bootstrap/macos.yml --ask-pass --ask-become-pass
+#
+# Play 2 — standard bootstrap (brew, tailscale)
+#   Connects as the 'ansible' user (normal operation).
+
+- name: Bootstrap macOS hosts
+  hosts: macos
+  become: false
+  tags: [bootstrap, macos]
+  roles:
+    #- role: system/brew
+    #  tags: [brew, packages, system]
+
+    - role: system/hostname
+      tags: [hostname, system]
+
+    - role: system/network
+      tags: [network, static-ip, system]
+
+    #- role: system/tailscale
+    #  tags: [tailscale, vpn, system]

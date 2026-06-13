@@ -1,0 +1,28 @@
+---
+# Linux hostname configuration.
+# - hostnamectl sets the transient + static hostname (survives reboot)
+# - /etc/hostname stores the persistent value
+# - /etc/hosts maps the FQDN to 127.0.1.1 (Debian convention)
+
+- name: Set hostname via hostnamectl
+  ansible.builtin.hostname:
+    name: "{{ hostname_fqdn }}"
+    use: systemd
+  become: true
+
+- name: Write /etc/hostname
+  ansible.builtin.copy:
+    content: "{{ hostname_fqdn }}\n"
+    dest: /etc/hostname
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Ensure FQDN is in /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^127\\.0\\.1\\.1"
+    line: "127.0.1.1  {{ hostname_fqdn }}  {{ hostname_short }}"
+    state: present
+  become: true

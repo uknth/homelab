@@ -1,0 +1,12 @@
+---
+# Static IP configuration defaults.
+# The target IP is derived from the inventory's ansible_host for each host.
+
+network_subnet_mask: "255.255.255.0"
+network_gateway: "10.0.2.1"
+network_dns_servers:
+  - "10.0.2.2"    # gw01 — Blocky DNS
+  - "1.1.1.1"     # fallback
+
+# Override this if auto-detection fails (run: networksetup -listallnetworkservices)
+network_ethernet_service: ""

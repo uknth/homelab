@@ -1,0 +1,20 @@
+---
+# Variables applied to all hosts in the 'macos' group
+
+ansible_python_interpreter: /usr/bin/python3
+ansible_become_method: sudo
+
+# Homebrew — Apple Silicon path by default
+homebrew_prefix: /opt/homebrew
+homebrew_user: "{{ user }}"
+
+# Common macOS packages to install via Homebrew
+homebrew_packages:
+  - git
+  - wget
+  - curl
+  - jq
+  - htop
+
+# Time
+ntp_server: time.apple.com

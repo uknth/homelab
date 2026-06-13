@@ -1,0 +1,28 @@
+---
+# Sets a static IP on Debian/Ubuntu via /etc/network/interfaces.
+# Uses ansible_default_ipv4.interface to detect the primary ethernet interface.
+#
+# Run with a temporary dynamic IP override when the machine is still on DHCP:
+#   ansible-playbook site.yml --limit <host> --tags network \
+#     -e "ansible_host=<current-dhcp-ip>" --ask-become-pass
+
+- name: Detect primary ethernet interface
+  ansible.builtin.set_fact:
+    _ethernet_iface: "{{ ansible_default_ipv4.interface }}"
+
+- name: Fail if no interface detected
+  ansible.builtin.fail:
+    msg: >
+      Could not detect a primary network interface on {{ inventory_hostname }}.
+      Set network_ethernet_iface explicitly to override.
+  when: _ethernet_iface | length == 0
+
+- name: Configure static IP in /etc/network/interfaces
+  ansible.builtin.template:
+    src: interfaces.j2
+    dest: /etc/network/interfaces
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart networking

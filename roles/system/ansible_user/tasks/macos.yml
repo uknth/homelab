@@ -1,0 +1,74 @@
+---
+# macOS user creation via dscl (Directory Service CLI).
+# The 'user' module does not support macOS, so we use dscl directly.
+
+- name: Create ansible user on macOS
+  become: true
+  block:
+    - name: Create user record in local directory
+      ansible.builtin.command: dscl . -create /Users/{{ ansible_user_name }}
+      changed_when: true
+
+    - name: Set real name
+      ansible.builtin.command: >
+        dscl . -create /Users/{{ ansible_user_name }} RealName "{{ ansible_user_realname }}"
+      changed_when: true
+
+    - name: Get highest existing UID
+      ansible.builtin.shell: |
+        dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1
+      register: _max_uid
+      changed_when: false
+
+    - name: Set UID (max existing + 1)
+      ansible.builtin.command: >
+        dscl . -create /Users/{{ ansible_user_name }} UniqueID {{ _max_uid.stdout | int + 1 }}
+      changed_when: true
+
+    - name: Set primary GID (staff = 20)
+      ansible.builtin.command: >
+        dscl . -create /Users/{{ ansible_user_name }} PrimaryGroupID 20
+      changed_when: true
+
+    - name: Set home directory path
+      ansible.builtin.command: >
+        dscl . -create /Users/{{ ansible_user_name }} NFSHomeDirectory /Users/{{ ansible_user_name }}
+      changed_when: true
+
+    - name: Set login shell
+      ansible.builtin.command: >
+        dscl . -create /Users/{{ ansible_user_name }} UserShell {{ ansible_user_shell }}
+      changed_when: true
+
+    - name: Set password
+      ansible.builtin.command: >
+        dscl . -passwd /Users/{{ ansible_user_name }} "{{ ansible_user_sudo_password }}"
+      changed_when: true
+      no_log: true
+
+    - name: Create home directory
+      ansible.builtin.command: createhomedir -c -u {{ ansible_user_name }}
+      changed_when: true
+
+    - name: Grant passwordless sudo
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/{{ ansible_user_name }}
+        line: "{{ ansible_user_name }} ALL=(ALL) NOPASSWD: ALL"
+        create: true
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: Add SSH authorized key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user_name }}"
+        key: "{{ ansible_user_public_key }}"
+        state: present
+
+    - name: Enable Remote Login (SSH) on macOS
+      ansible.builtin.command: systemsetup -setremotelogin on
+      changed_when: true
+
+    - name: Allow ansible user to connect via SSH
+      ansible.builtin.command: >
+        dseditgroup -o edit -a {{ ansible_user_name }} -t user com.apple.access_ssh
+      changed_when: true

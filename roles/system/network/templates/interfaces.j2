@@ -1,0 +1,14 @@
+# Managed by Ansible — do not edit manually
+# Host: {{ inventory_hostname }}
+
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+auto {{ _ethernet_iface }}
+iface {{ _ethernet_iface }} inet static
+    address     {{ hostvars[inventory_hostname]['ansible_host'] }}
+    netmask     {{ network_subnet_mask }}
+    gateway     {{ network_gateway }}
+    dns-nameservers {{ network_dns_servers | join(' ') }}

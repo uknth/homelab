@@ -1,8 +1,0 @@
-- name: install beszel-hub
-  hosts: control-1.host
-  roles:
-    - name: docker/monitor/beszel
-      tags: ["docker", "monitor", "beszel"]
-
-    - name: docker/services/glance
-      tags: ["docker", "services", "glance"]

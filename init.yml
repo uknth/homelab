@@ -1,0 +1,51 @@
+# Initialization Playbook
+#
+# This playbook
+#   - creates the initial ansible user
+#   - sets the authorized_keys for the ansible user to login
+#
+
+# Example of how to run this playbook:
+#     ansible-playbook init.yml \
+#       --tags "ansible-user" \
+#       -e "ansible_host=10.0.2.23" -e "ansible_user=uknth" -e "ansible_become_password=<uknth's password>" \
+#       --ask-pass --ask-become-pass --ask-vault-pass
+---
+# Bootstrap playbook.
+# Run this ONCE against fresh machines using an existing admin account.
+
+- name: Bootstrap machines for Ansible management
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - role: system/ansible_user
+      tags:
+          - ansible-user
+          - init
+          - bootstrap
+
+
+  post_tasks:
+    - name: Verify ansible user exists
+      ansible.builtin.command: id {{ ansible_user_name }}
+      changed_when: false
+
+    - name: Verify SSH directory exists
+      ansible.builtin.stat:
+        path: "/Users/{{ ansible_user_name }}/.ssh"
+      register: mac_ssh_dir
+      when: ansible_system == "Darwin"
+
+    - name: Verify SSH directory exists
+      ansible.builtin.stat:
+        path: "/home/{{ ansible_user_name }}/.ssh"
+      register: linux_ssh_dir
+      when: ansible_system == "Linux"
+
+    - name: Display bootstrap completion message
+      ansible.builtin.debug:
+        msg:
+          - "Bootstrap completed successfully."
+          - "You can now connect using:"
+          - "ssh {{ ansible_user_name }}@{{ inventory_hostname }}"

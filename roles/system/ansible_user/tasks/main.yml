@@ -1,0 +1,28 @@
+---
+# Creates the 'ansible' service account on the target host.
+# Safe to run repeatedly — all tasks are skipped if the user already exists.
+# Supports: Debian/Ubuntu (Linux) and macOS (Darwin).
+#
+# On Linux  : uses the 'user' module — standard and idempotent.
+# On macOS  : uses dscl (Directory Service CLI) — required because the 'user'
+#             module does not support macOS user creation.
+#
+# The play that includes this role must connect as an admin user with sudo rights.
+
+- name: Check if ansible user already exists
+  ansible.builtin.command: id {{ ansible_user_name }}
+  register: ansible_user_check
+  changed_when: false
+  failed_when: false
+
+- name: Create ansible user (Linux)
+  ansible.builtin.import_tasks: linux.yml
+  when:
+    - ansible_user_check.rc != 0
+    - ansible_system == "Linux"
+
+- name: Create ansible user (macOS)
+  ansible.builtin.import_tasks: macos.yml
+  when:
+    - ansible_user_check.rc != 0
+    - ansible_system == "Darwin"

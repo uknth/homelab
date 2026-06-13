@@ -1,0 +1,29 @@
+---
+# admin01 — Admin workstation / jumphost (Mac Mini M1, macOS)
+#
+# Managed:
+#   - Developer toolchain: Go, Node.js, kubectl, Helm, kind, AWS CLI
+#   - Acts as the primary SSH jumphost into the homelab
+
+- name: Configure admin workstation (admin01)
+  hosts: admin01
+  become: false
+  tags: [admin01, admin, macos]
+  roles:
+    - role: dev/go
+      tags: [go, dev]
+
+    - role: dev/node
+      tags: [node, dev]
+
+    - role: dev/kubectl
+      tags: [kubectl, k8s, dev]
+
+    - role: dev/helm
+      tags: [helm, k8s, dev]
+
+    - role: dev/kind
+      tags: [kind, k8s, dev]
+
+    - role: dev/awscli
+      tags: [awscli, aws, dev]

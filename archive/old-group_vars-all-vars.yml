@@ -1,0 +1,375 @@
+# smtp configuration
+smtp_host: "mail.smtp2go.com"
+smtp_port: 587
+smtp_security: "starttls"
+smtp_from: "{{ vault_smtp_from }}"
+smtp_user: "{{ vault_smtp_user }}"
+smtp_password: "{{ vault_smtp_password }}"
+
+# control-1
+#---------------------------------------------------------------
+# beszel
+ba_public_key: "{{ vault_ba_public_key }}"
+beszel_ext_port: 8090
+# glance
+glance_ext_port: 14031
+glance_rss_feeds:
+  - {url: "https://selfh.st/rss/selfhosted", title: "selfh.st"}
+  - {url: "https://ciechanow.ski/atom.xml", title: "Ciechanow.ski"}
+  - {url: "https://www.joshwcomeau.com/rss.xml", title: "Josh Comeau"}
+  - {url: "https://samwho.dev/rss.xml", title: "Sam Who"}
+  - {url: "https://ishadeed.com/feed.xml", title: "Ahmad Shadeed"}
+
+glance_youtube_channels:
+  - {name: "Linus Tech Tips", id: "UCXuqSBlHAE6Xw-yeJA0Tunw"}
+  - {name: "Jeff Geerling", id: "UCR-DXc1voovS8nhAvccRZhg"}
+  - {name: "Fireship", id: "UCsBjURrPoezykLs9EqgamOA"}
+  - {name: "Marques Brownlee", id: "UCXuqSBlHAE6Xw-yeJA0Tunw"}
+  - {name: "Veritasium", id: "UCUHnyfMqiRRG1u-2MsSQLbXA"}
+
+glance_weather_location: "Bangalore, India"
+glance_weather_units: "metric"
+glance_weather_hour_format: "12h"
+glance_repositories:
+  - "glanceapp/glance"
+  - "immich-app/immich"
+glance_auth_token: "{{ vault_glance_auth_token }}"
+
+# uptimekuma
+
+# nas-2
+#---------------------------------------------------------------
+# host config
+media_base_dir: "/mnt/media"
+media_out_dir: "/mnt/storage"
+service_dir: "/mnt/service"
+user_data_dir: "/mnt/user-data"
+
+nas1_host: "10.0.2.3"
+nas1_username: "{{ vault_nas1_user }}"
+nas1_password: "{{ vault_nas1_password }}"
+nas1_mount_point: "/mnt/nas1"
+nas1_mount_dirs:
+  - music
+  - video
+  - home
+  - homes
+# vaultwarden
+vw_root_dir: "{{ service_dir }}/vaultwarden"
+vw_ext_port: 14001
+vw_host: "vault.puhome.net"
+vw_admin_token: "{{ vault_vw_admin_token }}"
+vw_smtp_host: "{{ smtp_host }}"
+vw_smtp_port: "{{ smtp_port }}"
+vw_smtp_security: "{{ smtp_security }}"
+vw_smtp_from: "{{ smtp_from }}"
+vw_smtp_user: "{{ smtp_user }}"
+vw_smtp_password: "{{ smtp_password }}"
+vw_signups_domains_whitelist: "uknth.me,gmail.com,outlook.com"
+# fusion
+fusion_root_dir: "{{ service_dir }}/fusion"
+fusion_password: "{{ vault_fusion_password }}"
+fusion_ext_port: 14002
+# media (arr stack)
+arr_vpn_user: "{{ vault_arr_vpn_user }}"
+arr_vpn_password: "{{ vault_arr_vpn_password }}"
+arr_vpn_regions: "{{ vault_arr_vpn_regions }}"
+arr_qbittorrent_user: "{{ vault_arr_qbittorrent_user }}"
+arr_qbittorrent_password: "{{ vault_arr_qbittorrent_password }}"
+arr_qbittorrent_ext_port: 14013
+arr_nzbget_ext_port: 14014
+arr_prowlarr_ext_port: 14015
+arr_sonarr_ext_port: 14016
+arr_radarr_ext_port: 14017
+arr_lidarr_ext_port: 14018
+arr_bazarr_ext_port: 14019
+arr_ytdl_sub_ext_port: 14022
+arr_whisparr_ext_port: 14023
+arr_unpackerr_ext_port: 14024
+# music (navidrome)
+music_root_dir: "{{ service_dir }}/music"
+music_navidrome_ext_port: 14025
+music_navidrome_data_dir: "{{ music_root_dir }}/navidrome/data"
+music_headphones_ext_port: 14026
+music_headphones_downloads_dir: "{{ media_out_dir }}/data/usenet/music"
+music_headphones_music_dir: "{{ media_out_dir }}/data/music"
+music_headphones_config_dir: "{{ music_root_dir }}/headphones/config"
+music_headphones_data_dir: "{{ music_root_dir }}/headphones/data"
+music_picard_ext_port: 14028
+# Arr API Keys
+arr_sonarr_api_key: "{{ vault_arr_sonarr_api_key }}"
+arr_radarr_api_key: "{{ vault_arr_radarr_api_key }}"
+arr_lidarr_api_key: "{{ vault_arr_lidarr_api_key }}"
+arr_whisparr_api_key: "{{ vault_arr_whisparr_api_key }}"
+# media (jellyfin)
+jellyfin_nas1_dir: "{{ nas1_mount_point }}"
+jellyfin_jellyseerr_ext_port: 14020
+jellyfin_ext_port: 14021
+# photos
+immich_root_dir: "{{ service_dir }}/immich"
+immich_storage_location: /mnt/images/upload
+immich_db_data_location: "/mnt/images/db/data"
+immich_backup_location: "/mnt/images/backup"
+immich_db_password: "{{ vault_immich_db_password }}"
+# File sync (seafile)
+seafile_root_dir: "{{ service_dir }}/seafile"
+seafile_data_dir: "{{ user_data_dir }}/seafile"
+
+# Paperless
+paperless_root_dir: "{{ service_dir }}/paperless"
+paperless_ext_port: 14027
+paperless_ext_url: "https://docs.{{ base_domain }}"
+paperless_secret_key: "{{ vault_paperless_secret_key }}"
+paperless_db_name: "paperless"
+paperless_db_user: "{{ vault_paperless_db_user }}"
+paperless_db_password: "{{ vault_paperless_db_password }}"
+
+# webdav
+webdav_ext_port: 5005
+
+# gateway-1
+#---------------------------------------------------------------
+blocky_ext_port: 14011
+blocky_ui_ext_port: 14012
+blocky_domain_mapping:
+  - {name: "router-1.host.puhome.net", ip: "10.0.2.1"}
+
+# certbot & nginx
+nginx_certbot_admin_email: "{{ vault_certbot_admin_email }}"
+nginx_certbot_cloudflare_email: "{{ vault_certbot_cloudflare_email }}"
+nginx_certbot_cloudflare_api_key: "{{ vault_certbot_cloudflare_api_key }}"
+nginx_resolver: "10.0.2.2"
+nginx_cockpit_hosts: "{{ groups['managed_hosts'] | default([]) }}"
+
+#---------------------------------------------------------------
+# SERVICE MAPPING
+#---------------------------------------------------------------
+service_mapping:
+  # media services in nas-2
+  - {name: "qbittorrent", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_qbittorrent_ext_port }}"}
+  - {name: "torrent", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_qbittorrent_ext_port }}"} # alias
+  - {name: "nzbget", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_nzbget_ext_port }}"}
+  - {name: "prowlarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_prowlarr_ext_port }}"}
+  - {name: "sonarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_sonarr_ext_port }}"}
+  - {name: "radarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_radarr_ext_port }}"}
+  - {name: "lidarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_lidarr_ext_port }}"}
+  - {name: "bazarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_bazarr_ext_port }}"}
+  - {name: "jellyfin", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"}
+  - {name: "video", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
+  - {name: "media", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
+  - {name: "jellyseerr", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"}
+  - {name: "whisparr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_whisparr_ext_port }}"}
+  # music on nas-2
+  - {name: "headphones", ip: "10.0.2.2", host: "nas-2", port: "{{ music_headphones_ext_port }}"}
+  # fusion on nas-2
+  - {name: "fusion", ip: "10.0.2.2", host: "nas-2", port: "{{ fusion_ext_port }}"}
+  # vault on nas-2
+  - {name: "vault", ip: "10.0.2.2", host: "nas-2", port: "{{ vw_ext_port }}"}
+  # photos on nas-2
+  - {name: "immich", ip: "10.0.2.2", host: "nas-2", port: "2283"}
+  - {name: "photos", ip: "10.0.2.2", host: "nas-2", port: "2283"}
+  # paperless on nas-2
+  - {name: "docs", ip: "10.0.2.2", host: "nas-2", port: "{{ paperless_ext_port }}"}
+  # webdav on nas-2
+  - {name: "webdav", ip: "10.0.2.2", host: "nas-1", port: "{{ webdav_ext_port }}"}
+  # blocky on gateway-1
+  - {name: "blocky-dns", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ext_port }}"}
+  - {name: "blocky", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ui_ext_port }}"}
+  # beszel monitoring server on control-1
+  - {name: "beszel", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"}
+  - {name: "monitor", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"} # alias
+  # glance on control-1
+  - { name: "glance", ip: "10.0.2.2", host: "control-1", port: "{{ glance_ext_port }}"}
+  - { name: "dash", ip: "10.0.2.2", host: "control-1", port: "{{ glance_ext_port }}"} # alias
+  # extra services on unmanaged hosts
+  - {name: "homeassistant", ip: "10.0.2.2", host: "iot-1", port: "8123"}
+  - {name: "pi-hole", ip: "10.0.2.2", host: "pie-1", port: "80"}
+#---------------------------------------------------------------
+
+# smtp configuration
+smtp_host: "mail.smtp2go.com"
+smtp_port: 587
+smtp_security: "starttls"
+smtp_from: "{{ vault_smtp_from }}"
+smtp_user: "{{ vault_smtp_user }}"
+smtp_password: "{{ vault_smtp_password }}"
+
+# control-1
+#---------------------------------------------------------------
+# beszel
+ba_public_key: "{{ vault_ba_public_key }}"
+beszel_ext_port: 8090
+# glance
+glance_ext_port: 14031
+glance_rss_feeds:
+  - {url: "https://selfh.st/rss/selfhosted", title: "selfh.st"}
+  - {url: "https://ciechanow.ski/atom.xml", title: "Ciechanow.ski"}
+  - {url: "https://www.joshwcomeau.com/rss.xml", title: "Josh Comeau"}
+  - {url: "https://samwho.dev/rss.xml", title: "Sam Who"}
+  - {url: "https://ishadeed.com/feed.xml", title: "Ahmad Shadeed"}
+
+glance_youtube_channels:
+  - {name: "Linus Tech Tips", id: "UCXuqSBlHAE6Xw-yeJA0Tunw"}
+  - {name: "Jeff Geerling", id: "UCR-DXc1voovS8nhAvccRZhg"}
+  - {name: "Fireship", id: "UCsBjURrPoezykLs9EqgamOA"}
+  - {name: "Marques Brownlee", id: "UCXuqSBlHAE6Xw-yeJA0Tunw"}
+  - {name: "Veritasium", id: "UCUHnyfMqiRRG1u-2MsSQLbXA"}
+
+glance_weather_location: "Bangalore, India"
+glance_weather_units: "metric"
+glance_weather_hour_format: "12h"
+glance_repositories:
+  - "glanceapp/glance"
+  - "immich-app/immich"
+glance_auth_token: "{{ vault_glance_auth_token }}"
+
+# uptimekuma
+
+# nas-2
+#---------------------------------------------------------------
+# host config
+media_base_dir: "/mnt/media"
+media_out_dir: "/mnt/storage"
+service_dir: "/mnt/service"
+user_data_dir: "/mnt/user-data"
+
+nas1_host: "10.0.2.3"
+nas1_username: "{{ vault_nas1_user }}"
+nas1_password: "{{ vault_nas1_password }}"
+nas1_mount_point: "/mnt/nas1"
+nas1_mount_dirs:
+  - music
+  - video
+  - home
+  - homes
+# vaultwarden
+vw_root_dir: "{{ service_dir }}/vaultwarden"
+vw_ext_port: 14001
+vw_host: "vault.puhome.net"
+vw_admin_token: "{{ vault_vw_admin_token }}"
+vw_smtp_host: "{{ smtp_host }}"
+vw_smtp_port: "{{ smtp_port }}"
+vw_smtp_security: "{{ smtp_security }}"
+vw_smtp_from: "{{ smtp_from }}"
+vw_smtp_user: "{{ smtp_user }}"
+vw_smtp_password: "{{ smtp_password }}"
+vw_signups_domains_whitelist: "uknth.me,gmail.com,outlook.com"
+# fusion
+fusion_root_dir: "{{ service_dir }}/fusion"
+fusion_password: "{{ vault_fusion_password }}"
+fusion_ext_port: 14002
+# media (arr stack)
+arr_vpn_user: "{{ vault_arr_vpn_user }}"
+arr_vpn_password: "{{ vault_arr_vpn_password }}"
+arr_vpn_regions: "{{ vault_arr_vpn_regions }}"
+arr_qbittorrent_user: "{{ vault_arr_qbittorrent_user }}"
+arr_qbittorrent_password: "{{ vault_arr_qbittorrent_password }}"
+arr_qbittorrent_ext_port: 14013
+arr_nzbget_ext_port: 14014
+arr_prowlarr_ext_port: 14015
+arr_sonarr_ext_port: 14016
+arr_radarr_ext_port: 14017
+arr_lidarr_ext_port: 14018
+arr_bazarr_ext_port: 14019
+arr_ytdl_sub_ext_port: 14022
+arr_whisparr_ext_port: 14023
+arr_unpackerr_ext_port: 14024
+# music (navidrome)
+music_root_dir: "{{ service_dir }}/music"
+music_navidrome_ext_port: 14025
+music_navidrome_data_dir: "{{ music_root_dir }}/navidrome/data"
+music_headphones_ext_port: 14026
+music_headphones_downloads_dir: "{{ media_out_dir }}/data/usenet/music"
+music_headphones_music_dir: "{{ media_out_dir }}/data/music"
+music_headphones_config_dir: "{{ music_root_dir }}/headphones/config"
+music_headphones_data_dir: "{{ music_root_dir }}/headphones/data"
+music_picard_ext_port: 14028
+# Arr API Keys
+arr_sonarr_api_key: "{{ vault_arr_sonarr_api_key }}"
+arr_radarr_api_key: "{{ vault_arr_radarr_api_key }}"
+arr_lidarr_api_key: "{{ vault_arr_lidarr_api_key }}"
+arr_whisparr_api_key: "{{ vault_arr_whisparr_api_key }}"
+# media (jellyfin)
+jellyfin_nas1_dir: "{{ nas1_mount_point }}"
+jellyfin_jellyseerr_ext_port: 14020
+jellyfin_ext_port: 14021
+# photos
+immich_root_dir: "{{ service_dir }}/immich"
+immich_storage_location: /mnt/images/upload
+immich_db_data_location: "/mnt/images/db/data"
+immich_backup_location: "/mnt/images/backup"
+immich_db_password: "{{ vault_immich_db_password }}"
+# File sync (seafile)
+seafile_root_dir: "{{ service_dir }}/seafile"
+seafile_data_dir: "{{ user_data_dir }}/seafile"
+
+# Paperless
+paperless_root_dir: "{{ service_dir }}/paperless"
+paperless_ext_port: 14027
+paperless_ext_url: "https://docs.{{ base_domain }}"
+paperless_secret_key: "{{ vault_paperless_secret_key }}"
+paperless_db_name: "paperless"
+paperless_db_user: "{{ vault_paperless_db_user }}"
+paperless_db_password: "{{ vault_paperless_db_password }}"
+
+# webdav
+webdav_ext_port: 5005
+
+# gateway-1
+#---------------------------------------------------------------
+blocky_ext_port: 14011
+blocky_ui_ext_port: 14012
+blocky_domain_mapping:
+  - {name: "router-1.host.puhome.net", ip: "10.0.2.1"}
+
+# certbot & nginx
+nginx_certbot_admin_email: "{{ vault_certbot_admin_email }}"
+nginx_certbot_cloudflare_email: "{{ vault_certbot_cloudflare_email }}"
+nginx_certbot_cloudflare_api_key: "{{ vault_certbot_cloudflare_api_key }}"
+nginx_resolver: "10.0.2.2"
+nginx_cockpit_hosts: "{{ groups['managed_hosts'] | default([]) }}"
+
+#---------------------------------------------------------------
+# SERVICE MAPPING
+#---------------------------------------------------------------
+service_mapping:
+  # media services in nas-2
+  - {name: "qbittorrent", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_qbittorrent_ext_port }}"}
+  - {name: "torrent", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_qbittorrent_ext_port }}"} # alias
+  - {name: "nzbget", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_nzbget_ext_port }}"}
+  - {name: "prowlarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_prowlarr_ext_port }}"}
+  - {name: "sonarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_sonarr_ext_port }}"}
+  - {name: "radarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_radarr_ext_port }}"}
+  - {name: "lidarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_lidarr_ext_port }}"}
+  - {name: "bazarr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_bazarr_ext_port }}"}
+  - {name: "jellyfin", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"}
+  - {name: "video", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
+  - {name: "media", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_ext_port }}"} # alias
+  - {name: "jellyseerr", ip: "10.0.2.2", host: "nas-2", port: "{{ jellyfin_jellyseerr_ext_port }}"}
+  - {name: "whisparr", ip: "10.0.2.2", host: "nas-2", port: "{{ arr_whisparr_ext_port }}"}
+  # music on nas-2
+  - {name: "headphones", ip: "10.0.2.2", host: "nas-2", port: "{{ music_headphones_ext_port }}"}
+  # fusion on nas-2
+  - {name: "fusion", ip: "10.0.2.2", host: "nas-2", port: "{{ fusion_ext_port }}"}
+  # vault on nas-2
+  - {name: "vault", ip: "10.0.2.2", host: "nas-2", port: "{{ vw_ext_port }}"}
+  # photos on nas-2
+  - {name: "immich", ip: "10.0.2.2", host: "nas-2", port: "2283"}
+  - {name: "photos", ip: "10.0.2.2", host: "nas-2", port: "2283"}
+  # paperless on nas-2
+  - {name: "docs", ip: "10.0.2.2", host: "nas-2", port: "{{ paperless_ext_port }}"}
+  # webdav on nas-2
+  - {name: "webdav", ip: "10.0.2.2", host: "nas-1", port: "{{ webdav_ext_port }}"}
+  # blocky on gateway-1
+  - {name: "blocky-dns", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ext_port }}"}
+  - {name: "blocky", ip: "10.0.2.2", host: "gateway-1", port: "{{ blocky_ui_ext_port }}"}
+  # beszel monitoring server on control-1
+  - {name: "beszel", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"}
+  - {name: "monitor", ip: "10.0.2.2", host: "control-1", port: "{{ beszel_ext_port }}"} # alias
+  # glance on control-1
+  - { name: "glance", ip: "10.0.2.2", host: "control-1", port: "{{ glance_ext_port }}"}
+  - { name: "dash", ip: "10.0.2.2", host: "control-1", port: "{{ glance_ext_port }}"} # alias
+  # extra services on unmanaged hosts
+  - {name: "homeassistant", ip: "10.0.2.2", host: "iot-1", port: "8123"}
+  - {name: "pi-hole", ip: "10.0.2.2", host: "pie-1", port: "80"}
+#---------------------------------------------------------------

@@ -1,0 +1,27 @@
+---
+# macOS hostname configuration via scutil.
+# Three separate names exist on macOS:
+#   HostName      — the FQDN used by SSH and DNS reverse lookup
+#   LocalHostName — Bonjour/mDNS name (no dots allowed, used as admin01.local)
+#   ComputerName  — human-readable display name shown in Finder / System Settings
+
+- name: Get current HostName
+  ansible.builtin.command: scutil --get HostName
+  register: _current_hostname
+  changed_when: false
+  failed_when: false  # scutil returns non-zero if not set yet
+
+- name: Set HostName (FQDN)
+  ansible.builtin.command: scutil --set HostName "{{ hostname_fqdn }}"
+  become: true
+  when: _current_hostname.stdout != hostname_fqdn
+
+- name: Set LocalHostName (Bonjour — short name, no dots)
+  ansible.builtin.command: scutil --set LocalHostName "{{ hostname_short }}"
+  become: true
+  when: _current_hostname.stdout != hostname_fqdn
+
+- name: Set ComputerName (display name)
+  ansible.builtin.command: scutil --set ComputerName "{{ hostname_short }}"
+  become: true
+  when: _current_hostname.stdout != hostname_fqdn
