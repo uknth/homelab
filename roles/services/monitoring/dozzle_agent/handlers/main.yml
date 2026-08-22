@@ -1,0 +1,7 @@
+---
+- name: Restart dozzle_agent
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ dozzle_agent_root_dir }}/compose"
+    project_name: "dozzle-agent"
+    state: restarted

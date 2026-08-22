@@ -1,0 +1,6 @@
+---
+# services/dashboard/portainer_agent — Portainer Agent on remote docker hosts
+# (cmp01, gw01) so the util01 Portainer can manage them as environments.
+portainer_agent_image: "portainer/agent:latest"
+portainer_agent_root_dir: "{{ service_root }}/portainer-agent"
+portainer_agent_port: 9001

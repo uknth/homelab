@@ -33,6 +33,10 @@
 - name: Utility services (util01)
   ansible.builtin.import_playbook: playbooks/hosts/util01.yml
 
+# Remote management/monitoring agents (Portainer + Dozzle) on cmp01 + gw01.
+- name: Docker agents (cmp01, gw01)
+  ansible.builtin.import_playbook: playbooks/ops/agents.yml
+
 #- name: Admin workstation (ctl01)
 #  ansible.builtin.import_playbook: playbooks/hosts/ctl01.yml
 

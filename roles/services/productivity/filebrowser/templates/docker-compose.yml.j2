@@ -1,0 +1,13 @@
+# Managed by Ansible — services/productivity/filebrowser
+services:
+  filebrowser:
+    image: {{ filebrowser_image }}
+    container_name: filebrowser
+    user: "{{ filebrowser_puid }}:{{ filebrowser_pgid }}"
+    restart: unless-stopped
+    ports:
+      - "{{ filebrowser_port }}:80"
+    volumes:
+      - {{ filebrowser_srv }}:/srv                          # media mount (rw)
+      - {{ filebrowser_root_dir }}/database:/database
+      - {{ filebrowser_root_dir }}/config:/config

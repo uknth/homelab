@@ -118,3 +118,9 @@ Immich, Vaultwarden, Affine, Joplin, Kener, Miniflux, Seafile, Silverbullet, Sta
 Trillium, Websurfx, Homer, Sourcebot, the k8s media stack, k3s, Samba, Syncthing, Navidrome/
 Headphones (music), Fusion, opencloud, webdav. Pull one back only by adding it here and to a
 roadmap phase first.
+
+> **2026-08-22 additions:**
+> - **Filebrowser** (`services/productivity/filebrowser`, cmp01, `files.puhome.net`) — web file manager rooted at `/mnt/media/data`, runs as uid 1001 (writes land correctly), `noauth` behind Authentik forward-auth.
+> - **Portainer** now manages all docker hosts: local `primary` (util01) + **Agent** envs on cmp01/gw01 (`services/dashboard/portainer_agent`, codified registration in the portainer role).
+> - **Dozzle** aggregates logs from every docker host via remote agents (`services/monitoring/dozzle_agent` on cmp01/gw01 + `DOZZLE_REMOTE_AGENT`).
+> - Agents deploy via `playbooks/ops/agents.yml` (`docker_hosts:!util01`), wired into `site.yml`.

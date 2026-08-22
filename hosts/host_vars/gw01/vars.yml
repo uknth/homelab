@@ -27,6 +27,7 @@ nginx_sites:
   - { name: seer,       upstream: "http://10.0.2.5:5055", sso: false }   # Jellyseerr
   - { name: books,      upstream: "http://10.0.2.5:5000", sso: false }   # Kavita 0.8.2
   - { name: docs,       upstream: "http://10.0.2.5:8000", sso: false }   # Paperless-ngx
+  - { name: files,      upstream: "http://10.0.2.5:8085", sso: true }    # Filebrowser (media mgmt)
 
   # arr stack (cmp01) — admin web UIs behind SSO (inter-app APIs bypass nginx)
   - { name: nzbget,     upstream: "http://10.0.2.5:6789", sso: true }    # Usenet (primary)

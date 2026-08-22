@@ -1,0 +1,6 @@
+---
+# services/monitoring/dozzle_agent — Dozzle agent on remote docker hosts so the
+# central Dozzle (util01) can stream their container logs too.
+dozzle_agent_image: "amir20/dozzle:latest"
+dozzle_agent_root_dir: "{{ service_root }}/dozzle-agent"
+dozzle_agent_port: 7007

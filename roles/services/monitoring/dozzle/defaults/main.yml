@@ -2,3 +2,10 @@
 dozzle_image: "amir20/dozzle:latest"
 dozzle_root_dir: "{{ service_root }}/dozzle"
 dozzle_port: 8093
+
+# Remote Dozzle agents (host:7007) to aggregate logs from other docker hosts.
+# Defaults to every docker host except util01 (which Dozzle reads via its local
+# socket). Requires services/monitoring/dozzle_agent running on those hosts.
+dozzle_remote_agents: >-
+  {{ (groups['docker_hosts'] | difference(['util01']))
+     | map('extract', hostvars, 'ansible_host') | map('regex_replace', '$', ':7007') | join(',') }}

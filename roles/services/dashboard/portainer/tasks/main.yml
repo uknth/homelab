@@ -90,3 +90,47 @@
     status_code: 200
   no_log: true
   changed_when: true
+
+# --- Register Docker environments (idempotent) ---
+# Pre-provisioning admin via API skips Portainer's setup wizard, so the local
+# environment is never auto-created. Add it explicitly, plus an Agent env per
+# remote docker host (portainer_agent role must be running there).
+- name: Get existing endpoints
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/endpoints"
+    headers:
+      Authorization: "Bearer {{ _pt_jwt.json.jwt }}"
+  register: _pt_eps
+
+- name: Create the local (util01) environment
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/endpoints"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _pt_jwt.json.jwt }}"
+    body_format: form-multipart
+    body:
+      Name: "local"
+      EndpointCreationType: "1"
+    status_code: [200, 409]
+  # Portainer usually auto-creates a local socket env ("primary"); only add one
+  # if no local (type 1) environment exists at all.
+  when: (_pt_eps.json | selectattr('Type','equalto',1) | list | length) == 0
+
+- name: Create Agent environments for remote docker hosts
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/endpoints"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _pt_jwt.json.jwt }}"
+    body_format: form-multipart
+    body:
+      Name: "{{ item }}"
+      EndpointCreationType: "2"
+      URL: "tcp://{{ hostvars[item].ansible_host }}:{{ portainer_agent_port }}"
+      TLS: "true"
+      TLSSkipVerify: "true"
+      TLSSkipClientVerify: "true"
+    status_code: [200, 409]
+  loop: "{{ portainer_agent_hosts }}"
+  when: item not in (_pt_eps.json | map(attribute='Name') | list)

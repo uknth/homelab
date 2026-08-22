@@ -34,3 +34,6 @@
 
     - role: services/documents/paperless
       tags: [paperless, documents]
+
+    - role: services/productivity/filebrowser
+      tags: [filebrowser, files]

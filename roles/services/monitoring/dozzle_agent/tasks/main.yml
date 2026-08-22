@@ -1,0 +1,28 @@
+---
+- name: Create dozzle-agent dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ dozzle_agent_root_dir }}"
+    - "{{ dozzle_agent_root_dir }}/compose"
+- name: Template dozzle-agent compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ dozzle_agent_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart dozzle_agent
+- name: Deploy dozzle-agent
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ dozzle_agent_root_dir }}/compose"
+    project_name: "dozzle-agent"
+    state: present
+    pull: missing

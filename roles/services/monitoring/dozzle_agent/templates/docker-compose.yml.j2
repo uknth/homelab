@@ -1,0 +1,13 @@
+# Managed by Ansible — services/monitoring/dozzle_agent
+services:
+  dozzle-agent:
+    image: {{ dozzle_agent_image }}
+    container_name: dozzle-agent
+    command: agent
+    restart: unless-stopped
+    ports:
+      - "{{ dozzle_agent_port }}:7007"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ={{ timezone }}

@@ -8,3 +8,9 @@ portainer_admin_password: "{{ vault_portainer_admin_password }}"
 portainer_oidc_client_id: "{{ vault_portainer_oidc_client_id }}"
 portainer_oidc_client_secret: "{{ vault_portainer_oidc_client_secret }}"
 portainer_url: "https://docker.{{ base_domain }}"
+
+# Remote docker hosts to register as Portainer Agent environments (need
+# services/dashboard/portainer_agent running on them, port 9001). util01 is the
+# local socket environment. Defaults to docker_hosts minus util01.
+portainer_agent_hosts: "{{ groups['docker_hosts'] | difference(['util01']) }}"
+portainer_agent_port: 9001

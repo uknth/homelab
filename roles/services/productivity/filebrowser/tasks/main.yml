@@ -1,0 +1,57 @@
+---
+- name: Create filebrowser dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ filebrowser_puid }}"
+    group: "{{ filebrowser_pgid }}"
+    mode: "0755"
+  loop:
+    - "{{ filebrowser_root_dir }}"
+    - "{{ filebrowser_root_dir }}/compose"
+    - "{{ filebrowser_root_dir }}/config"
+    - "{{ filebrowser_root_dir }}/database"
+
+- name: Template filebrowser settings
+  become: true
+  ansible.builtin.template:
+    src: settings.json.j2
+    dest: "{{ filebrowser_root_dir }}/config/settings.json"
+    owner: "{{ filebrowser_puid }}"
+    group: "{{ filebrowser_pgid }}"
+    mode: "0644"
+  notify: Restart filebrowser
+
+# Initialise the bolt DB with noauth + an admin, BEFORE the server holds the file
+# lock (bolt is single-writer, so this can't be done via exec on the running one).
+- name: Initialise filebrowser database with noauth (once)
+  become: true
+  ansible.builtin.shell: |
+    set -e
+    V="-v {{ filebrowser_root_dir }}/database:/database -v {{ filebrowser_root_dir }}/config:/config"
+    U="--user {{ filebrowser_puid }}:{{ filebrowser_pgid }}"
+    DB="--database /database/filebrowser.db"
+    docker run --rm $U $V {{ filebrowser_image }} config init $DB
+    docker run --rm $U $V {{ filebrowser_image }} config set --auth.method=noauth $DB
+    docker run --rm $U $V {{ filebrowser_image }} users add admin "$(openssl rand -hex 12)" --perm.admin $DB
+  args:
+    creates: "{{ filebrowser_root_dir }}/database/filebrowser.db"
+
+- name: Template filebrowser compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ filebrowser_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart filebrowser
+
+- name: Deploy filebrowser
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ filebrowser_root_dir }}/compose"
+    project_name: "filebrowser"
+    state: present
+    pull: missing

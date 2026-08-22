@@ -1,0 +1,16 @@
+---
+# services/productivity/filebrowser — web file manager on cmp01 for the media mount.
+#
+# Rooted at the single NFS media mount (/mnt/media/data) so you can view/edit/
+# upload/delete under books/ movies/ shows/ music/ downloads/ directly from a
+# browser. Runs as the media owner (1001) so writes land with correct ownership
+# and the arr apps/Jellyfin see them. Gated by Authentik forward-auth at the
+# nginx layer (files.puhome.net, sso:true); filebrowser itself runs in `noauth`
+# mode so there's no second login — Authentik is the single gate.
+
+filebrowser_image: "filebrowser/filebrowser:latest"
+filebrowser_root_dir: "{{ service_root }}/filebrowser"   # /opt/homelab/filebrowser (state)
+filebrowser_srv: "{{ media_data_dir }}"                  # /mnt/media/data (what it serves)
+filebrowser_port: 8085
+filebrowser_puid: "{{ media_uid }}"
+filebrowser_pgid: "{{ media_gid }}"

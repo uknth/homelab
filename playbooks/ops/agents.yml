@@ -1,0 +1,14 @@
+---
+# playbooks/ops/agents.yml — remote monitoring/management agents on the docker
+# hosts that aren't util01 (util01 uses its local socket directly).
+#   ansible-playbook playbooks/ops/agents.yml
+- name: Deploy Portainer + Dozzle agents on remote docker hosts
+  hosts: docker_hosts:!util01
+  become: true
+  gather_facts: true
+  tags: [agents]
+  roles:
+    - role: services/dashboard/portainer_agent
+      tags: [portainer-agent, portainer]
+    - role: services/monitoring/dozzle_agent
+      tags: [dozzle-agent, dozzle]
