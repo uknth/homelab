@@ -26,4 +26,3 @@ ntp_fallback_pools:
 # --- system/beszel_agent ---
 # Empty until the Beszel hub (util01, phase 4) exists and its public key is
 # added to the vault. The agent role no-ops while this is empty.
-beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"

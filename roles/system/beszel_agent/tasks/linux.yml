@@ -1,0 +1,50 @@
+---
+# Beszel agent on Linux (systemd). Included from main.yml when ansible_system == Linux.
+- name: Create beszel system user
+  become: true
+  ansible.builtin.user:
+    name: "{{ beszel_agent_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Ensure install directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ beszel_agent_install_dir }}"
+    state: directory
+    owner: "{{ beszel_agent_user }}"
+    group: "{{ beszel_agent_user }}"
+    mode: "0755"
+
+- name: Map architecture to Beszel release suffix
+  ansible.builtin.set_fact:
+    _beszel_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture == 'aarch64' else ansible_architecture) }}"
+
+- name: Download and extract the agent binary
+  become: true
+  ansible.builtin.unarchive:
+    src: "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_linux_{{ _beszel_arch }}.tar.gz"
+    dest: "{{ beszel_agent_install_dir }}"
+    remote_src: true
+    owner: "{{ beszel_agent_user }}"
+    group: "{{ beszel_agent_user }}"
+    creates: "{{ beszel_agent_install_dir }}/beszel-agent"
+
+- name: Install the systemd unit
+  become: true
+  ansible.builtin.template:
+    src: beszel-agent.service.j2
+    dest: /etc/systemd/system/beszel-agent.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart beszel-agent
+
+- name: Enable and start beszel-agent
+  become: true
+  ansible.builtin.systemd:
+    name: beszel-agent
+    state: started
+    enabled: true
+    daemon_reload: true

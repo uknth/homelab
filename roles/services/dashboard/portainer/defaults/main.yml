@@ -2,3 +2,9 @@
 portainer_image: "portainer/portainer-ce:lts"
 portainer_root_dir: "{{ service_root }}/portainer"
 portainer_port: 9001            # host port (9000 taken by authentik on util01)
+
+# OAuth (Authentik OIDC)
+portainer_admin_password: "{{ vault_portainer_admin_password }}"
+portainer_oidc_client_id: "{{ vault_portainer_oidc_client_id }}"
+portainer_oidc_client_secret: "{{ vault_portainer_oidc_client_secret }}"
+portainer_url: "https://docker.{{ base_domain }}"

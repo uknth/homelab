@@ -1,0 +1,48 @@
+---
+# Beszel agent on macOS (launchd LaunchDaemon). Included when ansible_system == Darwin.
+# Runs as the ansible `user` (not root), listening on PORT for the hub to connect.
+- name: Ensure install directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ beszel_agent_install_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: staff
+    mode: "0755"
+
+- name: Map architecture to Beszel release suffix
+  ansible.builtin.set_fact:
+    _beszel_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture in ['aarch64','arm64'] else ansible_architecture) }}"
+
+- name: Download and extract the agent binary (darwin)
+  # macOS ships BSD tar; Ansible's unarchive wants GNU tar, so extract manually.
+  # BSD `tar xzf` handles gzip fine. curl-downloaded binaries carry no quarantine.
+  become: true
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd "{{ beszel_agent_install_dir }}"
+    curl -fsSL -o beszel-agent.tar.gz \
+      "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_darwin_{{ _beszel_arch }}.tar.gz"
+    tar xzf beszel-agent.tar.gz beszel-agent
+    rm -f beszel-agent.tar.gz
+    chown "{{ user }}:staff" beszel-agent
+    chmod 0755 beszel-agent
+  args:
+    creates: "{{ beszel_agent_install_dir }}/beszel-agent"
+
+- name: Install the launchd daemon plist
+  become: true
+  ansible.builtin.template:
+    src: dev.beszel.agent.plist.j2
+    dest: "{{ beszel_agent_macos_plist }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: Reload beszel-agent (launchd)
+
+- name: Ensure the daemon is bootstrapped
+  become: true
+  ansible.builtin.shell: >-
+    launchctl print system/{{ beszel_agent_macos_label }} >/dev/null 2>&1
+    || launchctl bootstrap system {{ beszel_agent_macos_plist }}
+  changed_when: false

@@ -27,3 +27,66 @@
     project_name: "portainer"
     state: present
     pull: missing
+
+# --- Configure Authentik OAuth (idempotent) ---
+- name: Wait for Portainer API
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/system/status"
+    status_code: 200
+  register: _pt_status
+  retries: 15
+  delay: 3
+  until: _pt_status.status == 200
+
+- name: Try to authenticate as admin
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/auth"
+    method: POST
+    body_format: json
+    body: { Username: admin, Password: "{{ portainer_admin_password }}" }
+    status_code: [200, 401, 422]
+  register: _pt_auth
+  no_log: true
+
+- name: Initialize admin if not yet set up
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/users/admin/init"
+    method: POST
+    body_format: json
+    body: { Username: admin, Password: "{{ portainer_admin_password }}" }
+    status_code: [200, 409]
+  when: _pt_auth.status != 200
+  no_log: true
+
+- name: Authenticate (get JWT)
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/auth"
+    method: POST
+    body_format: json
+    body: { Username: admin, Password: "{{ portainer_admin_password }}" }
+  register: _pt_jwt
+  no_log: true
+
+- name: Configure Authentik OAuth
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/settings"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ _pt_jwt.json.jwt }}"
+    body_format: json
+    body:
+      AuthenticationMethod: 3
+      OAuthSettings:
+        ClientID: "{{ portainer_oidc_client_id }}"
+        ClientSecret: "{{ portainer_oidc_client_secret }}"
+        AuthorizationURI: "{{ authentik_oidc_authorize_url }}"
+        AccessTokenURI: "{{ authentik_oidc_token_url }}"
+        ResourceURI: "{{ authentik_oidc_userinfo_url }}"
+        RedirectURI: "{{ portainer_url }}"
+        UserIdentifier: preferred_username
+        Scopes: "openid email profile"
+        OAuthAutoCreateUsers: true
+        SSO: true
+    status_code: 200
+  no_log: true
+  changed_when: true

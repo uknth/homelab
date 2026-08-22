@@ -41,3 +41,14 @@ media_uid: 1001
 media_gid: 1001
 
 timezone: Asia/Kolkata
+
+# Authentik OIDC endpoints (shared by apps configuring OAuth/OIDC)
+authentik_url: "https://auth.{{ base_domain }}"
+authentik_oidc_authorize_url: "{{ authentik_url }}/application/o/authorize/"
+authentik_oidc_token_url: "{{ authentik_url }}/application/o/token/"
+authentik_oidc_userinfo_url: "{{ authentik_url }}/application/o/userinfo/"
+
+# Beszel monitoring hub public key — every agent (Linux systemd + macOS launchd)
+# authenticates the hub with this. Fleet-wide, so it lives in `all` (not just
+# `linux`) now that macOS hosts run agents too. Empty until the hub exists.
+beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"

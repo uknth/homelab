@@ -12,3 +12,7 @@ beszel_agent_version: "0.9.1"   # pin; bump deliberately
 beszel_agent_port: 45876
 beszel_agent_user: beszel
 beszel_agent_install_dir: /opt/beszel
+
+# macOS (launchd) specifics
+beszel_agent_macos_label: "dev.beszel.agent"
+beszel_agent_macos_plist: "/Library/LaunchDaemons/{{ beszel_agent_macos_label }}.plist"

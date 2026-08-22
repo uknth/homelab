@@ -10,3 +10,4 @@ services:
       - {{ beszel_hub_root_dir }}/data:/beszel_data
     environment:
       - TZ={{ timezone }}
+      - USER_CREATION={{ beszel_user_creation | string | lower }}

@@ -1,5 +1,6 @@
 ---
 # Install and run the Beszel agent. No-ops until the hub key is available.
+# OS-dispatched: systemd on Linux, launchd on macOS.
 
 - name: Note beszel agent is deferred (no hub key yet)
   ansible.builtin.debug:
@@ -8,50 +9,14 @@
       Skipping agent install on {{ inventory_hostname }}. Re-run after phase 4.
   when: beszel_agent_key | length == 0
 
-- name: Install and configure Beszel agent
-  when: beszel_agent_key | length > 0
-  become: true
-  block:
-    - name: Create beszel system user
-      ansible.builtin.user:
-        name: "{{ beszel_agent_user }}"
-        system: true
-        shell: /usr/sbin/nologin
-        create_home: false
+- name: Install Beszel agent (Linux / systemd)
+  ansible.builtin.include_tasks: linux.yml
+  when:
+    - beszel_agent_key | length > 0
+    - ansible_system == 'Linux'
 
-    - name: Ensure install directory exists
-      ansible.builtin.file:
-        path: "{{ beszel_agent_install_dir }}"
-        state: directory
-        owner: "{{ beszel_agent_user }}"
-        group: "{{ beszel_agent_user }}"
-        mode: "0755"
-
-    - name: Map architecture to Beszel release suffix
-      ansible.builtin.set_fact:
-        _beszel_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture == 'aarch64' else ansible_architecture) }}"
-
-    - name: Download and extract the agent binary
-      ansible.builtin.unarchive:
-        src: "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_linux_{{ _beszel_arch }}.tar.gz"
-        dest: "{{ beszel_agent_install_dir }}"
-        remote_src: true
-        owner: "{{ beszel_agent_user }}"
-        group: "{{ beszel_agent_user }}"
-        creates: "{{ beszel_agent_install_dir }}/beszel-agent"
-
-    - name: Install the systemd unit
-      ansible.builtin.template:
-        src: beszel-agent.service.j2
-        dest: /etc/systemd/system/beszel-agent.service
-        owner: root
-        group: root
-        mode: "0644"
-      notify: Restart beszel-agent
-
-    - name: Enable and start beszel-agent
-      ansible.builtin.systemd:
-        name: beszel-agent
-        state: started
-        enabled: true
-        daemon_reload: true
+- name: Install Beszel agent (macOS / launchd)
+  ansible.builtin.include_tasks: macos.yml
+  when:
+    - beszel_agent_key | length > 0
+    - ansible_system == 'Darwin'

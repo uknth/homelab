@@ -113,3 +113,32 @@
 
 - name: Configure OIDC providers + apps
   ansible.builtin.import_tasks: oidc.yml
+
+# --- OIDC email_verified fix (PocketBase/Beszel et al.) ---
+# Authentik's default "email" scope mapping ships `email_verified: False`.
+# PocketBase's OIDC extractor drops the email claim unless email_verified is
+# true, so Beszel user creation fails with "email cannot be blank". We set it to
+# true when the user actually has an email. Looked up by scope (pk is per-install).
+- name: Resolve the OIDC 'email' scope mapping
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/propertymappings/provider/scope/?scope_name=email"
+    headers: "{{ _ak_headers }}"
+  register: _email_scope
+  no_log: true
+
+- name: Ensure email scope mapping reports email_verified for users with an email
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/propertymappings/provider/scope/{{ _email_scope.json.results[0].pk }}/"
+    method: PATCH
+    headers: "{{ _ak_headers }}"
+    body_format: json
+    body:
+      expression: |-
+        return {
+            "email": request.user.email,
+            "email_verified": bool(request.user.email),
+        }
+    status_code: 200
+  register: _email_patch
+  changed_when: "'email_verified\": bool' not in (_email_scope.json.results[0].expression | default(''))"
+  when: _email_scope.json.results | length > 0

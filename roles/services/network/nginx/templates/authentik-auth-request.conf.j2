@@ -6,3 +6,7 @@ auth_request_set $authentik_groups   $upstream_http_x_authentik_groups;
 proxy_set_header X-authentik-username $authentik_username;
 proxy_set_header X-authentik-email    $authentik_email;
 proxy_set_header X-authentik-groups   $authentik_groups;
+# Trusted-header identity for apps that support forward-proxy auth (e.g. Dozzle)
+proxy_set_header Remote-User  $authentik_username;
+proxy_set_header Remote-Email $authentik_email;
+proxy_set_header Remote-Name  $authentik_username;

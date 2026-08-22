@@ -35,3 +35,21 @@ authentik_oidc_apps:
     launch: "https://docker.{{ base_domain }}"
     client_id: "{{ vault_portainer_oidc_client_id }}"
     secret: "{{ vault_portainer_oidc_client_secret }}"
+  - slug: beszel
+    name: Beszel
+    redirect: ["https://metrics.{{ base_domain }}/api/oauth2-redirect"]
+    launch: "https://metrics.{{ base_domain }}"
+    client_id: "{{ vault_beszel_oidc_client_id }}"
+    secret: "{{ vault_beszel_oidc_client_secret }}"
+  - slug: jellyfin
+    name: Jellyfin
+    redirect: ["https://video.{{ base_domain }}/sso/OID/redirect/authentik", "http://video.{{ base_domain }}/sso/OID/redirect/authentik"]
+    launch: "https://video.{{ base_domain }}"
+    client_id: "{{ vault_jellyfin_oidc_client_id }}"
+    secret: "{{ vault_jellyfin_oidc_client_secret }}"
+  - slug: kavita
+    name: Kavita
+    redirect: ["https://books.{{ base_domain }}/signin-oidc"]
+    launch: "https://books.{{ base_domain }}"
+    client_id: "{{ vault_kavita_oidc_client_id }}"
+    secret: "{{ vault_kavita_oidc_client_secret }}"

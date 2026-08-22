@@ -2,3 +2,24 @@
 beszel_hub_image: "henrygd/beszel:latest"
 beszel_hub_root_dir: "{{ service_root }}/beszel"
 beszel_hub_port: 8090
+
+# OAuth (Authentik OIDC) + superuser
+beszel_superuser_email: "{{ vault_certbot_email }}"
+beszel_superuser_password: "{{ vault_beszel_superuser_password }}"
+beszel_oidc_client_id: "{{ vault_beszel_oidc_client_id }}"
+beszel_oidc_client_secret: "{{ vault_beszel_oidc_client_secret }}"
+
+# Allow Authentik/OIDC logins to auto-provision a Beszel user on first sign-in.
+# Without this, Beszel's users collection has createRule=null (superuser-only),
+# so OIDC login 403s ("Only superusers can perform this action") and the popup
+# dies blank. Safe here: Authentik is already the gatekeeper in front of Beszel.
+beszel_user_creation: true
+
+# Systems to auto-register in the hub. Defaults to every host in the `linux`
+# group (they run system/beszel_agent). Each becomes a monitored system that the
+# hub connects to at <ansible_host>:<agent_port>. Systems must be owned by a
+# `users` record — created on first OIDC login — so if no users exist yet this
+# step no-ops; just re-run the role after logging into Beszel once.
+beszel_hub_agent_port: 45876
+beszel_register_hosts: >-
+  {{ (groups['linux'] | default([])) + (groups['macos'] | default([])) + ['nas01', 'nas02'] }}

@@ -17,7 +17,14 @@
 - name: Bootstrap macOS hosts
   hosts: macos
   become: false
+  gather_facts: false
   tags: [bootstrap, macos]
+  pre_tasks:
+    # Gather facts under `always` so fact-dependent roles (e.g. beszel_agent's
+    # OS dispatch) work even when the play is invoked with a narrow --tags.
+    - name: Gather facts
+      ansible.builtin.setup:
+      tags: [always]
   roles:
     #- role: system/brew
     #  tags: [brew, packages, system]
@@ -27,3 +34,6 @@
 
     - role: system/network
       tags: [network, static-ip, system]
+
+    - role: system/beszel_agent
+      tags: [beszel, beszel-agent, monitoring]

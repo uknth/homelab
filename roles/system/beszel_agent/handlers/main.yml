@@ -4,3 +4,11 @@
   ansible.builtin.service:
     name: beszel-agent
     state: restarted
+
+- name: Reload beszel-agent (launchd)
+  become: true
+  ansible.builtin.shell: |
+    launchctl bootout system {{ beszel_agent_macos_plist }} 2>/dev/null || true
+    launchctl bootstrap system {{ beszel_agent_macos_plist }}
+    launchctl enable system/{{ beszel_agent_macos_label }}
+    launchctl kickstart -k system/{{ beszel_agent_macos_label }}

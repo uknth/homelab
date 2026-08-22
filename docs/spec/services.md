@@ -25,6 +25,8 @@ implementation exists in `archive/` to reference. Per user direction, v3 roles a
 | `system/unattended_upgrades` | linux | 🟢 built | net-new — maintenance layer 1 (security pocket, no auto-reboot) |
 | `system/tailscale` | linux | 🟡 planned | `artis3n.tailscale` |
 | `system/beszel_agent` | linux | 🟢 built + **active** | native install; hub key set, agents live fleet-wide |
+
+> **Monitoring coverage:** agents run on all Linux hosts (systemd) + macOS hosts (launchd); systems auto-registered by `beszel_hub` (`beszel_register_hosts`). Live: gw01, cmp01, util01, ai01, ctl01. `nas01`/`nas02` need a manual container — see [`../runbooks/beszel-nas-agents.md`](../runbooks/beszel-nas-agents.md). dns01 excluded (no armv6 agent build).
 | `system/nvidia_docker` | cmp01 | 🟢 built | registers NVIDIA runtime with Docker (Jellyfin NVENC) |
 | `system/nfs_mounts` | cmp01 | 🟢 built | mounts nas01:/mnt/data-pool/media/data at /mnt/media/data (NFSv4.2, fstab); read/write as uid 1001 |
 | `services/storage/truenas_nfs` | nas01 (API) | 🟢 built | manages TrueNAS NFS export defs via REST API (create/update); restricts media export to cmp01 |
@@ -77,6 +79,7 @@ helper is already PIA-shaped).
 | Glance | `services/dashboard/glance` | — | ⚪ retired | replaced by Homepage (role kept in repo) |
 | Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
 | n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7) |
+| Syncthing | `services/productivity/syncthing` | `sync.puhome.net` | 🟢 built + live | standalone file sync; GUI behind forward-auth; data under `/opt/homelab/syncthing/data` (Restic-backed) |
 
 ## `ai01` — AI workloads
 

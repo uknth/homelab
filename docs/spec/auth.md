@@ -86,11 +86,64 @@ credentials from the vault so providers are reproducible.
 | App | Authentik provider | App-side config | Status |
 |---|---|---|---|
 | Paperless | codified | role env (allauth OIDC) | 🟢 live |
-| Portainer | codified | via API (needs codifying in role) | 🟢 live (AuthMethod=OAuth, SSO) |
-| Kavita | codified | pending (0.8.2 OIDC support TBD) | ⏳ provider ready |
-| Beszel | codified | pending (PocketBase OAuth) | ⏳ provider ready |
-| Jellyfin | codified | pending (SSO plugin install) | ⏳ provider ready |
-| Dozzle | n/a | trusted-header (`forward-proxy`) | ⏳ pending |
+| Portainer | codified | **codified in role** (API config) | 🟢 live |
+| Kavita | codified | oidcConfig via API | 🟢 live (0.9.x; in-place upgrade; authority set) |
+| Beszel | codified | **codified in role** (PocketBase API + `USER_CREATION`) | 🟢 live & verified (sso:false + USER_CREATION + email_verified — see note) |
+| Jellyfin | codified | SSO plugin (installed+configured via API) | 🟢 live (login button added; /sso/OID/start/authentik) |
+| Dozzle | n/a | trusted-header (`forward-proxy`) | 🟢 live (auto-login via Remote-* headers) |
 
-**Codification gap:** Portainer's OAuth settings were applied via the Portainer
-API by hand; fold into the `portainer` role for full reproducibility.
+**Codified in roles:** Portainer + Beszel OAuth (via API, idempotent). **Still via ad-hoc API (codify next):** Jellyfin (wizard+plugin+SSO config) and Kavita (admin+oidcConfig).
+
+### Tier-1 OIDC apps must NOT also be forward-authed (2026-08-22)
+
+A Tier-1 app does its **own** OIDC round-trip to Authentik and needs its OAuth
+**callback** URL reachable. If that app's vhost is *also* `sso: true` (Tier-2
+forward-auth), nginx intercepts the callback and 302s it to the Authentik outpost
+before the app can consume the `code` — the login silently fails.
+
+This bit **Beszel**: its callback `https://metrics.puhome.net/api/oauth2-redirect`
+was behind forward-auth, so PocketBase never saw the code (blank/again-login loop).
+Fix: **`metrics` and `docker` (Portainer) are now `sso: false`** in
+`hosts/host_vars/gw01/vars.yml`, matching Paperless/Jellyfin/Kavita. Rule of thumb:
+**Tier-1 (own OIDC) ⇒ `sso: false`; Tier-2 (forward-auth) / trusted-header ⇒ `sso: true`.**
+
+**Beszel had a *second*, independent blocker.** Even with the callback reachable,
+the OIDC token exchange failed with `403 "Only superusers can perform this action"`
+on `POST /api/collections/users/auth-with-oauth2`: Beszel's `users` collection ships
+`createRule: null` (superuser-only), and with **zero** users existing every OIDC login
+tried to *create* a user and was denied — the popup died blank. Fix: set
+**`USER_CREATION=true`** in the Beszel compose (`beszel_user_creation`, codified in the
+role). Beszel then relaxes the rule to `createRule: "@request.context = 'oauth2'"`, so
+OIDC (and only OIDC) auto-provisions the user. The auto-created user must be verified —
+`authRule: verified=true` — which Authentik satisfies via `email_verified`. Diagnosis
+came straight from PocketBase's own request logs (`/api/logs`, superuser).
+
+**And a *fourth* layer.** With creation allowed, it then failed `400 "email cannot
+be blank"`. PocketBase's generic OIDC extractor **drops the email claim unless
+`email_verified` is true**, and Authentik's stock *email* scope mapping hardcodes
+`email_verified: False`. Fix (codified in `authentik_config`): patch that scope
+mapping to `email_verified: bool(request.user.email)`. This is a shared default, so
+it also hardens OIDC for any other strict consumer. **Net: Beszel OIDC took four
+independent fixes** — `sso:false`, `USER_CREATION=true`, the create rule (auto), and
+`email_verified`.
+
+### Jellyfin admin (2026-08-22)
+
+The wizard admin is **`admin`** / `vault_jellyfin_admin_password` (manual-login form,
+not the Authentik button). Authentik SSO users land as **non-admin** by default;
+`uknth` was promoted to admin via the API. This promotion is **not yet codified** — a
+Jellyfin rebuild resets it. Codify-next: the SSO plugin's admin-role mapping (grant
+Jellyfin admin from an Authentik group) alongside the wizard/plugin config.
+
+## Known blocker: .NET HttpClient GitHub downloads on cmp01
+
+Jellyfin-SSO-plugin install and Kavita 0.9.x's first-boot migration both fail the
+same way: a **.NET HttpClient download from GitHub times out (100s)** on cmp01,
+while `curl` from the same container fetches the file in <1s (IPv4, DNS fine).
+**Root cause (found 2026-08-22):** GitHub's CDN (`*.githubusercontent.com`) round-robins
+four Fastly anycast edges `185.199.108-111.133`; **`.109.133` is blackholed** over the WAN
+(20s timeout, 0 B/s) while the others are fast — likely a broken route on one of the dual-WAN
+ISPs. Any client hitting `.109` hangs; curl retries, .NET (single-shot) times out.
+**Fix:** Blocky pins `githubusercontent.com` -> `185.199.110.133` (a working edge) —
+`blocky_pinned_hosts`. This unblocks the Jellyfin plugin install and Kavita 0.9.x.
+The proper long-term fix is at the Omada router (repair the WAN route to `.109`).

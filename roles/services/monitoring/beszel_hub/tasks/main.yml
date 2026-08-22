@@ -27,3 +27,107 @@
     project_name: "beszel"
     state: present
     pull: missing
+
+# --- Configure Authentik OIDC (idempotent) ---
+- name: Ensure Beszel superuser exists
+  become: true
+  ansible.builtin.command: >-
+    docker exec beszel /beszel superuser upsert
+    "{{ beszel_superuser_email }}" "{{ beszel_superuser_password }}"
+  register: _bz_su
+  changed_when: "'Successfully' in _bz_su.stdout"
+  no_log: true
+
+- name: Wait for Beszel API
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/health"
+    status_code: 200
+  register: _bz_health
+  retries: 15
+  delay: 3
+  until: _bz_health.status == 200
+
+- name: Authenticate as superuser
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/_superusers/auth-with-password"
+    method: POST
+    body_format: json
+    body: { identity: "{{ beszel_superuser_email }}", password: "{{ beszel_superuser_password }}" }
+  register: _bz_auth
+  no_log: true
+
+- name: Set Beszel app URL (needed for OAuth redirects)
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/settings"
+    method: PATCH
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+    body_format: json
+    body:
+      meta:
+        appName: Beszel
+        appURL: "https://metrics.{{ base_domain }}"
+    status_code: 200
+  no_log: true
+  changed_when: true
+
+- name: Configure OIDC on the users collection
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/users"
+    method: PATCH
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+    body_format: json
+    body:
+      oauth2:
+        enabled: true
+        providers:
+          - name: oidc
+            clientId: "{{ beszel_oidc_client_id }}"
+            clientSecret: "{{ beszel_oidc_client_secret }}"
+            authURL: "{{ authentik_oidc_authorize_url }}"
+            tokenURL: "{{ authentik_oidc_token_url }}"
+            userInfoURL: "{{ authentik_oidc_userinfo_url }}"
+            displayName: Authentik
+            pkce: true
+    status_code: 200
+  no_log: true
+  changed_when: true
+
+# --- Register monitored systems (idempotent) ---
+# Beszel shows nothing until each agent host is registered as a "system". Agents
+# run in classic listen mode (system/beszel_agent), so the hub just needs a
+# record with host+port and it connects using its key. Owned by all current
+# users; skipped entirely until at least one user exists (first OIDC login).
+- name: Get Beszel users (systems need an owner)
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/users/records?perPage=200"
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+  register: _bz_users
+  no_log: true
+
+- name: Get already-registered systems
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/systems/records?perPage=200"
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+  register: _bz_systems
+
+- name: Register a system per Linux agent host
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/systems/records"
+    method: POST
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+    body_format: json
+    body:
+      name: "{{ item }}"
+      host: "{{ hostvars[item].ansible_host }}"
+      port: "{{ beszel_hub_agent_port | string }}"
+      users: "{{ _bz_users.json['items'] | map(attribute='id') | list }}"
+    status_code: [200, 400]
+  loop: "{{ beszel_register_hosts }}"
+  when:
+    - _bz_users.json.totalItems | int > 0
+    - item not in (_bz_systems.json['items'] | map(attribute='name') | list)
