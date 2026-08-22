@@ -15,7 +15,7 @@
 
 gitops_dir: "{{ service_root }}/gitops"          # /opt/homelab/gitops
 gitops_repo_url: "git@git.sr.ht:~uknth/homelab"
-gitops_branch: "main"
+gitops_branch: "master"   # repo default branch (override per-need)
 gitops_auto_apply: false                          # dry-run only until you flip this
 gitops_ntfy_url: "http://localhost:8091/homelab-deploy"
 gitops_vault_pass: "/home/{{ user }}/.config/homelab/.vault_pass"   # on util01, the executor user's home

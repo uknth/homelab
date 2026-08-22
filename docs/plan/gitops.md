@@ -7,7 +7,7 @@ Kubernetes tools and this fleet is Docker Compose + Ansible.
 ## Flow
 
 ```
- developer ──push──▶ git.sr.ht/~<user>/homelab   (branch: main)
+ developer ──push──▶ git.sr.ht/~<user>/homelab   (branch: master)
                           │
                           ▼
                  builds.sr.ht  (.build.yml)          ← NO secrets, no host access
@@ -94,7 +94,7 @@ for `~uknth/homelab` (push triggers the build).
 **Trigger is polling, not an inbound webhook.** builds.sr.ht runs in the cloud and
 cannot reach n8n on the LAN (`util01`, 10.0.2.8) without exposing it publicly
 (Tailscale Funnel/Cloudflare Tunnel — extra attack surface). So the deploy trigger
-inverts: **n8n on util01 polls git.sr.ht** for a new `main` commit (and, optionally,
+inverts: **n8n on util01 polls git.sr.ht** for a new `master` commit (and, optionally,
 a green builds.sr.ht status) and then runs the on-LAN executor. No inbound exposure.
 
 **Executor still = util01**, out-of-band provisioned with ansible + the repo +
