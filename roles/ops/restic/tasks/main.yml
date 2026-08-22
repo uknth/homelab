@@ -30,14 +30,14 @@
     group: root
     mode: "0600"
 
-- name: Pre-seed nas02 host key (accept-new on first connect)
+- name: Pre-seed nas02 host key (runs on the backup host; never blocks)
   become: true
-  ansible.builtin.known_hosts:
-    path: "{{ restic_known_hosts }}"
-    name: "{{ restic_host }}"
-    key: "{{ lookup('pipe', 'ssh-keyscan -T 5 ' ~ restic_host ~ ' 2>/dev/null') }}"
-    state: present
-  ignore_errors: true   # not fatal; script uses StrictHostKeyChecking=accept-new
+  ansible.builtin.shell: >-
+    ssh-keyscan -T 5 -H {{ restic_host }} >> {{ restic_known_hosts }} 2>/dev/null;
+    sort -u {{ restic_known_hosts }} -o {{ restic_known_hosts }}
+  changed_when: false
+  failed_when: false
+  # Belt-and-suspenders only; the backup script also uses StrictHostKeyChecking=accept-new.
 
 - name: Create restic config dir
   become: true

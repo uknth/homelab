@@ -36,6 +36,9 @@
     - role: services/monitoring/uptime_kuma
       tags: [uptime-kuma, synthetics, monitoring]
 
+    - role: services/monitoring/uptime_kuma_config
+      tags: [uptime-kuma-config, synthetics, monitoring]
+
     - role: services/monitoring/dozzle
       tags: [dozzle, logs, monitoring]
 

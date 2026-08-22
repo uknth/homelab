@@ -53,7 +53,7 @@ rebuilt by re-running the role — not restored. Each host declares its own
 | `cmp01` | `/opt/homelab/paperless/export` | `docker exec paperless document_exporter … --delete` (engine-independent export) |
 | `util01` | `/opt/homelab/syncthing/data` | — |
 
-- **Repo:** `sftp:backup@10.0.2.3:/volume1/restic/<host>` (Synology; NFS off, SFTP on),
+- **Repo:** `sftp:backup@10.0.2.3:/restic (SFTP chroot: the share root, not /volume1)/<host>` (Synology; NFS off, SFTP on),
   reached with a dedicated `keys/restic_backup_ed25519` key by the root-run job.
 - **Excluded:** bulk media (`/mnt/media`) — TrueNAS snapshots handle that.
 - **Retention:** `--keep-daily 7 --keep-weekly 4 --keep-monthly 6`, `restic forget --prune`.
@@ -63,7 +63,7 @@ rebuilt by re-running the role — not restored. Each host declares its own
 
 **Manual prerequisites (one-time, on the Synology `nas02`):** enable SSH; create a `backup`
 user with a home dir; add `keys/restic_backup_ed25519.pub` to its `~/.ssh/authorized_keys`;
-create a `/volume1/restic` folder it can write. Add `vault_restic_password` to the vault.
+create a `/restic (SFTP chroot: the share root, not /volume1)` folder it can write. Add `vault_restic_password` to the vault.
 Then `ansible-playbook site.yml --tags backup`.
 
 Secrets: `vault_restic_password`, plus an SSH key for the `backup` user on `nas02`.

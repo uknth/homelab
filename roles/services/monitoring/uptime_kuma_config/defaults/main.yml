@@ -1,0 +1,24 @@
+---
+# services/monitoring/uptime_kuma_config — declares Uptime Kuma monitors as code.
+#
+# Uptime Kuma has no REST API (Socket.IO only), so this drives it via the
+# uptime-kuma-api Python lib from the CONTROL NODE. Idempotent by monitor name:
+# an HTTP monitor per *.puhome.net service (derived from gw01's nginx_sites, so
+# it stays in sync) accepting 2xx+3xx (forward-auth 302 = up), plus a "Backups"
+# push monitor that ops/restic pings.
+
+kuma_config_url: "http://{{ hostvars['util01'].ansible_host }}:3001"
+kuma_config_user: "uknth"
+kuma_config_password: "{{ vault_uptime_kuma_password }}"
+kuma_config_venv: "{{ lookup('env','HOME') }}/.cache/homelab/kuma-venv"
+
+# HTTP monitors: one per service in gw01's reverse-proxy map.
+kuma_http_monitors: >-
+  {{ hostvars['gw01'].nginx_sites
+     | map(attribute='name')
+     | map('regex_replace', '^(.*)$', '{"name": "\1", "type": "http", "url": "https://\1.' ~ base_domain ~ '"}')
+     | map('from_json') | list }}
+
+# Push monitors (restic backup verification). ~25h heartbeat window.
+kuma_push_monitors:
+  - { name: "Backups", type: "push", interval: 90000 }

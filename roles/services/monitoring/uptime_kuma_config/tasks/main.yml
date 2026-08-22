@@ -1,0 +1,38 @@
+---
+# All work happens on the control node (Socket.IO client -> Kuma).
+- name: Ensure uptime-kuma-api is available in a venv
+  delegate_to: localhost
+  connection: local
+  become: false
+  run_once: true
+  ansible.builtin.pip:
+    name: uptime-kuma-api
+    virtualenv: "{{ kuma_config_venv }}"
+    virtualenv_command: "python3 -m venv"
+
+- name: Sync monitors (idempotent by name)
+  delegate_to: localhost
+  connection: local
+  become: false
+  run_once: true
+  ansible.builtin.command:
+    argv:
+      - "{{ kuma_config_venv }}/bin/python"
+      - "{{ role_path }}/files/manage_monitors.py"
+  environment:
+    KUMA_URL: "{{ kuma_config_url }}"
+    KUMA_USER: "{{ kuma_config_user }}"
+    KUMA_PASSWORD: "{{ kuma_config_password }}"
+    KUMA_HTTP: "{{ kuma_http_monitors | to_json }}"
+    KUMA_PUSH: "{{ kuma_push_monitors | to_json }}"
+  register: _kuma_sync
+  changed_when: "'\"created\": []' not in _kuma_sync.stdout"
+  no_log: true
+
+- name: Show created monitors
+  delegate_to: localhost
+  connection: local
+  become: false
+  run_once: true
+  ansible.builtin.debug:
+    msg: "{{ (_kuma_sync.stdout | from_json).created }}"

@@ -52,3 +52,9 @@ authentik_oidc_userinfo_url: "{{ authentik_url }}/application/o/userinfo/"
 # authenticates the hub with this. Fleet-wide, so it lives in `all` (not just
 # `linux`) now that macOS hosts run agents too. Empty until the hub exists.
 beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"
+
+# Backup verification: restic pings this Uptime Kuma push monitor on success, so
+# a missed nightly backup surfaces as a red 'Backups' tile. Token is the push
+# monitor created by services/monitoring/uptime_kuma_config.
+kuma_backup_push_token: "FJbMvkKkBA"
+restic_kuma_push_url: "http://{{ hostvars['util01'].ansible_host }}:3001/api/push/{{ kuma_backup_push_token }}"

@@ -16,7 +16,7 @@
 
 restic_user: "backup"
 restic_host: "{{ hostvars['nas02'].ansible_host }}"     # 10.0.2.3
-restic_repo_root: "/volume1/restic"
+restic_repo_root: "/restic"
 restic_repo: "sftp:{{ restic_user }}@{{ restic_host }}:{{ restic_repo_root }}/{{ inventory_hostname }}"
 restic_password: "{{ vault_restic_password }}"
 
