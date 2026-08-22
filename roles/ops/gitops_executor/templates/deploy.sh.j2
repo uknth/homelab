@@ -9,17 +9,22 @@ VENV="{{ gitops_dir }}/venv"
 BRANCH="{{ gitops_branch }}"
 NTFY="{{ gitops_ntfy_url }}"
 AUTO_APPLY="{{ 'true' if gitops_auto_apply else 'false' }}"
-[ "${1:-}" = "--check" ] && AUTO_APPLY="false"
+FORCE_CHECK="false"
+[ "${1:-}" = "--check" ] && { AUTO_APPLY="false"; FORCE_CHECK="true"; }
 
 cd "$REPO" || { echo "repo not cloned at $REPO"; exit 1; }
 notify() { curl -fsS -m 15 -H "Title: $1" -d "$2" "$NTFY" >/dev/null 2>&1 || true; }
 
 git fetch --quiet origin "$BRANCH"
 LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse "origin/$BRANCH")
-if [ "$LOCAL" = "$REMOTE" ]; then echo "already up to date ($LOCAL)"; exit 0; fi
-
-echo "updating $LOCAL -> $REMOTE"
-git pull --ff-only --quiet origin "$BRANCH" || { notify "Deploy FAILED" "git pull failed"; exit 1; }
+if [ "$LOCAL" = "$REMOTE" ]; then
+  echo "already up to date ($LOCAL)"
+  [ "$FORCE_CHECK" != "true" ] && exit 0
+  echo "(--check) running dry-run against current checkout anyway"
+else
+  echo "updating $LOCAL -> $REMOTE"
+  git pull --ff-only --quiet origin "$BRANCH" || { notify "Deploy FAILED" "git pull failed"; exit 1; }
+fi
 SHORT=$(git rev-parse --short HEAD)
 
 echo "=== dry-run (--check --diff) ==="
