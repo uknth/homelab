@@ -1,0 +1,24 @@
+---
+# Drop the conditional-forward config into Pi-hole's dnsmasq.d and reload DNS.
+
+- name: Ensure dnsmasq.d exists
+  become: true
+  ansible.builtin.file:
+    path: /etc/dnsmasq.d
+    state: directory
+    mode: "0755"
+
+- name: Install conditional-forward drop-in (puhome.net -> Blocky)
+  become: true
+  ansible.builtin.template:
+    src: 02-puhome-forward.conf.j2
+    dest: "{{ pihole_dropin_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart pihole DNS
+
+- name: Validate dnsmasq config
+  become: true
+  ansible.builtin.command: pihole-FTL dnsmasq-test
+  changed_when: false

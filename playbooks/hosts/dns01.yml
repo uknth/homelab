@@ -1,0 +1,19 @@
+---
+# dns01 — Pi-hole DNS appliance (Raspberry Pi Zero)
+#
+# Minimally managed: config only. No docker / full bootstrap (tiny armv6 box).
+#   - hostname : sync OS hostname to inventory name
+#   - pihole   : conditional-forward puhome.net -> Blocky (so the secondary
+#                resolver answers local names for every service, automatically)
+
+- name: Configure dns01 (Pi-hole)
+  hosts: dns
+  become: true
+  gather_facts: true
+  tags: [dns01, dns]
+  roles:
+    - role: system/hostname
+      tags: [hostname, system]
+
+    - role: services/network/pihole
+      tags: [pihole, dns, network]

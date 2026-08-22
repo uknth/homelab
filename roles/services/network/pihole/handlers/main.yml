@@ -1,0 +1,5 @@
+---
+- name: Restart pihole DNS
+  become: true
+  ansible.builtin.command: pihole restartdns
+  changed_when: true

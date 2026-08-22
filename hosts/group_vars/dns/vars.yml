@@ -1,0 +1,4 @@
+---
+# Variables for the 'dns' group (dns01 — Raspberry Pi Zero / Pi-hole).
+# Deliberately minimal: this box is managed for its Pi-hole config only.
+ansible_python_interpreter: /usr/bin/python3

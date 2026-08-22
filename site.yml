@@ -18,6 +18,10 @@
 - name: Gateway services (gw01)
   ansible.builtin.import_playbook: playbooks/hosts/gw01.yml
 
+# Phase 2 — Pi-hole conditional-forward to Blocky (dns01).
+- name: DNS appliance (dns01)
+  ansible.builtin.import_playbook: playbooks/hosts/dns01.yml
+
 #- name: Compute services (cmp01)
 #  ansible.builtin.import_playbook: playbooks/hosts/cmp01.yml
 

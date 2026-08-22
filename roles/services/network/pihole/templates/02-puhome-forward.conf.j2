@@ -1,0 +1,5 @@
+# Managed by Ansible (roles/services/network/pihole) — do not edit by hand.
+# Forward the entire local zone to Blocky (authoritative for *.puhome.net),
+# so Pi-hole (secondary resolver) answers local names too. One rule covers
+# every current and future *.puhome.net service — no per-app edits.
+server=/{{ pihole_forward_domain }}/{{ pihole_forward_target }}

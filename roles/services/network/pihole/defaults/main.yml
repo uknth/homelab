@@ -1,0 +1,13 @@
+---
+# services/network/pihole — configures the (already-installed) Pi-hole on dns01.
+# Config-only: Pi-hole itself is not installed/managed by Ansible.
+#
+# The single job: conditionally forward the whole local zone to Blocky, so every
+# *.puhome.net name resolves via the secondary resolver too — set once, works
+# for every service ever launched (no per-app changes). Mirrors how Blocky is
+# authoritative for the zone; Pi-hole just delegates the zone to it.
+
+# Forward the base domain to Blocky (derived from gw01's inventory IP).
+pihole_forward_domain: "{{ base_domain }}"
+pihole_forward_target: "{{ hostvars['gw01'].ansible_host }}"
+pihole_dropin_path: /etc/dnsmasq.d/02-puhome-forward.conf
