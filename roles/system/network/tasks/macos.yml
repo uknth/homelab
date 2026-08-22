@@ -20,7 +20,7 @@
   ansible.builtin.set_fact:
     _ethernet_service: >-
       {{ _network_services.stdout_lines
-         | reject('match', '.*\\*.*')
+         | reject('search', '[*]')
          | select('search', '(?i)ethernet|lan|usb|thunderbolt')
          | list | first | default('') }}
   when: network_ethernet_service == ""
