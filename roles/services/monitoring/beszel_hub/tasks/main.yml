@@ -43,6 +43,7 @@
     url: "http://localhost:{{ beszel_hub_port }}/api/health"
     status_code: 200
   register: _bz_health
+  check_mode: false
   retries: 15
   delay: 3
   until: _bz_health.status == 200
@@ -54,6 +55,7 @@
     body_format: json
     body: { identity: "{{ beszel_superuser_email }}", password: "{{ beszel_superuser_password }}" }
   register: _bz_auth
+  check_mode: false
   no_log: true
 
 - name: Set Beszel app URL (needed for OAuth redirects)
@@ -105,6 +107,7 @@
     headers:
       Authorization: "{{ _bz_auth.json.token }}"
   register: _bz_users
+  check_mode: false
   no_log: true
 
 - name: Get already-registered systems
@@ -113,6 +116,7 @@
     headers:
       Authorization: "{{ _bz_auth.json.token }}"
   register: _bz_systems
+  check_mode: false
 
 - name: Register a system per Linux agent host
   ansible.builtin.uri:

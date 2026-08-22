@@ -26,6 +26,7 @@
     KUMA_HTTP: "{{ kuma_http_monitors | to_json }}"
     KUMA_PUSH: "{{ kuma_push_monitors | to_json }}"
   register: _kuma_sync
+  check_mode: false
   changed_when: "'\"created\": []' not in _kuma_sync.stdout"
   no_log: true
 

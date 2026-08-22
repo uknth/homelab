@@ -7,6 +7,7 @@
     url: "{{ authentik_api }}/crypto/certificatekeypairs/?name={{ authentik_signing_key_name | urlencode }}"
     headers: "{{ _ak_headers }}"
   register: _signkey
+  check_mode: false
   no_log: true
 
 - name: Resolve OIDC scope mapping pks
@@ -14,6 +15,7 @@
     url: "{{ authentik_api }}/propertymappings/provider/scope/"
     headers: "{{ _ak_headers }}"
   register: _scopes
+  check_mode: false
   no_log: true
 
 - name: Compute scope mapping pk list
@@ -26,6 +28,7 @@
     url: "{{ authentik_api }}/providers/oauth2/?ordering=name&page_size=100"
     headers: "{{ _ak_headers }}"
   register: _oauth_providers
+  check_mode: false
   no_log: true
 
 - name: Create/patch OIDC providers
@@ -60,6 +63,7 @@
     url: "{{ authentik_api }}/providers/oauth2/?ordering=name&page_size=100"
     headers: "{{ _ak_headers }}"
   register: _oauth_providers2
+  check_mode: false
   no_log: true
 
 - name: Look up existing applications
@@ -67,6 +71,7 @@
     url: "{{ authentik_api }}/core/applications/?page_size=100"
     headers: "{{ _ak_headers }}"
   register: _apps_all
+  check_mode: false
   no_log: true
 
 - name: Create OIDC applications (bound to provider; idempotent)

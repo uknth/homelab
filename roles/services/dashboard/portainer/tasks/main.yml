@@ -34,6 +34,7 @@
     url: "http://localhost:{{ portainer_port }}/api/system/status"
     status_code: 200
   register: _pt_status
+  check_mode: false
   retries: 15
   delay: 3
   until: _pt_status.status == 200
@@ -46,6 +47,7 @@
     body: { Username: admin, Password: "{{ portainer_admin_password }}" }
     status_code: [200, 401, 422]
   register: _pt_auth
+  check_mode: false
   no_log: true
 
 - name: Initialize admin if not yet set up
@@ -65,6 +67,7 @@
     body_format: json
     body: { Username: admin, Password: "{{ portainer_admin_password }}" }
   register: _pt_jwt
+  check_mode: false
   no_log: true
 
 - name: Configure Authentik OAuth
@@ -101,6 +104,7 @@
     headers:
       Authorization: "Bearer {{ _pt_jwt.json.jwt }}"
   register: _pt_eps
+  check_mode: false
 
 - name: Create the local (util01) environment
   ansible.builtin.uri:
