@@ -29,6 +29,9 @@ customDNS:
 {% for h in (groups['linux'] | default([])) + (groups['macos'] | default([])) %}
     {{ h }}.host.{{ base_domain }}: {{ hostvars[h].ansible_host }}
 {% endfor %}
+{% for name, ip in blocky_pinned_hosts.items() %}
+    {{ name }}: {{ ip }}
+{% endfor %}
 {% for name, ip in blocky_extra_mappings.items() %}
     {{ name }}: {{ ip }}
 {% endfor %}

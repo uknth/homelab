@@ -26,3 +26,10 @@ blocky_upstreams:
 blocky_extra_mappings:
   dns01.host.puhome.net: "10.0.2.7"
   router.host.puhome.net: "10.0.2.1"
+
+# Pin specific hostnames to a working IP (workaround for broken anycast edges).
+# GitHub's CDN (*.githubusercontent.com) round-robins 185.199.108-111.133;
+# .109.133 is blackholed via our WAN, so .NET single-shot downloads (Jellyfin
+# plugins, Kavita migrations) time out. Pin to a known-good edge.
+blocky_pinned_hosts:
+  githubusercontent.com: "185.199.110.133"
