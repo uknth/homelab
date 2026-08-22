@@ -11,7 +11,8 @@
 #   - {{ gitops_dir }}/repo               : `git clone` of git.sr.ht:~uknth/homelab
 #     (read-only sr.ht deploy key, or public https)
 #   - ~/.config/homelab/.vault_pass       : ansible vault password (chmod 600)
-#   - {{ gitops_dir }}/repo/keys/ansible_rsa.private : the ansible SSH key (keys/ is git-ignored)
+#   - {{ gitops_dir }}/repo/keys/ansible_rsa.private     : ansible SSH key (keys/ is git-ignored)
+#   - {{ gitops_dir }}/repo/keys/restic_backup_ed25519  : Synology backup key (ops/restic)
 
 gitops_dir: "{{ service_root }}/gitops"          # /opt/homelab/gitops
 gitops_repo_url: "git@git.sr.ht:~uknth/homelab"
@@ -24,5 +25,5 @@ gitops_vault_pass: "/home/{{ user }}/.config/homelab/.vault_pass"   # on util01,
 # no-extra-credentials option vs n8n SSH-ing into the host). Disabled by default
 # — enable once the repo clone + secret files are in place. deploy.sh is dry-run
 # only unless gitops_auto_apply is also true.
-gitops_timer_enabled: false
+gitops_timer_enabled: true    # dry-run poll on; auto-apply below stays off
 gitops_timer_calendar: "*:0/10"    # every 10 minutes

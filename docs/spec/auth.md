@@ -147,3 +147,12 @@ ISPs. Any client hitting `.109` hangs; curl retries, .NET (single-shot) times ou
 **Fix:** Blocky pins `githubusercontent.com` -> `185.199.110.133` (a working edge) —
 `blocky_pinned_hosts`. This unblocks the Jellyfin plugin install and Kavita 0.9.x.
 The proper long-term fix is at the Omada router (repair the WAN route to `.109`).
+
+### Jellyfin native-client login (2026-08-23)
+
+SSO (the Authentik button) only works in the **web** player; native clients
+(TV/phone apps) can't do the OAuth redirect and need a username/password. The
+`uknth` SSO account had no local password, so native logins were denied. Fix: set
+a local password on `uknth` (currently = the Jellyfin admin password) — web SSO
+still works, native clients use `uknth` + password. Not codified (per-user secret);
+recorded here.
