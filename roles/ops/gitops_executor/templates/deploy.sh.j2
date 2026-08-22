@@ -4,6 +4,10 @@
 #   deploy.sh --check  -> force dry-run only
 set -uo pipefail
 
+# Ansible refuses to run without a UTF-8 locale (systemd/non-login shells
+# default to POSIX/ISO8859-1).
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
 REPO="{{ gitops_dir }}/repo"
 VENV="{{ gitops_dir }}/venv"
 BRANCH="{{ gitops_branch }}"
