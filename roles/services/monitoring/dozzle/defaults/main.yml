@@ -1,0 +1,4 @@
+---
+dozzle_image: "amir20/dozzle:latest"
+dozzle_root_dir: "{{ service_root }}/dozzle"
+dozzle_port: 8093

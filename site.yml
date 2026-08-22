@@ -29,8 +29,9 @@
 #- name: Compute services (cmp01)
 #  ansible.builtin.import_playbook: playbooks/hosts/cmp01.yml
 
-#- name: Utility services (util01)
-#  ansible.builtin.import_playbook: playbooks/hosts/util01.yml
+# Phase 4 — observability + SSO (util01).
+- name: Utility services (util01)
+  ansible.builtin.import_playbook: playbooks/hosts/util01.yml
 
 #- name: Admin workstation (ctl01)
 #  ansible.builtin.import_playbook: playbooks/hosts/ctl01.yml

@@ -1,0 +1,22 @@
+---
+# gw01 host vars — the central reverse-proxy map. Every *.puhome.net service is
+# added here as it comes online; nginx templates a vhost per entry.
+#   name     : subdomain (<name>.puhome.net)
+#   upstream : proxy_pass target
+#   sso      : gate behind Authentik forward-auth (omit/false = public)
+
+nginx_sites:
+  # Identity — NOT behind SSO (it IS the login)
+  - { name: auth,       upstream: "http://10.0.2.8:9000", sso: false }   # Authentik
+
+  # Observability / ops (util01) — admin UIs behind SSO
+  - { name: metrics,    upstream: "http://10.0.2.8:8090", sso: true }    # Beszel hub
+  - { name: synthetics, upstream: "http://10.0.2.8:3001", sso: true }    # Uptime Kuma
+  - { name: dash,       upstream: "http://10.0.2.8:8092", sso: true }    # Glance
+  - { name: docker,     upstream: "http://10.0.2.8:9001", sso: true }    # Portainer
+  - { name: logs,       upstream: "http://10.0.2.8:8093", sso: true }    # Dozzle
+
+  # ntfy — public (apps POST notifications; phone subscribes). Own ACLs later.
+  - { name: ntfy,       upstream: "http://10.0.2.8:8091", sso: false }
+  # n8n — own auth + receives webhooks (phase 7 GitOps); not forward-authed.
+  - { name: n8n,        upstream: "http://10.0.2.8:5678", sso: false }

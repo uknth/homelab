@@ -1,0 +1,29 @@
+---
+- name: Create beszel hub dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ beszel_hub_root_dir }}"
+    - "{{ beszel_hub_root_dir }}/compose"
+    - "{{ beszel_hub_root_dir }}/data"
+- name: Template beszel hub compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ beszel_hub_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart beszel_hub
+- name: Deploy beszel hub
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ beszel_hub_root_dir }}/compose"
+    project_name: "beszel"
+    state: present
+    pull: missing

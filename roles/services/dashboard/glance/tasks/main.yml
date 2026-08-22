@@ -1,0 +1,32 @@
+---
+- name: Create glance dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ glance_root_dir }}"
+    - "{{ glance_root_dir }}/compose"
+    - "{{ glance_root_dir }}/config"
+- name: Template glance config + compose
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  loop:
+    - { src: glance.yml.j2, dest: "{{ glance_root_dir }}/config/glance.yml" }
+    - { src: docker-compose.yml.j2, dest: "{{ glance_root_dir }}/compose/docker-compose.yml" }
+  notify: Restart glance
+- name: Deploy glance
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ glance_root_dir }}/compose"
+    project_name: "glance"
+    state: present
+    pull: missing

@@ -1,0 +1,5 @@
+---
+ntfy_image: "binwiederhier/ntfy:latest"
+ntfy_root_dir: "{{ service_root }}/ntfy"
+ntfy_port: 8091
+ntfy_base_url: "https://ntfy.{{ base_domain }}"

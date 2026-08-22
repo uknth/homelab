@@ -1,0 +1,4 @@
+---
+beszel_hub_image: "henrygd/beszel:latest"
+beszel_hub_root_dir: "{{ service_root }}/beszel"
+beszel_hub_port: 8090

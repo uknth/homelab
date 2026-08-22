@@ -1,0 +1,33 @@
+---
+- name: Create diun dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ diun_root_dir }}"
+    - "{{ diun_root_dir }}/compose"
+    - "{{ diun_root_dir }}/config"
+    - "{{ diun_root_dir }}/data"
+- name: Template diun config + compose
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  loop:
+    - { src: diun.yml.j2, dest: "{{ diun_root_dir }}/config/diun.yml" }
+    - { src: docker-compose.yml.j2, dest: "{{ diun_root_dir }}/compose/docker-compose.yml" }
+  notify: Restart diun
+- name: Deploy diun
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ diun_root_dir }}/compose"
+    project_name: "diun"
+    state: present
+    pull: missing

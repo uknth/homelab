@@ -1,0 +1,62 @@
+# Managed by Ansible (roles/services/auth/authentik) — do not edit by hand.
+services:
+  postgresql:
+    image: {{ authentik_postgres_image }}
+    container_name: authentik-postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - {{ authentik_root_dir }}/pgdata:/var/lib/postgresql/data
+    env_file: [.env]
+
+  redis:
+    image: {{ authentik_redis_image }}
+    container_name: authentik-redis
+    command: --save 60 1 --loglevel warning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - {{ authentik_root_dir }}/redis:/data
+
+  server:
+    image: ghcr.io/goauthentik/server:{{ authentik_version }}
+    container_name: authentik-server
+    restart: unless-stopped
+    command: server
+    env_file: [.env]
+    volumes:
+      - {{ authentik_root_dir }}/media:/media
+      - {{ authentik_root_dir }}/custom-templates:/templates
+    ports:
+      - "{{ authentik_http_port }}:9000"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/goauthentik/server:{{ authentik_version }}
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    env_file: [.env]
+    user: root
+    volumes:
+      - {{ authentik_root_dir }}/media:/media
+      - {{ authentik_root_dir }}/custom-templates:/templates
+      - {{ authentik_root_dir }}/certs:/certs
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

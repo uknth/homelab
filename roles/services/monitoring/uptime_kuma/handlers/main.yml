@@ -1,0 +1,7 @@
+---
+- name: Restart uptime_kuma
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ uptime_kuma_root_dir }}/compose"
+    project_name: "uptime-kuma"
+    state: restarted

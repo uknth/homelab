@@ -1,0 +1,22 @@
+---
+# services/auth/authentik — Single Sign-On provider (server + worker + Postgres
+# + Redis) on util01. Enforced fleet-wide via nginx forward-auth on gw01.
+# See docs/spec/auth.md.
+
+authentik_version: "2026.8.0"
+authentik_root_dir: "{{ service_root }}/authentik"   # /opt/homelab/authentik (local disk)
+
+# HTTP port exposed on util01; nginx (gw01) reverse-proxies + forward-auths to it.
+authentik_http_port: 9000
+
+authentik_pg_user: authentik
+authentik_pg_db: authentik
+
+# Secrets (generated + stored in the vault; not user-provided).
+authentik_secret_key: "{{ vault_authentik_secret_key }}"
+authentik_pg_password: "{{ vault_authentik_postgres_password }}"
+authentik_bootstrap_password: "{{ vault_authentik_bootstrap_password }}"
+authentik_bootstrap_email: "{{ vault_certbot_email | default('admin@puhome.net') }}"
+
+authentik_postgres_image: "docker.io/library/postgres:16-alpine"
+authentik_redis_image: "docker.io/library/redis:7-alpine"

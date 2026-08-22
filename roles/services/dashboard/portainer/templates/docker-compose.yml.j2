@@ -1,0 +1,12 @@
+# Managed by Ansible — services/dashboard/portainer
+services:
+  portainer:
+    image: {{ portainer_image }}
+    container_name: portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "{{ portainer_port }}:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ portainer_root_dir }}/data:/data

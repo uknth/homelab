@@ -1,0 +1,12 @@
+# Managed by Ansible — services/dashboard/glance
+services:
+  glance:
+    image: {{ glance_image }}
+    container_name: glance
+    restart: unless-stopped
+    ports:
+      - "{{ glance_port }}:8080"
+    volumes:
+      - {{ glance_root_dir }}/config/glance.yml:/app/config/glance.yml:ro
+    environment:
+      - TZ={{ timezone }}

@@ -1,0 +1,4 @@
+---
+portainer_image: "portainer/portainer-ce:lts"
+portainer_root_dir: "{{ service_root }}/portainer"
+portainer_port: 9001            # host port (9000 taken by authentik on util01)

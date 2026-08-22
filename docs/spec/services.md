@@ -24,7 +24,7 @@ implementation exists in `archive/` to reference. Per user direction, v3 roles a
 | `system/docker` | linux | 🟢 built | moved from `archive/roles/packages/system/docker`; codename-dynamic (bookworm+trixie) |
 | `system/unattended_upgrades` | linux | 🟢 built | net-new — maintenance layer 1 (security pocket, no auto-reboot) |
 | `system/tailscale` | linux | 🟡 planned | `artis3n.tailscale` |
-| `system/beszel_agent` | linux | 🟢 built | moved from archive; native install, **guarded on hub key** (activates in phase 4) |
+| `system/beszel_agent` | linux | 🟢 built + **active** | native install; hub key set, agents live fleet-wide |
 | `system/nfs_mounts` | cmp01 | 🟢 built | mounts nas01:/mnt/data-pool/media/data at /mnt/media/data (NFSv4.2, fstab); read/write as uid 1001 |
 | `services/storage/truenas_nfs` | nas01 (API) | 🟢 built | manages TrueNAS NFS export defs via REST API (create/update); restricts media export to cmp01 |
 | `system/brew` | macos | 🟡 planned | — |
@@ -65,15 +65,16 @@ helper is already PIA-shaped).
 
 | Service | Target role | Domain | Status | v2 reference |
 |---|---|---|---|---|
-| Authentik (SSO) | `services/auth/authentik` | `auth.puhome.net` | 🔵 net-new | — (identity provider for the whole fleet; see [auth.md](auth.md)) |
-| Beszel (hub) | `services/monitoring/beszel_hub` | `metrics.puhome.net` | 🟡 planned | `archive/roles/docker2/monitor/beszel` |
-| Uptime Kuma | `services/monitoring/uptime_kuma` | `synthetics.puhome.net` | 🔵 net-new | — |
-| ntfy | `services/monitoring/ntfy` | `ntfy.puhome.net` | 🔵 net-new | — (notification sink) |
-| Diun | `services/monitoring/diun` | — | 🔵 net-new | — (image-update notifier) |
-| Dozzle | `services/monitoring/dozzle` | `logs.puhome.net` | 🔵 net-new | — (live container logs) |
-| Glance | `services/dashboard/glance` | `dash.puhome.net` | 🟡 planned | `archive/roles/docker2/services/glance` |
-| Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟡 planned | `uknth/ansible-role-portainer` |
-| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🔵 net-new | — (also GitOps trigger, see [gitops](../plan/gitops.md)) |
+| Authentik (SSO) | `services/auth/authentik` | `auth.puhome.net` | 🟢 built + **live** | v2026.8.0; server+worker+PG+Redis on util01; served via nginx+wildcard TLS; akadmin bootstrapped |
+| Authentik config (forward-auth) | `services/auth/authentik_config` | — | 🟢 built + **live** | domain-level forward-auth provider via API (idempotent); embedded outpost gates all *.puhome.net |
+| Beszel (hub) | `services/monitoring/beszel_hub` | `metrics.puhome.net` | 🟢 built + live | agents active fleet-wide |
+| Uptime Kuma | `services/monitoring/uptime_kuma` | `synthetics.puhome.net` | 🟢 built + live | — |
+| ntfy | `services/monitoring/ntfy` | `ntfy.puhome.net` | 🟢 built + live | notification sink (open pub/sub; token ACLs = later) |
+| Diun | `services/monitoring/diun` | — | 🟢 built + live | image-update notifier -> ntfy (6h) |
+| Dozzle | `services/monitoring/dozzle` | `logs.puhome.net` | 🟢 built + live | live container logs |
+| Glance | `services/dashboard/glance` | `dash.puhome.net` | 🟢 built + live | — |
+| Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
+| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7) |
 
 ## `ai01` — AI workloads
 

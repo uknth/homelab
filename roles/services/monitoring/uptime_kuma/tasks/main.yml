@@ -1,0 +1,29 @@
+---
+- name: Create uptime-kuma dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ uptime_kuma_root_dir }}"
+    - "{{ uptime_kuma_root_dir }}/compose"
+    - "{{ uptime_kuma_root_dir }}/data"
+- name: Template uptime-kuma compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ uptime_kuma_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart uptime_kuma
+- name: Deploy uptime-kuma
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ uptime_kuma_root_dir }}/compose"
+    project_name: "uptime-kuma"
+    state: present
+    pull: missing

@@ -1,0 +1,8 @@
+# Managed by Ansible — services/monitoring/ntfy
+# Internal-only (behind nginx on the LAN/Tailscale). Open pub/sub for now;
+# token ACLs are a later hardening step. See docs/spec/maintenance.md.
+base-url: "{{ ntfy_base_url }}"
+listen-http: ":80"
+cache-file: "/var/cache/ntfy/cache.db"
+cache-duration: "12h"
+behind-proxy: true

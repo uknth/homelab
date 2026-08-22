@@ -1,0 +1,5 @@
+---
+glance_image: "glanceapp/glance:latest"
+glance_root_dir: "{{ service_root }}/glance"
+glance_port: 8092
+glance_weather_location: "Bangalore, India"

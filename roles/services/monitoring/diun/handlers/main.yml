@@ -1,0 +1,7 @@
+---
+- name: Restart diun
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ diun_root_dir }}/compose"
+    project_name: "diun"
+    state: restarted

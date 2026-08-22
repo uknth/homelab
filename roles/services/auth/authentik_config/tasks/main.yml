@@ -1,0 +1,97 @@
+---
+# Idempotently ensure the domain-level forward-auth provider + app exist and are
+# bound to the embedded outpost.
+
+- name: Set API auth header
+  ansible.builtin.set_fact:
+    _ak_headers:
+      Authorization: "Bearer {{ authentik_api_token }}"
+  no_log: true
+
+- name: Resolve authorization flow pk
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/flows/instances/?slug={{ authentik_fa_authz_flow_slug }}"
+    headers: "{{ _ak_headers }}"
+  register: _authz_flow
+  no_log: true
+
+- name: Resolve invalidation flow pk
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/flows/instances/?slug={{ authentik_fa_invalidation_flow_slug }}"
+    headers: "{{ _ak_headers }}"
+  register: _inval_flow
+  no_log: true
+
+- name: Look up existing forward-auth proxy provider
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/providers/proxy/?name={{ authentik_fa_provider_name | urlencode }}"
+    headers: "{{ _ak_headers }}"
+  register: _existing_provider
+  no_log: true
+
+- name: Create forward-auth proxy provider
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/providers/proxy/"
+    method: POST
+    headers: "{{ _ak_headers }}"
+    body_format: json
+    body:
+      name: "{{ authentik_fa_provider_name }}"
+      authorization_flow: "{{ _authz_flow.json.results[0].pk }}"
+      invalidation_flow: "{{ _inval_flow.json.results[0].pk }}"
+      mode: forward_domain
+      external_host: "{{ authentik_fa_external_host }}"
+      cookie_domain: "{{ authentik_fa_cookie_domain }}"
+    status_code: [200, 201]
+  register: _created_provider
+  when: _existing_provider.json.results | length == 0
+  no_log: true
+
+- name: Set provider pk fact
+  ansible.builtin.set_fact:
+    _fa_provider_pk: "{{ (_existing_provider.json.results[0].pk
+                          if _existing_provider.json.results | length > 0
+                          else _created_provider.json.pk) }}"
+
+- name: Look up existing application
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/core/applications/?slug={{ authentik_fa_app_slug }}"
+    headers: "{{ _ak_headers }}"
+  register: _existing_app
+  no_log: true
+
+- name: Create application bound to the provider
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/core/applications/"
+    method: POST
+    headers: "{{ _ak_headers }}"
+    body_format: json
+    body:
+      name: "{{ authentik_fa_app_name }}"
+      slug: "{{ authentik_fa_app_slug }}"
+      provider: "{{ _fa_provider_pk | int }}"
+    status_code: [200, 201]
+  when: _existing_app.json.results | length == 0
+  no_log: true
+
+- name: Get all outposts
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/outposts/instances/"
+    headers: "{{ _ak_headers }}"
+  register: _outposts
+  no_log: true
+
+- name: Select the embedded outpost
+  ansible.builtin.set_fact:
+    _embedded_outpost: "{{ _outposts.json.results | selectattr('name', 'search', 'Embedded Outpost') | list | first }}"
+
+- name: Ensure provider is bound to the embedded outpost
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/outposts/instances/{{ _embedded_outpost.pk }}/"
+    method: PATCH
+    headers: "{{ _ak_headers }}"
+    body_format: json
+    body:
+      providers: "{{ (_embedded_outpost.providers + [_fa_provider_pk | int]) | unique }}"
+    status_code: [200]
+  when: (_fa_provider_pk | int) not in _embedded_outpost.providers

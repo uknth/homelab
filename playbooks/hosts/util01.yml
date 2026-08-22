@@ -1,28 +1,43 @@
 ---
 # util01 — Utility / observability node (Mini PC, Debian)
 #
-# Services:
-#   - authentik   : SSO / identity provider  (auth.puhome.net) — every service's single
-#                   sign-on; nginx on gw01 forward-auths to its outpost
-#   - beszel      : monitoring hub  (metrics.puhome.net)
-#   - uptime-kuma : synthetic monitoring / status page  (synthetics.puhome.net)
-#   - glance      : home dashboard  (dash.puhome.net)
-#   - portainer   : Docker management UI  (docker.puhome.net)
-#   - n8n         : workflow automation  (n8n.puhome.net)
+# Services (all reverse-proxied via gw01 nginx):
+#   - authentik   : SSO / identity provider          auth.puhome.net
+#   - beszel      : monitoring hub                    metrics.puhome.net
+#   - ntfy        : notification sink                 ntfy.puhome.net
+#   - diun        : image-update notifier (-> ntfy)   (no UI)
+#   - uptime-kuma : synthetic monitoring              synthetics.puhome.net
+#   - glance      : home dashboard                    dash.puhome.net
+#   - portainer   : Docker management UI              docker.puhome.net
+#   - dozzle      : live container logs               logs.puhome.net
+#   - n8n         : workflow automation / GitOps      n8n.puhome.net
 
 - name: Deploy utility services on util01
   hosts: util01
   become: true
+  gather_facts: true
   tags: [util01, utility]
   roles:
     - role: services/auth/authentik
       tags: [authentik, sso, auth]
 
+    - role: services/auth/authentik_config
+      tags: [authentik, authentik-config, sso, auth]
+
     - role: services/monitoring/beszel_hub
       tags: [beszel, beszel-hub, monitoring]
 
+    - role: services/monitoring/ntfy
+      tags: [ntfy, notifications, monitoring]
+
+    - role: services/monitoring/diun
+      tags: [diun, updates, monitoring]
+
     - role: services/monitoring/uptime_kuma
       tags: [uptime-kuma, synthetics, monitoring]
+
+    - role: services/monitoring/dozzle
+      tags: [dozzle, logs, monitoring]
 
     - role: services/dashboard/glance
       tags: [glance, dashboard]

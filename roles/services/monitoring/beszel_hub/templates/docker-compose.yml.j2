@@ -1,0 +1,12 @@
+# Managed by Ansible — services/monitoring/beszel_hub
+services:
+  beszel:
+    image: {{ beszel_hub_image }}
+    container_name: beszel
+    restart: unless-stopped
+    ports:
+      - "{{ beszel_hub_port }}:8090"
+    volumes:
+      - {{ beszel_hub_root_dir }}/data:/beszel_data
+    environment:
+      - TZ={{ timezone }}

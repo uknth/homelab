@@ -41,6 +41,7 @@
   become: true
   community.docker.docker_compose_v2:
     project_src: "{{ blocky_root_dir }}/compose"
+    project_name: "blocky"
     state: present
     pull: missing
   tags: [blocky, blocky-deploy]

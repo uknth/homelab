@@ -1,0 +1,12 @@
+# Managed by Ansible — services/monitoring/uptime_kuma
+services:
+  uptime-kuma:
+    image: {{ uptime_kuma_image }}
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "{{ uptime_kuma_port }}:3001"
+    volumes:
+      - {{ uptime_kuma_root_dir }}/data:/app/data
+    environment:
+      - TZ={{ timezone }}

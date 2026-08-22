@@ -1,0 +1,12 @@
+# Managed by Ansible — services/monitoring/dozzle
+services:
+  dozzle:
+    image: {{ dozzle_image }}
+    container_name: dozzle
+    restart: unless-stopped
+    ports:
+      - "{{ dozzle_port }}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ={{ timezone }}

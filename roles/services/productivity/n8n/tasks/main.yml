@@ -1,0 +1,41 @@
+---
+- name: Create n8n dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ n8n_root_dir }}"
+    - "{{ n8n_root_dir }}/compose"
+    - "{{ n8n_root_dir }}/data"
+- name: Fix n8n data dir ownership (container runs as uid 1000 'node')
+  become: true
+  ansible.builtin.file:
+    path: "{{ n8n_root_dir }}/data"
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+- name: Template n8n env + compose
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ n8n_root_dir }}/compose/{{ item.dest }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0640"
+  loop:
+    - { src: env.j2, dest: .env }
+    - { src: docker-compose.yml.j2, dest: docker-compose.yml }
+  no_log: true
+  notify: Restart n8n
+- name: Deploy n8n
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ n8n_root_dir }}/compose"
+    project_name: "n8n"
+    state: present
+    pull: missing

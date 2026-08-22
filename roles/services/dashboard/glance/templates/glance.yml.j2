@@ -1,0 +1,23 @@
+# Managed by Ansible — services/dashboard/glance
+pages:
+  - name: Home
+    columns:
+      - size: small
+        widgets:
+          - type: calendar
+          - type: weather
+            location: {{ glance_weather_location }}
+            units: metric
+            hour-format: 12h
+      - size: full
+        widgets:
+          - type: clock
+            hour-format: 24h
+          - type: monitor
+            title: Homelab
+            sites:
+              - { title: Authentik,   url: "https://auth.{{ base_domain }}" }
+              - { title: Metrics,     url: "https://metrics.{{ base_domain }}" }
+              - { title: Uptime Kuma, url: "https://synthetics.{{ base_domain }}" }
+              - { title: Portainer,   url: "https://docker.{{ base_domain }}" }
+              - { title: Logs,        url: "https://logs.{{ base_domain }}" }

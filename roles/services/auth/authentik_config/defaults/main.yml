@@ -1,0 +1,18 @@
+---
+# services/auth/authentik_config — configures Authentik objects via its API
+# (idempotent). Currently: a domain-level forward-auth proxy provider bound to
+# the embedded outpost, so nginx forward-auth gates all *.puhome.net at once.
+#
+# Runs on util01 against the local API. Needs vault_authentik_api_token.
+
+authentik_api: "http://localhost:9000/api/v3"
+authentik_api_token: "{{ vault_authentik_api_token }}"
+
+# Domain-level forward-auth provider
+authentik_fa_provider_name: "homelab-forward-auth"
+authentik_fa_app_slug: "homelab-forward-auth"
+authentik_fa_app_name: "Homelab Forward Auth"
+authentik_fa_external_host: "https://auth.{{ base_domain }}"
+authentik_fa_cookie_domain: "{{ base_domain }}"
+authentik_fa_authz_flow_slug: "default-provider-authorization-implicit-consent"
+authentik_fa_invalidation_flow_slug: "default-provider-invalidation-flow"

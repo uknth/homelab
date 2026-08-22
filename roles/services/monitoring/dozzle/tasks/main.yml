@@ -1,0 +1,28 @@
+---
+- name: Create dozzle dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ dozzle_root_dir }}"
+    - "{{ dozzle_root_dir }}/compose"
+- name: Template dozzle compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ dozzle_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart dozzle
+- name: Deploy dozzle
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ dozzle_root_dir }}/compose"
+    project_name: "dozzle"
+    state: present
+    pull: missing

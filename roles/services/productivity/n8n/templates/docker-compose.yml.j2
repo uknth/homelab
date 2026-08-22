@@ -1,0 +1,11 @@
+# Managed by Ansible — services/productivity/n8n
+services:
+  n8n:
+    image: {{ n8n_image }}
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "{{ n8n_port }}:5678"
+    volumes:
+      - {{ n8n_root_dir }}/data:/home/node/.n8n
+    env_file: [.env]

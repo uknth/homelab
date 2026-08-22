@@ -1,0 +1,16 @@
+# Managed by Ansible — services/monitoring/diun
+watch:
+  workers: 4
+  schedule: "{{ diun_schedule }}"
+  firstCheckNotif: false
+
+providers:
+  docker:
+    watchStopped: {{ diun_watch_stopped | lower }}
+
+notif:
+  ntfy:
+    endpoint: "{{ diun_ntfy_endpoint }}"
+    topic: "{{ diun_ntfy_topic }}"
+    priority: 3
+    timeout: 10s

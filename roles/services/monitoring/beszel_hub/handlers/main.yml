@@ -1,0 +1,7 @@
+---
+- name: Restart beszel_hub
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ beszel_hub_root_dir }}/compose"
+    project_name: "beszel"
+    state: restarted

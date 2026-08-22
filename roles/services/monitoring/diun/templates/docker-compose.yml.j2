@@ -1,0 +1,14 @@
+# Managed by Ansible — services/monitoring/diun
+services:
+  diun:
+    image: {{ diun_image }}
+    container_name: diun
+    command: serve
+    restart: unless-stopped
+    volumes:
+      - {{ diun_root_dir }}/data:/data
+      - {{ diun_root_dir }}/config/diun.yml:/etc/diun/diun.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ={{ timezone }}
+      - LOG_LEVEL=info

@@ -1,0 +1,9 @@
+---
+diun_image: "crazymax/diun:latest"
+diun_root_dir: "{{ service_root }}/diun"
+diun_schedule: "0 0 */6 * * *"          # every 6h
+diun_ntfy_endpoint: "http://{{ hostvars['util01'].ansible_host }}:{{ ntfy_port | default(8091) }}"
+diun_ntfy_topic: "homelab-updates"
+# Only watch containers that opt in with the label diun.enable=true? No — watch all
+# running containers across this host by default.
+diun_watch_stopped: false
