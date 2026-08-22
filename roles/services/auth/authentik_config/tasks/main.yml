@@ -87,7 +87,6 @@
     status_code: [200]
   changed_when: false
   no_log: true
-  no_log: true
 
 - name: Get all outposts
   ansible.builtin.uri:

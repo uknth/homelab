@@ -82,3 +82,20 @@ way, so switching later only changes the apply half.
 
 Mirror/host the repo on `git.sr.ht`. Today it's a local git repo with a GitHub-style key
 convention; the SourceHut remote and a build user/secret need to be set up before Phase 7.
+
+## Phase 7 build notes (2026-08-22)
+
+**CI is live-ready** (`.build.yml`): verified that `ansible-playbook site.yml
+--syntax-check` passes with **no vault password** (CI strips `vault_password_file`
+from `ansible.cfg` into `ci.cfg`), so builds.sr.ht never needs a secret. Lint is
+advisory for now. **To activate:** enable the git.sr.ht → builds.sr.ht integration
+for `~uknth/homelab` (push triggers the build).
+
+**Trigger is polling, not an inbound webhook.** builds.sr.ht runs in the cloud and
+cannot reach n8n on the LAN (`util01`, 10.0.2.8) without exposing it publicly
+(Tailscale Funnel/Cloudflare Tunnel — extra attack surface). So the deploy trigger
+inverts: **n8n on util01 polls git.sr.ht** for a new `main` commit (and, optionally,
+a green builds.sr.ht status) and then runs the on-LAN executor. No inbound exposure.
+
+**Executor still = util01**, out-of-band provisioned with ansible + the repo +
+`~/.config/homelab/.vault_pass` + `keys/ansible_rsa.private`.
