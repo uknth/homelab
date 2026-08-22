@@ -8,8 +8,11 @@
 #
 #   ansible-playbook playbooks/bootstrap/macos.yml --ask-pass --ask-become-pass
 #
-# Play 2 — standard bootstrap (brew, tailscale)
+# Play 2 — standard bootstrap (brew, hostname, network)
 #   Connects as the 'ansible' user (normal operation).
+#
+# Note: Tailscale is NOT installed on macOS hosts. It runs on gw01 only, as a
+# subnet router advertising 10.0.2.0/24, which covers the whole fleet.
 
 - name: Bootstrap macOS hosts
   hosts: macos
@@ -24,6 +27,3 @@
 
     - role: system/network
       tags: [network, static-ip, system]
-
-    #- role: system/tailscale
-    #  tags: [tailscale, vpn, system]

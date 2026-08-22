@@ -1,0 +1,53 @@
+---
+# Deploy Blocky (local DNS) as a Docker container on gw01.
+
+- name: Create Blocky directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ blocky_root_dir }}"
+    - "{{ blocky_root_dir }}/compose"
+    - "{{ blocky_root_dir }}/config"
+  tags: [blocky, blocky-config]
+
+- name: Template Blocky config
+  become: true
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: "{{ blocky_root_dir }}/config/config.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart blocky
+  tags: [blocky, blocky-config]
+
+- name: Template Blocky docker-compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ blocky_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart blocky
+  tags: [blocky, blocky-config]
+
+- name: Deploy Blocky
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ blocky_root_dir }}/compose"
+    state: present
+    pull: missing
+  tags: [blocky, blocky-deploy]
+
+- name: Wait for Blocky to answer DNS on port 53
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: "{{ blocky_dns_port }}"
+    timeout: 30
+  tags: [blocky, blocky-deploy]

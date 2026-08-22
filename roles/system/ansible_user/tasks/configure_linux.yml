@@ -1,0 +1,32 @@
+---
+# Linux user configuration — ensured on every run (idempotent).
+- name: Ensure ansible user is configured (Linux)
+  become: true
+  block:
+    - name: Grant passwordless sudo
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/{{ ansible_user_name }}
+        line: "{{ ansible_user_name }} ALL=(ALL) NOPASSWD: ALL"
+        create: true
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: Add SSH authorized key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user_name }}"
+        key: "{{ ansible_user_public_key }}"
+        state: present
+
+    - name: Ensure PubkeyAuthentication is enabled in sshd_config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PubkeyAuthentication"
+        line: "PubkeyAuthentication yes"
+        state: present
+      notify: Restart sshd
+
+    - name: Ensure sshd is enabled and running
+      ansible.builtin.service:
+        name: ssh
+        state: started
+        enabled: true

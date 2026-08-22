@@ -1,0 +1,55 @@
+---
+# Obtain and auto-renew a wildcard cert for *.puhome.net via Cloudflare DNS-01.
+
+- name: Fail early if Cloudflare token or email is missing
+  ansible.builtin.fail:
+    msg: >-
+      certbot needs vault_cloudflare_dns_token and vault_certbot_email set in
+      the vault before it can request a wildcard cert.
+  when: certbot_cloudflare_token | length == 0 or certbot_email | length == 0
+
+- name: Install certbot and the Cloudflare DNS plugin
+  become: true
+  ansible.builtin.apt:
+    name:
+      - certbot
+      - python3-certbot-dns-cloudflare
+    state: present
+    update_cache: true
+
+- name: Write Cloudflare API credentials
+  become: true
+  ansible.builtin.template:
+    src: cloudflare.ini.j2
+    dest: "{{ certbot_credentials_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Build certbot argument list
+  ansible.builtin.set_fact:
+    _certbot_argv: >-
+      {{ ['certbot', 'certonly', '--non-interactive', '--agree-tos',
+          '--dns-cloudflare',
+          '--dns-cloudflare-credentials', certbot_credentials_path,
+          '--dns-cloudflare-propagation-seconds', '30',
+          '--email', certbot_email,
+          '--cert-name', certbot_cert_name,
+          '--deploy-hook', certbot_deploy_hook]
+         + (['--staging'] if certbot_staging else [])
+         + (certbot_domains | map('regex_replace', '^(.*)$', '--domain=\1') | list) }}
+
+- name: Request/renew the wildcard certificate
+  become: true
+  ansible.builtin.command:
+    argv: "{{ _certbot_argv }}"
+    creates: "/etc/letsencrypt/live/{{ certbot_cert_name }}/fullchain.pem"
+  register: _certbot
+  no_log: true
+
+- name: Ensure the certbot renewal timer is enabled
+  become: true
+  ansible.builtin.service:
+    name: certbot.timer
+    state: started
+    enabled: true

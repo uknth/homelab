@@ -1,0 +1,14 @@
+// Managed by Ansible (roles/system/unattended_upgrades) — do not edit by hand.
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+    "origin=Debian,codename=${distro_codename}-updates";
+};
+
+Unattended-Upgrade::Package-Blacklist {
+};
+
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "{{ 'true' if uu_autoremove else 'false' }}";
+Unattended-Upgrade::Automatic-Reboot "{{ 'true' if uu_auto_reboot else 'false' }}";
+Unattended-Upgrade::Automatic-Reboot-Time "03:30";
+Unattended-Upgrade::SyslogEnable "true";

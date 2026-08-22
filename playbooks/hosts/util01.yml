@@ -2,6 +2,8 @@
 # util01 — Utility / observability node (Mini PC, Debian)
 #
 # Services:
+#   - authentik   : SSO / identity provider  (auth.puhome.net) — every service's single
+#                   sign-on; nginx on gw01 forward-auths to its outpost
 #   - beszel      : monitoring hub  (metrics.puhome.net)
 #   - uptime-kuma : synthetic monitoring / status page  (synthetics.puhome.net)
 #   - glance      : home dashboard  (dash.puhome.net)
@@ -13,6 +15,9 @@
   become: true
   tags: [util01, utility]
   roles:
+    - role: services/auth/authentik
+      tags: [authentik, sso, auth]
+
     - role: services/monitoring/beszel_hub
       tags: [beszel, beszel-hub, monitoring]
 

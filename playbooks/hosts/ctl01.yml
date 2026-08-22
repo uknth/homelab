@@ -1,0 +1,33 @@
+---
+# ctl01 — Admin workstation / jumphost (Mac Mini M1, macOS)
+#
+# Managed:
+#   - Colima: Docker-compatible container runtime (Linux VM) — required by dev/kind
+#   - Developer toolchain: Go, Node.js, kubectl, Helm, kind, AWS CLI
+#   - Ansible control node + primary SSH jumphost into the homelab
+
+- name: Configure admin workstation (ctl01)
+  hosts: ctl01
+  become: false
+  tags: [ctl01, admin, macos]
+  roles:
+    - role: system/colima
+      tags: [colima, container-runtime, system]
+
+    - role: dev/go
+      tags: [go, dev]
+
+    - role: dev/node
+      tags: [node, dev]
+
+    - role: dev/kubectl
+      tags: [kubectl, k8s, dev]
+
+    - role: dev/helm
+      tags: [helm, k8s, dev]
+
+    - role: dev/kind
+      tags: [kind, k8s, dev]
+
+    - role: dev/awscli
+      tags: [awscli, aws, dev]

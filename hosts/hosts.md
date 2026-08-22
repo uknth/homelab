@@ -13,13 +13,13 @@ Role-based names of the Nodes
 | util01   | Utility node    |
 | gpu01    | GPU workloads   |
 | ai01     | Mac Mini M4 Pro |
-| admin01  | Mac Mini M1     |
-| c01      | Compute node    |
+| ctl01  | Mac Mini M1     |
+| cmp01      | Compute node    |
 | dns01    | DNS node        |
 
 
 gw01,ha01 -> RP5, running debian
-c01 -> custom pc, running debian
+cmp01 -> custom pc, running debian
 nas01 -> custom pc, running Truenas with 24tb in RAIDZ2
 nas02 -> synology nas device
 util01 -> mini-pc (skullsaint), debian
@@ -27,7 +27,7 @@ dns01 -> RPZero, pi-hole
 
 ## Node to Process mapping
 
-Compute Node c01 (debian)
+Compute Node cmp01 (debian)
 ---
 
 1. arr/downloader stack (sonarr, radarr, etc.)
@@ -58,7 +58,7 @@ Utility util01 (debian)
 5. Uptime-Kuma (synthetics.puhome.net)
 
 
-Admin admin01 (macos)
+Admin ctl01 (macos)
 --- 
 1. Jumphost
 2. Tailscale

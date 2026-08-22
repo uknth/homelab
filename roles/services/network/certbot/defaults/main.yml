@@ -1,0 +1,15 @@
+---
+# services/network/certbot — one *.puhome.net wildcard cert via Cloudflare
+# DNS-01. Wildcard requires DNS-01 (HTTP-01 can't do wildcards).
+
+certbot_email: "{{ vault_certbot_email | default('') }}"
+certbot_cloudflare_token: "{{ vault_cloudflare_dns_token | default('') }}"
+certbot_domains:
+  - "{{ base_domain }}"
+  - "*.{{ base_domain }}"
+certbot_cert_name: "{{ base_domain }}"
+certbot_credentials_path: /etc/letsencrypt/cloudflare.ini
+# Reload nginx after a successful renewal.
+certbot_deploy_hook: "systemctl reload nginx"
+# Use Let's Encrypt staging while testing to avoid rate limits (set false for real certs).
+certbot_staging: false

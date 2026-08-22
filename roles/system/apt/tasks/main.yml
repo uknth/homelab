@@ -1,0 +1,38 @@
+---
+# Ensure the apt cache is fresh, base packages are present, and (optionally) the
+# OS is fully upgraded. Idempotent — safe to run on every bootstrap.
+
+- name: Update apt cache
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: "{{ apt_cache_valid_time }}"
+
+- name: Install base packages
+  become: true
+  ansible.builtin.apt:
+    name: "{{ apt_base_packages }}"
+    state: present
+
+- name: Full-upgrade the OS (optional)
+  become: true
+  ansible.builtin.apt:
+    upgrade: full
+  when: apt_upgrade | bool
+
+- name: Remove orphaned packages
+  become: true
+  ansible.builtin.apt:
+    autoremove: true
+  when: apt_autoremove | bool
+
+- name: Check whether a reboot is required
+  become: true
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: _reboot_required
+
+- name: Note that a reboot is pending
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} has a pending reboot (/var/run/reboot-required present)."
+  when: _reboot_required.stat.exists

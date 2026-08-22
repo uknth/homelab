@@ -1,0 +1,81 @@
+---
+# Install Tailscale from the official apt repo and bring the node up as a
+# subnet router. Idempotent: skips `tailscale up` when already advertising.
+
+- name: Add Tailscale apt signing key
+  become: true
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.noarmor.gpg"
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    mode: "0644"
+
+- name: Add Tailscale apt repository
+  become: true
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.tailscale-keyring.list"
+    dest: /etc/apt/sources.list.d/tailscale.list
+    mode: "0644"
+
+- name: Install Tailscale
+  become: true
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+    update_cache: true
+
+- name: Enable IPv4 forwarding (required for subnet routing)
+  become: true
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Enable IPv6 forwarding (required for subnet routing)
+  become: true
+  ansible.posix.sysctl:
+    name: net.ipv6.conf.all.forwarding
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Ensure tailscaled is enabled and running
+  become: true
+  ansible.builtin.service:
+    name: tailscaled
+    state: started
+    enabled: true
+
+- name: Check current Tailscale status
+  become: true
+  ansible.builtin.command: tailscale status --json
+  register: _ts_status
+  changed_when: false
+  failed_when: false
+
+- name: Warn if no auth key is set and node is not up
+  ansible.builtin.debug:
+    msg: >-
+      tailscale_authkey is empty and this node isn't connected. Set
+      vault_tailscale_authkey in the vault, then re-run. Skipping `tailscale up`.
+  when:
+    - tailscale_authkey | length == 0
+    - '"BackendState" not in _ts_status.stdout or "Running" not in _ts_status.stdout'
+
+- name: Bring Tailscale up as subnet router
+  become: true
+  ansible.builtin.command: >-
+    tailscale up
+    --authkey={{ tailscale_authkey }}
+    --advertise-routes={{ tailscale_advertise_routes }}
+    --hostname={{ tailscale_hostname }}
+    --accept-dns={{ 'true' if tailscale_accept_dns else 'false' }}
+    --advertise-exit-node={{ 'true' if tailscale_advertise_exit_node else 'false' }}
+    {% if tailscale_tags | length > 0 %}--advertise-tags={{ tailscale_tags }}{% endif %}
+    {{ tailscale_extra_args }}
+  register: _ts_up
+  changed_when: "'Success' in _ts_up.stdout or _ts_up.rc == 0"
+  when: tailscale_authkey | length > 0
+  no_log: true

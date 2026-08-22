@@ -1,0 +1,4 @@
+// Managed by Ansible (roles/system/unattended_upgrades) — do not edit by hand.
+APT::Periodic::Update-Package-Lists "{{ uu_update_package_lists }}";
+APT::Periodic::Unattended-Upgrade "{{ uu_unattended_upgrade }}";
+APT::Periodic::AutocleanInterval "{{ uu_autoclean_interval }}";

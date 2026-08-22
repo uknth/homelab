@@ -1,0 +1,35 @@
+---
+# Install and configure unattended-upgrades for hands-off security patching.
+
+- name: Install unattended-upgrades
+  become: true
+  ansible.builtin.apt:
+    name:
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+
+- name: Configure unattended-upgrades (security origins, no auto-reboot)
+  become: true
+  ansible.builtin.template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable periodic apt updates + unattended upgrades
+  become: true
+  ansible.builtin.template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure unattended-upgrades service is enabled
+  become: true
+  ansible.builtin.service:
+    name: unattended-upgrades
+    state: started
+    enabled: true

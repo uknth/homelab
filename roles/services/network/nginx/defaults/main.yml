@@ -1,0 +1,19 @@
+---
+# services/network/nginx — reverse proxy for all *.puhome.net (native, on gw01).
+# TLS terminates here with the wildcard cert from services/network/certbot.
+# SSO is enforced per-site via Authentik forward-auth (opt-in with sso: true;
+# activates once Authentik exists — phase 4).
+
+nginx_cert_dir: "/etc/letsencrypt/live/{{ base_domain }}"
+
+# Authentik outpost (util01) — where forward-auth requests go. Used only by
+# vhosts with sso: true.
+nginx_authentik_host: "10.0.2.8"
+nginx_authentik_port: 9000
+
+# Per-service vhosts. Each: name (subdomain), upstream (proxy_pass target),
+# sso (require Authentik login). Populated as services come online.
+# Example:
+#   - { name: dash,   upstream: "http://10.0.2.8:14031", sso: true }
+#   - { name: sonarr, upstream: "http://10.0.2.5:8989",  sso: true }
+nginx_sites: []

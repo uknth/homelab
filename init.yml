@@ -1,23 +1,35 @@
 # Initialization Playbook
 #
-# This playbook
-#   - creates the initial ansible user
-#   - sets the authorized_keys for the ansible user to login
+# Creates the `ansible` service account on a host and installs its SSH key, so
+# the rest of the automation can connect as `ansible`. Idempotent: on a host
+# that's already initialised every task skips, so this is safe to run against
+# the whole fleet anytime.
 #
-
-# Example of how to run this playbook:
-#     ansible-playbook init.yml \
-#       --tags "ansible-user" \
-#       -e "ansible_host=10.0.2.23" -e "ansible_user=uknth" -e "ansible_become_password=<uknth's password>" \
-#       --ask-pass --ask-become-pass --ask-vault-pass
+# It connects as the personal admin user `uknth` (NOT `ansible`, which may not
+# exist yet), using the unified `uknth` key (~/.ssh/id_rsa) — see
+# docs/spec/conventions.md#unified-uknth-login. Passwordless sudo for `uknth`
+# is assumed (set it up as part of onboarding).
+#
+# Onboarding a new host:
+#   1. create `uknth`, add the unified id_rsa public key, grant NOPASSWD sudo
+#   2. add the host to hosts/hosts.yml
+#   3. ansible-playbook init.yml -l <newhost>
+#
+# Run for the whole fleet:      ansible-playbook init.yml
+# Run for one host:             ansible-playbook init.yml -l <host>
+#
+# First-ever contact, before the key is trusted (fallback to password):
+#   ansible-playbook init.yml -l <host> --ask-pass --ask-become-pass
 ---
-# Bootstrap playbook.
-# Run this ONCE against fresh machines using an existing admin account.
-
 - name: Bootstrap machines for Ansible management
-  hosts: all
+  hosts: managed
   gather_facts: true
   become: true
+  # Connect as the personal admin account with the unified key. Overridable
+  # with -e / --ask-pass for the very first contact on a brand-new host.
+  vars:
+    ansible_user: uknth
+    ansible_ssh_private_key_file: "~/.ssh/id_rsa"
   roles:
     - role: system/ansible_user
       tags:
@@ -25,19 +37,18 @@
           - init
           - bootstrap
 
-
   post_tasks:
     - name: Verify ansible user exists
       ansible.builtin.command: id {{ ansible_user_name }}
       changed_when: false
 
-    - name: Verify SSH directory exists
+    - name: Verify SSH directory exists (macOS)
       ansible.builtin.stat:
         path: "/Users/{{ ansible_user_name }}/.ssh"
       register: mac_ssh_dir
       when: ansible_system == "Darwin"
 
-    - name: Verify SSH directory exists
+    - name: Verify SSH directory exists (Linux)
       ansible.builtin.stat:
         path: "/home/{{ ansible_user_name }}/.ssh"
       register: linux_ssh_dir
@@ -46,6 +57,5 @@
     - name: Display bootstrap completion message
       ansible.builtin.debug:
         msg:
-          - "Bootstrap completed successfully."
-          - "You can now connect using:"
-          - "ssh {{ ansible_user_name }}@{{ inventory_hostname }}"
+          - "Bootstrap complete on {{ inventory_hostname }}."
+          - "Connect as the service account: ssh {{ ansible_user_name }}@{{ inventory_hostname }}"

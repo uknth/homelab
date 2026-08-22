@@ -1,0 +1,32 @@
+---
+# Variables applied to all hosts in the 'macos' group
+
+ansible_python_interpreter: /usr/bin/python3
+ansible_become_method: sudo
+
+# Homebrew — Apple Silicon path by default
+homebrew_prefix: /opt/homebrew
+homebrew_user: "{{ user }}"
+
+# Common macOS packages to install via Homebrew
+homebrew_packages:
+  - git
+  - wget
+  - curl
+  - jq
+  - htop
+
+# Time
+ntp_server: time.apple.com
+
+# Colima — Docker-compatible container runtime for macOS (Linux VM via Lima).
+# Applied only to hosts that need containers (ctl01, for dev/kind). Docker
+# Engine can't run natively on macOS; Colima provides the docker socket the
+# `docker` CLI and community.docker talk to. ai01 runs Ollama natively and does
+# not install this.
+colima_cpus: 4
+colima_memory: 8        # GiB
+colima_disk: 60         # GiB
+colima_vm_type: vz      # Apple Virtualization.framework on Apple Silicon
+colima_rosetta: true    # x86_64 emulation for amd64 images (e.g. kind node image)
+colima_autostart: true  # `brew services` so the VM comes up on login

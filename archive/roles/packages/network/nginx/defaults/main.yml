@@ -1,6 +1,0 @@
-nginx_certbot_admin_email: "email@example.com"
-nginx_certbot_cloudflare_email: "email@example.com"
-nginx_certbot_cloudflare_api_key: "api_key"
-service_mapping: []
-nginx_cockpit_hosts: []
-base_domain: "somedomain.net"

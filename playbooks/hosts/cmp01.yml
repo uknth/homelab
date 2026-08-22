@@ -1,0 +1,27 @@
+---
+# cmp01 — Compute node with GPU (Custom PC, Debian)
+#
+# Services:
+#   - arr stack  : sonarr, radarr, lidarr, bazarr, prowlarr, qbittorrent (VPN scoped to qbit)
+#   - jellyfin   : media server + jellyseerr
+#   - kavita     : book / comic reader
+#   - paperless  : document management
+#
+# Out of scope for v3 (user directive): Immich (photos), Vaultwarden (passwords).
+
+- name: Deploy compute services on cmp01
+  hosts: cmp01
+  become: true
+  tags: [cmp01, compute]
+  roles:
+    - role: services/media/arr
+      tags: [arr, media, downloader]
+
+    - role: services/media/jellyfin
+      tags: [jellyfin, media]
+
+    - role: services/media/kavita
+      tags: [kavita, media, books]
+
+    - role: services/documents/paperless
+      tags: [paperless, documents]

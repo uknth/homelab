@@ -1,13 +1,15 @@
 ---
-# Creates the 'ansible' service account on the target host.
-# Safe to run repeatedly — all tasks are skipped if the user already exists.
+# Creates and configures the 'ansible' service account on the target host.
 # Supports: Debian/Ubuntu (Linux) and macOS (Darwin).
 #
-# On Linux  : uses the 'user' module — standard and idempotent.
-# On macOS  : uses dscl (Directory Service CLI) — required because the 'user'
-#             module does not support macOS user creation.
+# Idempotent by design, split into two stages:
+#   * Creation  (create_*.yml)   — runs only when the account is missing.
+#   * Configure (configure_*.yml) — runs every time, ensuring sudo, the SSH
+#                                   authorized key, and SSH access are correct
+#                                   even for a pre-existing account.
 #
-# The play that includes this role must connect as an admin user with sudo rights.
+# The play that includes this role must connect as an admin user with sudo
+# rights (see init.yml).
 
 - name: Check if ansible user already exists
   ansible.builtin.command: id {{ ansible_user_name }}
@@ -15,14 +17,24 @@
   changed_when: false
   failed_when: false
 
+# ── Creation — only when the account does not yet exist ──────────────
 - name: Create ansible user (Linux)
-  ansible.builtin.import_tasks: linux.yml
+  ansible.builtin.import_tasks: create_linux.yml
   when:
     - ansible_user_check.rc != 0
     - ansible_system == "Linux"
 
 - name: Create ansible user (macOS)
-  ansible.builtin.import_tasks: macos.yml
+  ansible.builtin.import_tasks: create_macos.yml
   when:
     - ansible_user_check.rc != 0
     - ansible_system == "Darwin"
+
+# ── Configuration — ensured on every run (idempotent) ───────────────
+- name: Configure ansible user (Linux)
+  ansible.builtin.import_tasks: configure_linux.yml
+  when: ansible_system == "Linux"
+
+- name: Configure ansible user (macOS)
+  ansible.builtin.import_tasks: configure_macos.yml
+  when: ansible_system == "Darwin"

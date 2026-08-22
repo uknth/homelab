@@ -1,0 +1,47 @@
+# Managed by Ansible (roles/services/network/blocky) — do not edit by hand.
+ports:
+  dns: {{ blocky_dns_port }}
+  http: {{ blocky_http_port }}
+
+upstreams:
+  init:
+    strategy: fast
+  groups:
+    default:
+{% for u in blocky_upstreams %}
+      - {{ u }}
+{% endfor %}
+  # strict = try in listed order (Pi-hole first, DoH fallback)
+  strategy: strict
+  timeout: 2s
+
+# Local name resolution. customDNS answers a mapped domain AND its subdomains,
+# so the base-domain entry is the catch-all for every *.puhome.net service
+# name (all of which are reverse-proxied by nginx on gw01). More-specific
+# host records override it.
+customDNS:
+  customTTL: 1h
+  filterUnmappedTypes: true
+  mapping:
+    # Catch-all: every *.puhome.net service name -> nginx reverse proxy
+    {{ base_domain }}: {{ blocky_reverse_proxy_ip }}
+    # Per-host records (override the catch-all for real host IPs)
+{% for h in (groups['linux'] | default([])) + (groups['macos'] | default([])) %}
+    {{ h }}.host.{{ base_domain }}: {{ hostvars[h].ansible_host }}
+{% endfor %}
+{% for name, ip in blocky_extra_mappings.items() %}
+    {{ name }}: {{ ip }}
+{% endfor %}
+
+# Blocking is intentionally OFF — Pi-hole (dns01) owns ad/tracker blocking.
+blocking:
+  loading:
+    strategy: fast
+
+prometheus:
+  enable: true
+  path: /metrics
+
+log:
+  level: info
+  format: text

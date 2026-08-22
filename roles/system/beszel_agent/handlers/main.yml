@@ -1,0 +1,6 @@
+---
+- name: Restart beszel-agent
+  become: true
+  ansible.builtin.service:
+    name: beszel-agent
+    state: restarted

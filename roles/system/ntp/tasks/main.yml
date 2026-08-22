@@ -1,0 +1,30 @@
+---
+# Configure systemd-timesyncd with our NTP pools and enable network time.
+
+- name: Ensure systemd-timesyncd is installed
+  become: true
+  ansible.builtin.apt:
+    name: systemd-timesyncd
+    state: present
+
+- name: Configure timesyncd
+  become: true
+  ansible.builtin.template:
+    src: timesyncd.conf.j2
+    dest: /etc/systemd/timesyncd.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart timesyncd
+
+- name: Enable and start systemd-timesyncd
+  become: true
+  ansible.builtin.service:
+    name: systemd-timesyncd
+    state: started
+    enabled: true
+
+- name: Enable NTP synchronization
+  become: true
+  ansible.builtin.command: timedatectl set-ntp true
+  changed_when: false

@@ -1,0 +1,18 @@
+---
+# system/docker — Docker CE from Docker's official apt repo.
+# Codename-derived from the host so it works on bookworm and trixie.
+
+docker_apt_gpg_url: "https://download.docker.com/linux/debian/gpg"
+docker_apt_repo_base: "https://download.docker.com/linux/debian"
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Users added to the 'docker' group. group_vars/linux sets this to [ansible].
+docker_users: []
+
+# Python bindings so community.docker modules work from the target host.
+docker_install_python_bindings: true

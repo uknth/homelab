@@ -1,0 +1,12 @@
+---
+# system/ntp — time sync via systemd-timesyncd (Debian's default; no extra
+# daemon needed). group_vars/linux may override the pools.
+
+# Primary + fallback NTP pools (plain hostnames). IST-friendly by default.
+ntp_pools:
+  - 0.in.pool.ntp.org
+  - 1.in.pool.ntp.org
+  - 2.in.pool.ntp.org
+ntp_fallback_pools:
+  - time.google.com
+  - time.cloudflare.com

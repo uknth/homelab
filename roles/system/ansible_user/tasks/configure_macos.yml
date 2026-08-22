@@ -1,0 +1,27 @@
+---
+# macOS user configuration — ensured on every run (idempotent).
+- name: Configure ansible user on macOS
+  become: true
+  block:
+    - name: Grant passwordless sudo
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/{{ ansible_user_name }}
+        line: "{{ ansible_user_name }} ALL=(ALL) NOPASSWD: ALL"
+        create: true
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: Add SSH authorized key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user_name }}"
+        key: "{{ ansible_user_public_key }}"
+        state: present
+
+    - name: Enable Remote Login (SSH) on macOS
+      ansible.builtin.command: systemsetup -setremotelogin on
+      changed_when: false
+
+    - name: Allow ansible user to connect via SSH
+      ansible.builtin.command: >
+        dseditgroup -o edit -a {{ ansible_user_name }} -t user com.apple.access_ssh
+      changed_when: false

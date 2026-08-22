@@ -17,8 +17,11 @@
     - role: system/docker
       tags: [docker, system]
 
-    - role: system/tailscale
-      tags: [tailscale, vpn, system]
+    # Tailscale is NOT bootstrapped fleet-wide — it runs on gw01 only, as a
+    # subnet router advertising 10.0.2.0/24. See playbooks/hosts/gw01.yml.
+
+    - role: system/unattended_upgrades
+      tags: [unattended-upgrades, patching, system]
 
     - role: system/beszel_agent
       tags: [beszel-agent, monitoring, system]

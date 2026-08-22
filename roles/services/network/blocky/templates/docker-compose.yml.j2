@@ -1,0 +1,19 @@
+# Managed by Ansible (roles/services/network/blocky) — do not edit by hand.
+services:
+  blocky:
+    image: {{ blocky_image }}
+    container_name: blocky
+    restart: unless-stopped
+    ports:
+      - "{{ blocky_dns_port }}:53/tcp"
+      - "{{ blocky_dns_port }}:53/udp"
+      - "{{ blocky_ui_ext_port }}:{{ blocky_http_port }}/tcp"
+    volumes:
+      - "{{ blocky_root_dir }}/config/config.yml:/app/config.yml:ro"
+    environment:
+      - TZ={{ timezone }}
+    healthcheck:
+      test: ["CMD", "/app/blocky", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

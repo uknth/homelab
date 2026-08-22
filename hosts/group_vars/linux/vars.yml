@@ -1,0 +1,29 @@
+---
+# Variables applied to all hosts in the 'linux' group (Debian)
+
+ansible_python_interpreter: /usr/bin/python3
+
+# --- system/apt ---
+apt_cache_valid_time: 3600
+# Routine bootstrap installs base packages + security (unattended-upgrades) but
+# does NOT full-upgrade. Deliberate OS upgrades are the `--tags patch` play.
+apt_upgrade: false
+apt_autoremove: true
+
+# --- system/docker ---
+docker_users:
+  - "{{ user }}"
+
+# --- system/ntp (systemd-timesyncd) — IST-friendly pools ---
+ntp_pools:
+  - 0.in.pool.ntp.org
+  - 1.in.pool.ntp.org
+  - 2.in.pool.ntp.org
+ntp_fallback_pools:
+  - time.google.com
+  - time.cloudflare.com
+
+# --- system/beszel_agent ---
+# Empty until the Beszel hub (util01, phase 4) exists and its public key is
+# added to the vault. The agent role no-ops while this is empty.
+beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"

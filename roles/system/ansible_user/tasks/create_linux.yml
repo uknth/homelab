@@ -1,0 +1,10 @@
+---
+# Linux user creation — runs only when the account is missing.
+- name: Create ansible system user account
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_user_name }}"
+    comment: "{{ ansible_user_realname }}"
+    shell: "{{ ansible_user_shell }}"
+    create_home: true
+    state: present

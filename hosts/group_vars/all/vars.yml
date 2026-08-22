@@ -1,0 +1,37 @@
+# Ansible Global Config
+#---------------------------------------------------------------
+
+# role/ansible_user
+ansible_user_name: "ansible"
+ansible_user_shell: "/bin/bash"
+ansible_user_realname: "Ansible"
+ansible_user_public_key: "{{ vault_public_key }}"
+ansible_user_sudo_password: "{{ vault_sudo_password }}"
+
+# Connection settings — applied to all hosts
+# ansible builtin variables
+ansible_user: "{{ ansible_user_name }}"
+ansible_ssh_private_key_file: keys/ansible_rsa.private
+ansible_become_password: "{{ vault_sudo_password }}"
+
+# The service account that owns homelab state on managed hosts. Same as the
+# ansible user by default; referenced by config_dir/data_dir and Docker roles.
+user: "{{ ansible_user_name }}"
+
+base_domain: "puhome.net"
+
+# Persistent state lives on each host's LOCAL disk under /opt/homelab.
+# Bulk media lives on the NFS mount (media_root), never here — see docs/spec/storage.md.
+service_root: "/opt/homelab"
+config_dir: "{{ service_root }}/config"
+data_dir: "{{ service_root }}/data"
+
+# Single NFS mount from nas01 (10.0.2.6). One mount, with data/ inside it, so
+# hardlinks/atomic-moves work across downloader and library. See docs/spec/storage.md.
+media_root: "/mnt/media"
+
+# Pinned, fleet-wide media ownership. Do NOT derive from ansible_user at runtime.
+media_uid: 1500
+media_gid: 1500
+
+timezone: Asia/Kolkata

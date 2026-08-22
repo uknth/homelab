@@ -1,0 +1,14 @@
+---
+# system/beszel_agent — the Beszel monitoring agent on every Linux host.
+#
+# The agent authenticates to the Beszel HUB using the hub's SSH public key.
+# That key only exists once the hub is deployed (util01, phase 4), so this role
+# GUARDS on `beszel_agent_key`: until it's set (via vault_beszel_agent_key in
+# group_vars), the role no-ops with a note. Re-run bootstrap after phase 4 to
+# activate agents.
+
+beszel_agent_key: ""            # hub public key; empty = defer (see above)
+beszel_agent_version: "0.9.1"   # pin; bump deliberately
+beszel_agent_port: 45876
+beszel_agent_user: beszel
+beszel_agent_install_dir: /opt/beszel

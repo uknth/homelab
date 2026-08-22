@@ -1,0 +1,10 @@
+---
+# system/unattended_upgrades — automatic security patching (maintenance layer 1).
+# Security pocket only; never auto-reboots (that's the `--tags patch` play's job).
+
+uu_auto_reboot: false
+uu_autoremove: true
+# apt periodic cadence (days). 1 = daily cache update + unattended upgrade.
+uu_update_package_lists: "1"
+uu_unattended_upgrade: "1"
+uu_autoclean_interval: "7"

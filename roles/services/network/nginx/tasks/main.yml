@@ -1,0 +1,81 @@
+---
+# Native nginx reverse proxy for all *.puhome.net, TLS via the wildcard cert.
+
+- name: Install nginx
+  become: true
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+
+- name: Install shared snippets
+  become: true
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/nginx/snippets/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - ssl-params.conf
+    - authentik-forward-auth.conf
+    - authentik-auth-request.conf
+  notify: Reload nginx
+
+- name: Remove stock default site
+  become: true
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Install default (deny-unknown) server
+  become: true
+  ansible.builtin.template:
+    src: default-server.conf.j2
+    dest: /etc/nginx/sites-available/000-default.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Template per-service vhosts
+  become: true
+  ansible.builtin.template:
+    src: vhost.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ nginx_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload nginx
+
+- name: Enable configured sites (symlink)
+  become: true
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item }}.conf"
+    state: link
+  loop: "{{ ['000-default'] + (nginx_sites | map(attribute='name') | list) }}"
+  notify: Reload nginx
+
+- name: Prune sites-enabled entries no longer in nginx_sites
+  become: true
+  ansible.builtin.shell: >-
+    for f in /etc/nginx/sites-enabled/*.conf; do
+      b=$(basename "$f" .conf);
+      case " {{ (['000-default'] + (nginx_sites | map(attribute='name') | list)) | join(' ') }} " in
+        *" $b "*) : ;;
+        *) rm -f "$f" ;;
+      esac
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate nginx configuration
+  become: true
+  ansible.builtin.command: nginx -t
+  changed_when: false

@@ -1,0 +1,17 @@
+# Managed by Ansible (roles/system/beszel_agent) — do not edit by hand.
+[Unit]
+Description=Beszel Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ beszel_agent_user }}
+Environment="PORT={{ beszel_agent_port }}"
+Environment="KEY={{ beszel_agent_key }}"
+ExecStart={{ beszel_agent_install_dir }}/beszel-agent
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

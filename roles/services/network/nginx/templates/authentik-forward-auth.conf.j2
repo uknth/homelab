@@ -1,0 +1,18 @@
+# Managed by Ansible (roles/services/network/nginx) — do not edit by hand.
+# Authentik forward-auth. Included in a server{} block for sso: true vhosts.
+# The /outpost.goauthentik.io/ location proxies to the Authentik outpost.
+location /outpost.goauthentik.io {
+    proxy_pass http://{{ nginx_authentik_host }}:{{ nginx_authentik_port }}/outpost.goauthentik.io;
+    proxy_set_header Host $host;
+    proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
+    add_header Set-Cookie $auth_cookie;
+    auth_request_set $auth_cookie $upstream_http_set_cookie;
+}
+
+# Sign-in redirect when auth_request returns 401.
+error_page 401 = @goauthentik_signin;
+location @goauthentik_signin {
+    internal;
+    add_header Set-Cookie $auth_cookie;
+    return 302 /outpost.goauthentik.io/start?rd=$request_uri;
+}

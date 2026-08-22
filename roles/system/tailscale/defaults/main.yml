@@ -1,0 +1,22 @@
+---
+# system/tailscale — installs Tailscale and (on gw01) runs it as a subnet
+# router advertising the LAN, so it's the single Tailscale node for the fleet.
+
+tailscale_authkey: "{{ vault_tailscale_authkey | default('') }}"   # required to bring up
+tailscale_advertise_routes: "10.0.2.0/24"
+tailscale_hostname: "{{ inventory_hostname }}"
+# Don't let Tailscale override the host's DNS (Blocky stays authoritative locally).
+tailscale_accept_dns: false
+# ACL tag(s) to advertise (comma-separated, e.g. "tag:homelab"). Empty by
+# default: gw01's key expiry is disabled directly in the admin console, so the
+# tagged-device workaround isn't needed. Only set this if a tag is defined in
+# the tailnet ACL (tagOwners) AND the auth key is authorized for it — otherwise
+# `tailscale up` fails.
+tailscale_tags: ""
+
+# Advertise gw01 as an exit node (route internet traffic through home when
+# remote). Enabled to match the current live state; needs approval in the
+# admin console (same place as subnet routes).
+tailscale_advertise_exit_node: true
+
+tailscale_extra_args: ""

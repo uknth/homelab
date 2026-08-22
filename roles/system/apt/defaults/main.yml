@@ -1,0 +1,31 @@
+---
+# system/apt — base package layer for all Linux hosts.
+# Codename-agnostic: works on Debian 12 (bookworm) and 13 (trixie) alike.
+
+# Refresh the apt cache if older than this many seconds.
+apt_cache_valid_time: 3600
+
+# Run a full `apt full-upgrade`? Off by default here — deliberate OS upgrades
+# are the job of the `--tags patch` maintenance play, not routine bootstrap.
+# group_vars/linux may override per environment.
+apt_upgrade: false
+
+# Remove orphaned packages after changes.
+apt_autoremove: true
+
+# Baseline packages every managed Linux host should have.
+apt_base_packages:
+  - ca-certificates
+  - curl
+  - wget
+  - gnupg
+  - lsb-release
+  - git
+  - rsync
+  - unzip
+  - jq
+  - htop
+  - vim
+  - net-tools
+  - python3
+  - python3-pip

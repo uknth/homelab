@@ -2,20 +2,26 @@
 # gw01 — Network gateway (Raspberry Pi 5, Debian)
 #
 # Services:
-#   - blocky   : DNS server + ad-blocking  (dns.host.puhome.net)
-#   - nginx    : reverse proxy for all internal services
-#   - certbot  : TLS certificates via Let's Encrypt / Cloudflare DNS
+#   - blocky    : local DNS (names + fallback upstream; blocking off)
+#   - nginx     : reverse proxy for all *.puhome.net services (+ Authentik forward-auth)
+#   - certbot   : *.puhome.net wildcard TLS via Cloudflare DNS-01
+#   - tailscale : subnet router advertising 10.0.2.0/24 (the ONLY Tailscale node)
 
 - name: Deploy gateway services on gw01
   hosts: gw01
   become: true
+  gather_facts: true
   tags: [gw01, gateway]
   roles:
+    - role: system/tailscale
+      tags: [tailscale, vpn, network]
+
     - role: services/network/blocky
       tags: [blocky, dns, network]
 
-    - role: services/network/nginx
-      tags: [nginx, network]
-
+    # certbot must run BEFORE nginx — nginx references the wildcard cert it issues.
     - role: services/network/certbot
       tags: [certbot, tls, network]
+
+    - role: services/network/nginx
+      tags: [nginx, network]

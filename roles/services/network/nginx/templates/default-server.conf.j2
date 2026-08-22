@@ -1,0 +1,10 @@
+# Managed by Ansible (roles/services/network/nginx) — do not edit by hand.
+# Default server: drop connections for unknown Host headers.
+server {
+    listen 80 default_server;
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_certificate     {{ nginx_cert_dir }}/fullchain.pem;
+    ssl_certificate_key {{ nginx_cert_dir }}/privkey.pem;
+    return 444;
+}

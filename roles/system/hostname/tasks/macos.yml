@@ -2,7 +2,7 @@
 # macOS hostname configuration via scutil.
 # Three separate names exist on macOS:
 #   HostName      — the FQDN used by SSH and DNS reverse lookup
-#   LocalHostName — Bonjour/mDNS name (no dots allowed, used as admin01.local)
+#   LocalHostName — Bonjour/mDNS name (no dots allowed, used as ctl01.local)
 #   ComputerName  — human-readable display name shown in Finder / System Settings
 
 - name: Get current HostName

@@ -1,6 +1,6 @@
 ---
 # Entry point — dispatches to OS-specific task file.
-# Sets hostname to <inventory_hostname>.host.<base_domain> (e.g. admin01.host.puhome.net)
+# Sets hostname to <inventory_hostname>.host.<base_domain> (e.g. ctl01.host.puhome.net)
 
 - name: Set hostname (Linux)
   ansible.builtin.import_tasks: linux.yml
