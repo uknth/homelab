@@ -25,7 +25,8 @@ implementation exists in `archive/` to reference. Per user direction, v3 roles a
 | `system/unattended_upgrades` | linux | 🟢 built | net-new — maintenance layer 1 (security pocket, no auto-reboot) |
 | `system/tailscale` | linux | 🟡 planned | `artis3n.tailscale` |
 | `system/beszel_agent` | linux | 🟢 built | moved from archive; native install, **guarded on hub key** (activates in phase 4) |
-| `system/nfs_mounts` | cmp01 | 🔵 net-new | `archive/roles/packages/ops/mount-nas1` (was CIFS→wrong NAS; v3 is NFS→nas01) |
+| `system/nfs_mounts` | cmp01 | 🟢 built | mounts nas01:/mnt/data-pool/media/data at /mnt/media/data (NFSv4.2, fstab); read/write as uid 1001 |
+| `services/storage/truenas_nfs` | nas01 (API) | 🟢 built | manages TrueNAS NFS export defs via REST API (create/update); restricts media export to cmp01 |
 | `system/brew` | macos | 🟡 planned | — |
 | `system/colima` | ctl01 | 🔵 net-new | — (Docker-compatible runtime on macOS; required by `dev/kind`) |
 

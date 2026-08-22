@@ -44,29 +44,51 @@ the downloader's `torrents/` dir and the library's `media/` dir are under the sa
 Splitting media into separate mounts (`/mnt/movies`, `/mnt/tv`, …) breaks hardlinking, doubles
 disk usage, and turns imports into slow full copies.
 
-## Permissions — pin a shared GID
+## Permissions — align to the existing owner (uid/gid 1001)
 
-Ownership drift between host and containers is the second-most-common arr failure. Fix it once:
+Ownership drift between host and containers is the second-most-common arr failure. The
+existing library on the NAS is **already owned by uid/gid 1001** — which is exactly the
+`ansible` user on `cmp01` (the export has no `maproot`, so NFS passes the client's uid/gid
+straight through). So v3 **aligns to 1001** rather than forcing a new `media` GID and chowning
+500+ items:
 
-- Create a `media` group with a **pinned GID** (e.g. `1500`) — same number on the TrueNAS
-  dataset and on `cmp01`.
-- Own the exported dataset `root:media` (or `apps:media`) with `2775` (setgid) so new files
-  inherit the group.
-- Set `PUID`/`PGID` **identically** in every container that touches `/mnt/media`.
-- Do **not** derive UID/GID from `ansible_user` at runtime (the v2 mistake — it drifts per
-  host). Pin `media_gid: 1500` and a `media_uid` in `hosts/group_vars/all/vars.yml`.
+- `media_uid: 1001` / `media_gid: 1001` in `hosts/group_vars/all/vars.yml`.
+- Every container that touches the media mount runs `PUID`/`PGID` = these, so files it writes
+  stay owned consistently and the arr apps can hardlink/move freely.
+- These are **pinned constants**, not derived from `ansible_user` at runtime (the v2 mistake —
+  it drifts per host). They just happen to equal `cmp01`'s ansible uid today.
 
-## `nas01` — TrueNAS (semi-managed)
+(If the fleet ever gains a second media consumer whose ansible uid differs, switch the export
+to a `mapall`/`maproot` of 1001 on the TrueNAS side so the client uid no longer has to match.)
 
-NFS is live (`10.0.2.6:2049`). Ansible manages the export through the TrueNAS **REST API**
-(`ansible.builtin.uri` against the middleware; no core module exists), idempotently:
+## Layout of the export
 
-1. Ensure the `media` dataset exists.
-2. Ensure an NFS share for it exists, restricted to `10.0.2.5` (`cmp01`), with
-   `maproot`/`mapall` to the `media` UID/GID.
+The NFS export is the single handoff dir — one filesystem, so hardlinks/atomic moves work:
 
-Needs `vault_truenas_api_key` in the vault. `cmp01` mounts it via a `system/nfs_mounts` role
-(`ansible.posix.mount`, `fstype: nfs`, `state: mounted`, in fstab).
+```
+/mnt/media/data/            (NFS mount of nas01:/mnt/data-pool/media/data)
+  downloads/                downloader output
+  movies/  shows/  music/  books/   libraries (arr-managed)
+  whisparr/  yt/
+```
+
+## `nas01` — TrueNAS (semi-managed via API)
+
+NFS is live (`10.0.2.6:2049`), TrueNAS SCALE 25.10. The `media` dataset
+(`data-pool/media`) and its `data` export **already exist with real data** — Ansible does
+**not** create datasets. The `services/storage/truenas_nfs` role manages the *export
+definition* through the TrueNAS **REST API** (`ansible.builtin.uri`; no core module exists),
+idempotently (create-if-missing, update-if-drifted):
+
+- Ensures the export for `/mnt/data-pool/media/data` exists and is enabled.
+- Restricts allowed clients (`hosts`) to `10.0.2.5` (`cmp01`) — verified not to disrupt an
+  established mount.
+
+The role runs on the **control node** (`connection: local`, `playbooks/hosts/nas01.yml`)
+against the API; nas01 has no ansible account. Needs `vault_truenas_api_key`.
+
+`cmp01` mounts the export via the `system/nfs_mounts` role (`ansible.posix.mount`,
+`fstype: nfs4`, `state: mounted`, persisted in fstab) at `/mnt/media/data`.
 
 ## `nas02` — Synology (backup target)
 

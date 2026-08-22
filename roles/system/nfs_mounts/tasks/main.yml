@@ -1,0 +1,39 @@
+---
+# Install the NFS client and mount configured shares (persisted in fstab).
+
+- name: Install NFS client
+  become: true
+  ansible.builtin.apt:
+    name: nfs-common
+    state: present
+    update_cache: true
+
+- name: Ensure mount point parent directories exist
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Mount NFS shares (and persist in fstab)
+  become: true
+  ansible.posix.mount:
+    src: "{{ item.server }}:{{ item.export }}"
+    path: "{{ item.path }}"
+    fstype: nfs4
+    opts: "{{ item.opts }}"
+    state: mounted
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.server }}:{{ item.export }} -> {{ item.path }}"
+
+- name: Verify each NFS mount is active and readable
+  become: true
+  ansible.builtin.command: "findmnt --noheadings --target {{ item.path }}"
+  changed_when: false
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"

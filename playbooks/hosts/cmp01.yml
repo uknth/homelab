@@ -12,8 +12,13 @@
 - name: Deploy compute services on cmp01
   hosts: cmp01
   become: true
+  gather_facts: true
   tags: [cmp01, compute]
   roles:
+    # Storage first — the media stack depends on the NFS mount at /mnt/media/data.
+    - role: system/nfs_mounts
+      tags: [nfs, storage]
+
     - role: services/media/arr
       tags: [arr, media, downloader]
 

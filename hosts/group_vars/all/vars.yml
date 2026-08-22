@@ -26,12 +26,18 @@ service_root: "/opt/homelab"
 config_dir: "{{ service_root }}/config"
 data_dir: "{{ service_root }}/data"
 
-# Single NFS mount from nas01 (10.0.2.6). One mount, with data/ inside it, so
-# hardlinks/atomic-moves work across downloader and library. See docs/spec/storage.md.
+# Single NFS mount from nas01 (10.0.2.6). The export IS the "data" handoff dir
+# (holds downloads/, movies/, shows/, music/, ... on one filesystem so hardlinks
+# and atomic moves work). Mounted at media_data_dir. See docs/spec/storage.md.
+media_nfs_server: "{{ hostvars['nas01'].ansible_host }}"   # 10.0.2.6
+media_nfs_export: "/mnt/data-pool/media/data"              # existing TrueNAS NFS export
 media_root: "/mnt/media"
+media_data_dir: "{{ media_root }}/data"                    # local mount point == the export
 
-# Pinned, fleet-wide media ownership. Do NOT derive from ansible_user at runtime.
-media_uid: 1500
-media_gid: 1500
+# Media ownership: the existing library on the NAS is already owned by uid/gid
+# 1001 (the `ansible` user on cmp01), so we align to that rather than forcing a
+# new GID and chowning 500+ items. Containers run PUID/PGID = these.
+media_uid: 1001
+media_gid: 1001
 
 timezone: Asia/Kolkata

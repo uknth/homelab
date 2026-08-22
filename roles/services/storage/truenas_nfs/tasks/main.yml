@@ -1,0 +1,60 @@
+---
+# Ensure each desired NFS export exists and matches (create or update via API).
+
+- name: Fetch current NFS exports
+  ansible.builtin.uri:
+    url: "{{ truenas_api_base }}/sharing/nfs"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ truenas_api_key }}"
+    validate_certs: false
+    return_content: true
+  register: _nfs_current
+  no_log: true
+
+- name: Create missing NFS exports
+  ansible.builtin.uri:
+    url: "{{ truenas_api_base }}/sharing/nfs"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ truenas_api_key }}"
+    body_format: json
+    body:
+      path: "{{ item.path }}"
+      hosts: "{{ item.hosts | default([]) }}"
+      ro: "{{ item.ro | default(false) }}"
+      enabled: "{{ item.enabled | default(true) }}"
+      comment: "{{ item.comment | default('managed by Ansible') }}"
+    status_code: [200, 201]
+    validate_certs: false
+  changed_when: true
+  loop: "{{ truenas_nfs_exports }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: item.path not in (_nfs_current.json | map(attribute='path') | list)
+  no_log: true
+
+- name: Update drifted NFS exports (hosts / ro / enabled)
+  ansible.builtin.uri:
+    url: "{{ truenas_api_base }}/sharing/nfs/id/{{ _match.id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ truenas_api_key }}"
+    body_format: json
+    body:
+      hosts: "{{ item.hosts | default([]) }}"
+      ro: "{{ item.ro | default(false) }}"
+      enabled: "{{ item.enabled | default(true) }}"
+    validate_certs: false
+  changed_when: true
+  vars:
+    _match: "{{ (_nfs_current.json | selectattr('path', 'equalto', item.path) | list | first) | default({}) }}"
+  loop: "{{ truenas_nfs_exports }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - _match.id is defined
+    - (_match.hosts | default([]) | sort) != (item.hosts | default([]) | sort)
+        or (_match.ro | default(false)) != (item.ro | default(false))
+        or (_match.enabled | default(true)) != (item.enabled | default(true))
+  no_log: true

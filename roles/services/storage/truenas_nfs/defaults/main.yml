@@ -1,0 +1,18 @@
+---
+# services/storage/truenas_nfs — manage NFS exports on nas01 via the TrueNAS
+# REST API (idempotent: create-if-missing, update-if-drifted). Runs from the
+# control node (connection: local) against https://<nas01>/api/v2.0.
+#
+# nas01 stays otherwise unmanaged — this only manages export definitions so
+# they're reproducible IaC. It does NOT create datasets (they already exist).
+
+truenas_api_base: "https://{{ ansible_host }}/api/v2.0"
+truenas_api_key: "{{ vault_truenas_api_key }}"
+
+# Desired NFS exports. Managed fields: hosts (allowed clients), ro, enabled.
+truenas_nfs_exports:
+  - path: "{{ media_nfs_export }}"          # /mnt/data-pool/media/data
+    hosts: ["{{ hostvars['cmp01'].ansible_host }}"]   # restrict to cmp01
+    ro: false
+    enabled: true
+    comment: "media handoff — managed by Ansible (v3)"

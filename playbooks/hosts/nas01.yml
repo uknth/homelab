@@ -1,0 +1,15 @@
+---
+# nas01 — TrueNAS storage (semi-managed via API only).
+#
+# nas01 has no ansible account and is never SSH-managed. This play runs on the
+# CONTROL NODE (connection: local) and manages the NFS export definitions
+# through the TrueNAS REST API, so they're reproducible IaC.
+
+- name: Manage TrueNAS NFS exports (nas01)
+  hosts: nas01
+  connection: local
+  gather_facts: false
+  tags: [nas01, storage, truenas]
+  roles:
+    - role: services/storage/truenas_nfs
+      tags: [truenas-nfs, nfs, storage]

@@ -22,6 +22,10 @@
 - name: DNS appliance (dns01)
   ansible.builtin.import_playbook: playbooks/hosts/dns01.yml
 
+# Phase 3 — TrueNAS NFS export management via API (nas01, runs on control node).
+- name: Storage exports (nas01)
+  ansible.builtin.import_playbook: playbooks/hosts/nas01.yml
+
 #- name: Compute services (cmp01)
 #  ansible.builtin.import_playbook: playbooks/hosts/cmp01.yml
 

@@ -10,8 +10,7 @@ Build-out phases for v3, in dependency order. Status reflects what's actually wi
       `ansible managed -m ping` is green and sudo resolves to root everywhere. Vault password
       file (`~/.config/homelab/.vault_pass`) and vault keys (`vault_public_key`,
       `vault_sudo_password`, `vault_truenas_api_key`) all in place.
-- [ ] **TrueNAS API key** — present in vault as `vault_truenas_api_key`; still needs a live
-      call test against `https://10.0.2.6/api/v2.0/` when the storage phase starts.
+- [x] **TrueNAS API** — `vault_truenas_api_key` verified against `https://10.0.2.6/api/v2.0/` (SCALE 25.10); NFS export managed via `services/storage/truenas_nfs` (phase 3).
 - [ ] **Mixed Debian releases** — `util01` is Debian 13 (trixie); `gw01`/`cmp01` are Debian 12
       (bookworm). `system/apt` and `system/docker` must resolve the codename dynamically.
 - [ ] **ctl01 IP** — reserve `10.0.2.4` in Omada, update inventory.
@@ -24,7 +23,7 @@ Build-out phases for v3, in dependency order. Status reflects what's actually wi
 | 0 | Spec & plan rewritten to real hardware; `hosts/hosts.yml` corrected; `user`/`media_gid` defined; Immich/Vaultwarden dropped | 🟢 done (this pass) |
 | 1 | `system/` bootstrap (all Linux): ansible_user, hostname, apt, ntp, docker, **unattended_upgrades**, beszel_agent. (Tailscale is NOT here — it's gw01-only, phase 2.) | 🟢 built + run on gw01/cmp01/util01 (2026-08-22). All roles graduated out of `archive/`. NTP is native timesyncd; Docker codename-dynamic (verified on bookworm + trixie); beszel_agent guarded on hub key (activates phase 4). Idempotent, live gw01 DNS undisturbed. |
 | 2 | `gw01`: **Tailscale subnet router** (10.0.2.0/24, the only TS node), Blocky (local + fallback, blocking off), nginx + `*.puhome.net` wildcard + **Authentik forward-auth snippet**, certbot (Cloudflare DNS-01); Pi-hole conditional-forward | 🟢 deployed 2026-08-22 — Blocky live; Tailscale up + advertising 10.0.2.0/24; wildcard `*.puhome.net` cert issued (auto-renew timer active); nginx native serving TLS (default-deny, vhosts added per-service in phases 4–5). **Manual follow-ups:** approve subnet route + disable key expiry for gw01 in Tailscale admin console; add Pi-hole conditional-forward on dns01. |
-| 3 | **Storage**: TrueNAS `media` dataset + NFS export via API; `media` GID; `system/nfs_mounts` on cmp01 | 🔵 planned, net-new |
+| 3 | **Storage**: NFS export managed via TrueNAS API (`services/storage/truenas_nfs`, restricted to cmp01); `system/nfs_mounts` mounts it at /mnt/media/data on cmp01 | 🟢 done 2026-08-22 — mount live (rw, fstab), uid/gid aligned to existing owner 1001 (not 1500); export idempotent + drift-corrected |
 | 4 | `util01`: **Authentik (SSO — deploy FIRST, everything else gates on it)**, Beszel hub, Uptime Kuma, ntfy, Diun, Glance, Portainer, Dozzle, n8n | 🟡 planned |
 | 5a | `cmp01`: arr stack (VPN scoped to qBittorrent only) | 🟡 planned |
 | 5b | `cmp01`: Jellyfin + Jellyseerr (NVENC), Kavita | 🟡 planned |
