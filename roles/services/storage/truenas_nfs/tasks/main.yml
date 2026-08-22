@@ -11,6 +11,7 @@
     return_content: true
   register: _nfs_current
   no_log: true
+  check_mode: false      # read-only GET; must run in --check so the diff logic works
 
 - name: Create missing NFS exports
   ansible.builtin.uri:
