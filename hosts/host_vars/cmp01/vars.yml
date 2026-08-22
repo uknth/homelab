@@ -1,0 +1,10 @@
+---
+# cmp01 host vars
+
+# ops/restic — Paperless is the only thing cmp01 backs up (user directive).
+# document_exporter writes an engine-independent copy into paperless/export,
+# which is what restic then snapshots.
+restic_paths:
+  - "{{ service_root }}/paperless/export"
+restic_pre_commands:
+  - "docker exec -t paperless document_exporter /usr/src/paperless/export --delete"

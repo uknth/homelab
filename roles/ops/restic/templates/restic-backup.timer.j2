@@ -1,0 +1,11 @@
+# Managed by Ansible — ops/restic
+[Unit]
+Description=Nightly homelab restic backup
+
+[Timer]
+OnCalendar={{ restic_timer_calendar }}
+RandomizedDelaySec={{ restic_timer_randomized_delay }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -38,3 +38,12 @@
 
 #- name: AI workloads (ai01)
 #  ansible.builtin.import_playbook: playbooks/hosts/ai01.yml
+
+# Phase 6 — backups (restic -> nas02, SFTP). Scoped to Paperless + Syncthing.
+- name: Backups (backup_clients)
+  ansible.builtin.import_playbook: playbooks/ops/backups.yml
+
+# Phase 6 — OS patching. Opt-in only: runs with `--tags patch`.
+- name: OS patching (opt-in)
+  ansible.builtin.import_playbook: playbooks/ops/patch.yml
+  tags: [patch, never]

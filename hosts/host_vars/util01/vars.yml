@@ -1,0 +1,6 @@
+---
+# util01 host vars
+
+# ops/restic — Syncthing data is the only thing util01 backs up (user directive).
+restic_paths:
+  - "{{ service_root }}/syncthing/data"

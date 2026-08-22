@@ -41,17 +41,30 @@ major-version bump is how you lose data.
 
 ## 4. Backups — Restic → nas02 over SFTP
 
-Role `ops/restic` on every `backup_clients` host, on a systemd timer (nightly):
+Role `ops/restic` on `backup_clients`, on a systemd timer (nightly ~02:30 + jitter).
 
-- **Included:** `/opt/homelab` (all service config + SQLite/Postgres state).
-- **Pre-hook on `cmp01`:** `paperless document_exporter` so documents are exported in a
-  restorable, engine-independent form before the snapshot.
-- **Excluded:** `/mnt/media` — far too large for Restic; handled by TrueNAS snapshots instead.
-- **Repo:** `sftp:backup@10.0.2.3:/volume1/restic/<host>` (Synology; NFS is off, SFTP is on).
+**Scope is deliberately narrow (user directive 2026-08-22): only two data sets.**
+Everything else on `/opt/homelab` is reproducible from this Ansible repo, so it's
+rebuilt by re-running the role — not restored. Each host declares its own
+`restic_paths` (+ `restic_pre_commands`) in host_vars; a host with none self-skips.
+
+| Host | Data set | Pre-hook |
+|---|---|---|
+| `cmp01` | `/opt/homelab/paperless/export` | `docker exec paperless document_exporter … --delete` (engine-independent export) |
+| `util01` | `/opt/homelab/syncthing/data` | — |
+
+- **Repo:** `sftp:backup@10.0.2.3:/volume1/restic/<host>` (Synology; NFS off, SFTP on),
+  reached with a dedicated `keys/restic_backup_ed25519` key by the root-run job.
+- **Excluded:** bulk media (`/mnt/media`) — TrueNAS snapshots handle that.
 - **Retention:** `--keep-daily 7 --keep-weekly 4 --keep-monthly 6`, `restic forget --prune`.
-- **Verification:** a weekly `restic check`; every run pings a dedicated **Uptime Kuma**
-  push monitor on success, so a *silent* backup failure surfaces as a red dot rather than
-  going unnoticed.
+- **Verification:** weekly `restic check --read-data-subset=5%` (Sundays); every run pings a
+  dedicated **Uptime Kuma** push monitor on success (`restic_kuma_push_url`) and POSTs to
+  **ntfy** `homelab-backup` on failure, so a *silent* backup failure surfaces as a red dot.
+
+**Manual prerequisites (one-time, on the Synology `nas02`):** enable SSH; create a `backup`
+user with a home dir; add `keys/restic_backup_ed25519.pub` to its `~/.ssh/authorized_keys`;
+create a `/volume1/restic` folder it can write. Add `vault_restic_password` to the vault.
+Then `ansible-playbook site.yml --tags backup`.
 
 Secrets: `vault_restic_password`, plus an SSH key for the `backup` user on `nas02`.
 

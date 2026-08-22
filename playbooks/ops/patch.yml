@@ -1,0 +1,70 @@
+---
+# playbooks/ops/patch.yml — deliberate full OS upgrade across the Linux fleet.
+#
+# Opt-in only (tagged 'never'): runs solely when you ask for it —
+#   ansible-playbook site.yml --tags patch
+# Hosts upgrade one at a time (serial: 1); gw01 (DNS + reverse proxy) goes last
+# and alone so the fleet never loses DNS/proxy mid-run.
+
+- name: Full OS upgrade (compute + utility first)
+  hosts: linux:!gw01
+  become: true
+  serial: 1
+  gather_facts: true
+  tags: [patch, never]
+  tasks:
+    - name: apt update
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: apt full-upgrade
+      ansible.builtin.apt:
+        upgrade: full
+      register: patch_upgrade
+
+    - name: apt autoremove + clean
+      ansible.builtin.apt:
+        autoremove: true
+        autoclean: true
+
+    - name: Check for pending reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: patch_reboot
+
+    - name: Reboot if required
+      ansible.builtin.reboot:
+        msg: "Reboot after homelab patch run"
+        reboot_timeout: 600
+      when: patch_reboot.stat.exists
+
+- name: Full OS upgrade (gw01 last, alone)
+  hosts: gw01
+  become: true
+  serial: 1
+  gather_facts: true
+  tags: [patch, never]
+  tasks:
+    - name: apt update
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: apt full-upgrade
+      ansible.builtin.apt:
+        upgrade: full
+
+    - name: apt autoremove + clean
+      ansible.builtin.apt:
+        autoremove: true
+        autoclean: true
+
+    - name: Check for pending reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: patch_reboot_gw
+
+    - name: Reboot if required
+      ansible.builtin.reboot:
+        msg: "Reboot after homelab patch run"
+        reboot_timeout: 600
+      when: patch_reboot_gw.stat.exists

@@ -1,0 +1,101 @@
+---
+# Only provision hosts that actually contribute a data set.
+- name: Skip hosts with nothing to back up
+  ansible.builtin.meta: end_host
+  when: restic_paths | length == 0
+
+- name: Install restic
+  become: true
+  ansible.builtin.apt:
+    name: restic
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure /root/.ssh exists
+  become: true
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install backup SSH private key
+  become: true
+  ansible.builtin.copy:
+    src: "{{ restic_ssh_key_src }}"
+    dest: "{{ restic_ssh_key_dest }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Pre-seed nas02 host key (accept-new on first connect)
+  become: true
+  ansible.builtin.known_hosts:
+    path: "{{ restic_known_hosts }}"
+    name: "{{ restic_host }}"
+    key: "{{ lookup('pipe', 'ssh-keyscan -T 5 ' ~ restic_host ~ ' 2>/dev/null') }}"
+    state: present
+  ignore_errors: true   # not fatal; script uses StrictHostKeyChecking=accept-new
+
+- name: Create restic config dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ restic_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Write restic repository password
+  become: true
+  ansible.builtin.copy:
+    content: "{{ restic_password }}"
+    dest: "{{ restic_password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Template backup script
+  become: true
+  ansible.builtin.template:
+    src: homelab-backup.sh.j2
+    dest: "{{ restic_script }}"
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Template systemd service + timer
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/etc/systemd/system/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { src: "restic-backup.service.j2", dest: "restic-backup.service" }
+    - { src: "restic-backup.timer.j2",   dest: "restic-backup.timer" }
+  notify: Reload systemd
+
+- name: Flush handlers so the unit is known before we enable it
+  ansible.builtin.meta: flush_handlers
+
+- name: Initialise the restic repository if needed
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ restic_script }} init"
+  register: restic_init
+  changed_when: "'created restic repository' in restic_init.stdout"
+  failed_when:
+    - restic_init.rc != 0
+    - "'already initialized' not in restic_init.stdout + restic_init.stderr"
+
+- name: Enable + start the backup timer
+  become: true
+  ansible.builtin.systemd:
+    name: restic-backup.timer
+    enabled: true
+    state: started

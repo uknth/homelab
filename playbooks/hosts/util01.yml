@@ -47,3 +47,6 @@
 
     - role: services/productivity/n8n
       tags: [n8n, automation]
+
+    - role: services/productivity/syncthing
+      tags: [syncthing, sync, backup-source]

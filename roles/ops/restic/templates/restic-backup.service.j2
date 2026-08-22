@@ -1,0 +1,11 @@
+# Managed by Ansible — ops/restic
+[Unit]
+Description=Homelab restic backup ({{ inventory_hostname }} -> nas02)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+IOSchedulingClass=idle
+ExecStart={{ restic_script }}

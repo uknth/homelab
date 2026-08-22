@@ -1,0 +1,52 @@
+---
+# ops/restic — encrypted, deduplicated backups to nas02 (Synology) over SFTP.
+#
+# SCOPE (user directive 2026-08-22): we back up exactly two data sets, nothing
+# else — Paperless documents and Syncthing data. This is NOT a blanket
+# /opt/homelab backup. Each host declares what it contributes via restic_paths
+# (+ restic_pre_commands) in its host_vars; a host with an empty restic_paths
+# is skipped entirely.
+#
+# Repo per host:  sftp:backup@10.0.2.3:/volume1/restic/<host>
+# Requires (manual, one-time, on the Synology):
+#   - SSH service enabled; a 'backup' user with a home dir
+#   - the restic backup public key in that user's ~/.ssh/authorized_keys
+#   - a /volume1/restic shared folder writable by 'backup'
+# and in the vault: vault_restic_password.
+
+restic_user: "backup"
+restic_host: "{{ hostvars['nas02'].ansible_host }}"     # 10.0.2.3
+restic_repo_root: "/volume1/restic"
+restic_repo: "sftp:{{ restic_user }}@{{ restic_host }}:{{ restic_repo_root }}/{{ inventory_hostname }}"
+restic_password: "{{ vault_restic_password }}"
+
+# SSH key used by the (root-run) systemd job to reach the Synology backup user.
+# Private key lives on the control node under keys/ (git-ignored) and is copied
+# to the host; the matching .pub goes in the Synology user's authorized_keys.
+restic_ssh_key_src: "{{ inventory_dir }}/../keys/restic_backup_ed25519"
+restic_ssh_key_dest: "/root/.ssh/restic_backup_ed25519"
+restic_known_hosts: "/root/.ssh/known_hosts"
+
+# What this host backs up. OVERRIDE per host in host_vars. Empty => host skipped.
+restic_paths: []
+# Shell commands run (as root) before the snapshot, e.g. Paperless export.
+restic_pre_commands: []
+
+# Retention
+restic_keep_daily: 7
+restic_keep_weekly: 4
+restic_keep_monthly: 6
+
+# Nightly at 02:30 (+ randomized delay to avoid all hosts hammering nas02 at once)
+restic_timer_calendar: "*-*-* 02:30:00"
+restic_timer_randomized_delay: "900"
+
+# Optional health signals (leave "" to disable).
+# Uptime Kuma push monitor URL — pinged on success (…?status=up) / failure.
+restic_kuma_push_url: ""
+# ntfy topic URL — POSTed on failure.
+restic_ntfy_url: "http://{{ hostvars['util01'].ansible_host }}:8091/homelab-backup"
+
+restic_config_dir: "/etc/restic"
+restic_password_file: "{{ restic_config_dir }}/password"
+restic_script: "/usr/local/bin/homelab-backup"

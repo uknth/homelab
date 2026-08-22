@@ -1,0 +1,19 @@
+# Managed by Ansible — services/productivity/syncthing
+services:
+  syncthing:
+    image: {{ syncthing_image }}
+    container_name: syncthing
+    hostname: syncthing
+    restart: unless-stopped
+    environment:
+      - PUID={{ syncthing_puid }}
+      - PGID={{ syncthing_pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      - {{ syncthing_root_dir }}/config:/config
+      - {{ syncthing_root_dir }}/data:/data
+    ports:
+      - "{{ syncthing_gui_port }}:8384"                 # web UI (nginx -> forward-auth)
+      - "{{ syncthing_sync_port }}:22000/tcp"           # sync protocol (TCP)
+      - "{{ syncthing_sync_port }}:22000/udp"           # sync protocol (QUIC)
+      - "{{ syncthing_discovery_port }}:21027/udp"      # local discovery

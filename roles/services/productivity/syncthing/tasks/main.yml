@@ -1,0 +1,32 @@
+---
+- name: Create syncthing dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ syncthing_puid }}"
+    group: "{{ syncthing_pgid }}"
+    mode: "0755"
+  loop:
+    - "{{ syncthing_root_dir }}"
+    - "{{ syncthing_root_dir }}/compose"
+    - "{{ syncthing_root_dir }}/config"
+    - "{{ syncthing_root_dir }}/data"
+
+- name: Template syncthing compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ syncthing_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart syncthing
+
+- name: Deploy syncthing
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ syncthing_root_dir }}/compose"
+    project_name: "syncthing"
+    state: present
+    pull: missing

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Managed by Ansible — ops/restic. Homelab backup wrapper for {{ inventory_hostname }}.
+#   homelab-backup init   -> initialise the repo if absent (idempotent)
+#   homelab-backup        -> pre-hooks, snapshot, prune, health ping
+set -uo pipefail
+
+export RESTIC_REPOSITORY="{{ restic_repo }}"
+export RESTIC_PASSWORD_FILE="{{ restic_password_file }}"
+# Force restic's sftp to use our dedicated key + non-interactive host-key policy.
+export RESTIC_SFTP_COMMAND="ssh -i {{ restic_ssh_key_dest }} -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ restic_known_hosts }} {{ restic_user }}@{{ restic_host }} -s sftp"
+RESTIC=(restic -o "sftp.command=${RESTIC_SFTP_COMMAND}")
+
+log()  { echo "[$(date '+%F %T')] $*"; }
+
+kuma_ping() {  # $1 = up|down  $2 = message
+  local url="{{ restic_kuma_push_url }}"
+  [ -z "$url" ] && return 0
+  curl -fsS -m 15 "${url}?status=$1&msg=$(printf '%s' "$2" | sed 's/ /%20/g')" >/dev/null 2>&1 || true
+}
+
+ntfy_fail() {  # $1 = message
+  local url="{{ restic_ntfy_url }}"
+  [ -z "$url" ] && return 0
+  curl -fsS -m 15 -H "Title: Backup FAILED on {{ inventory_hostname }}" \
+       -H "Priority: high" -H "Tags: rotating_light" -d "$1" "$url" >/dev/null 2>&1 || true
+}
+
+# --- init mode -------------------------------------------------------------
+if [ "${1:-}" = "init" ]; then
+  if "${RESTIC[@]}" cat config >/dev/null 2>&1; then
+    log "repository already initialized"; exit 0
+  fi
+  log "initializing repository ${RESTIC_REPOSITORY}"
+  "${RESTIC[@]}" init
+  exit $?
+fi
+
+# --- backup mode -----------------------------------------------------------
+fail() { log "ERROR: $1"; ntfy_fail "$1"; kuma_ping down "$1"; exit 1; }
+
+log "=== backup start on {{ inventory_hostname }} ==="
+
+{% if restic_pre_commands | length > 0 %}
+log "running pre-hooks"
+{% for cmd in restic_pre_commands %}
+if ! {{ cmd }}; then fail "pre-hook failed: {{ cmd | replace('"','') }}"; fi
+{% endfor %}
+{% endif %}
+
+log "snapshotting: {{ restic_paths | join(' ') }}"
+if ! "${RESTIC[@]}" backup --tag homelab --host {{ inventory_hostname }} {{ restic_paths | join(' ') }}; then
+  fail "restic backup failed"
+fi
+
+log "pruning (keep d{{ restic_keep_daily }}/w{{ restic_keep_weekly }}/m{{ restic_keep_monthly }})"
+if ! "${RESTIC[@]}" forget --prune \
+      --keep-daily {{ restic_keep_daily }} \
+      --keep-weekly {{ restic_keep_weekly }} \
+      --keep-monthly {{ restic_keep_monthly }}; then
+  fail "restic forget/prune failed"
+fi
+
+# Weekly integrity check (Sundays), structure + a 5% data sample.
+if [ "$(date +%u)" = "7" ]; then
+  log "weekly restic check"
+  if ! "${RESTIC[@]}" check --read-data-subset=5%; then
+    fail "restic check found repository errors"
+  fi
+fi
+
+log "=== backup OK ==="
+kuma_ping up "backup ok"
+exit 0

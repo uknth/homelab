@@ -1,0 +1,18 @@
+---
+# playbooks/ops/backups.yml — Phase 6 backups.
+#
+# Restic -> nas02 (Synology) over SFTP, scoped to the two data sets we care
+# about: Paperless (cmp01) and Syncthing (util01). Each host declares its
+# restic_paths in host_vars; hosts with none self-skip (ops/restic end_host).
+#
+#   ansible-playbook site.yml --tags backup
+#   ansible-playbook playbooks/ops/backups.yml
+
+- name: Configure homelab backups
+  hosts: backup_clients
+  become: true
+  gather_facts: true
+  tags: [backup, restic, maintenance]
+  roles:
+    - role: ops/restic
+      tags: [restic]

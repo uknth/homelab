@@ -105,6 +105,11 @@ included, verification).
 
 | Data | Mechanism | Where |
 |---|---|---|
-| Service config + databases (`/opt/homelab`) | Restic → `nas02` over SFTP | `backup_clients` |
-| Paperless documents | `document_exporter` pre-hook, then Restic | `cmp01` |
-| Bulk media (`/mnt/media`) | TrueNAS snapshots + replication (not Restic — too large) | `nas01` |
+| Paperless documents | `document_exporter` pre-hook -> Restic → `nas02` (SFTP) | `cmp01` |
+| Syncthing data (`/opt/homelab/syncthing/data`) | Restic → `nas02` (SFTP) | `util01` |
+| Bulk media (`/mnt/media`) | TrueNAS snapshots (not Restic — too large) | `nas01` |
+
+**Backup scope is deliberately narrow** (user directive 2026-08-22): only the two
+data sets above are Restic'd — *not* all of `/opt/homelab`. Everything else
+(service config, DBs) is reproducible from this Ansible repo, so it is rebuilt by
+re-running the role, not restored from backup.

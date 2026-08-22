@@ -1,0 +1,23 @@
+---
+# services/productivity/syncthing — standalone Syncthing on util01.
+#
+# Continuous file sync between the user's devices and the homelab. Its synced
+# data lives under {{ syncthing_root_dir }}/data on LOCAL disk so it is a clean,
+# self-contained Restic target (one of the two data sets we back up — see
+# docs/spec/maintenance.md). Config (device IDs, folder DB, keys) lives beside it.
+#
+# GUI is gated by Authentik forward-auth at the nginx layer (sync.puhome.net,
+# sso: true) exactly like the other admin UIs; the sync protocol (22000) is a
+# direct device-to-device TLS channel and never goes through nginx.
+
+syncthing_image: "lscr.io/linuxserver/syncthing:latest"
+syncthing_root_dir: "{{ service_root }}/syncthing"     # /opt/homelab/syncthing
+
+# Run as the shared homelab owner (1001) so synced files carry consistent
+# ownership and Restic reads them without permission games.
+syncthing_puid: "{{ media_uid }}"
+syncthing_pgid: "{{ media_gid }}"
+
+syncthing_gui_port: 8384          # web UI (proxied via gw01 nginx, forward-auth)
+syncthing_sync_port: 22000        # sync protocol (TCP + QUIC/UDP), LAN + relay
+syncthing_discovery_port: 21027   # local discovery (UDP broadcast)

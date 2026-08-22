@@ -1,0 +1,7 @@
+---
+- name: Restart syncthing
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ syncthing_root_dir }}/compose"
+    project_name: "syncthing"
+    state: restarted
