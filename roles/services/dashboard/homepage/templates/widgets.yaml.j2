@@ -1,0 +1,15 @@
+# Managed by Ansible — services/dashboard/homepage
+- greeting:
+    text_size: xl
+    text: Homelab
+- datetime:
+    text_size: xl
+    format: { dateStyle: long, timeStyle: short, hour12: false }
+- resources:
+    label: util01
+    cpu: true
+    memory: true
+    disk: /
+- search:
+    provider: duckduckgo
+    target: _blank

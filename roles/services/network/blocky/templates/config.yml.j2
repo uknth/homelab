@@ -33,6 +33,12 @@ customDNS:
     {{ name }}: {{ ip }}
 {% endfor %}
 
+# IPv4-only network: drop AAAA queries so clients never try (unroutable)
+# IPv6 addresses — prevents container HTTP clients hanging on IPv6.
+filtering:
+  queryTypes:
+    - AAAA
+
 # Blocking is intentionally OFF — Pi-hole (dns01) owns ad/tracker blocking.
 blocking:
   loading:

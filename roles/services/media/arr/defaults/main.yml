@@ -1,0 +1,33 @@
+---
+# services/media/arr — download + management stack on cmp01.
+#
+# KEY v3 FIX vs v2: only qBittorrent (and its port-forward helper) run inside the
+# gluetun VPN netns. Prowlarr/Sonarr/Radarr/Lidarr/Bazarr sit on a normal bridge
+# network, so a VPN blip no longer takes down the whole stack. They reach qbit
+# via gluetun's published port (http://gluetun:8080 on the arr network).
+
+arr_root_dir: "{{ service_root }}/arr"          # /opt/homelab/arr — configs (local disk)
+arr_data_dir: "{{ media_data_dir }}"            # /mnt/media/data — single handoff mount
+arr_puid: "{{ media_uid }}"                     # 1001
+arr_pgid: "{{ media_gid }}"                     # 1001
+
+# ---- VPN (gluetun + PIA via WireGuard) ----
+arr_vpn_provider: "private internet access"
+arr_vpn_type: "openvpn"
+arr_vpn_user: "{{ vault_pia_user }}"
+arr_vpn_password: "{{ vault_pia_password }}"
+arr_vpn_regions: "Netherlands"                  # PF-capable region
+arr_lan_subnet: "10.0.2.0/24"
+
+# NOTE: qbittorrent-port auto-sync helper removed (fiddly); nzbget (Usenet) is
+# the primary downloader. Set qbit listen port manually if needed, or re-add later.
+# ---- host ports (cmp01) ----
+arr_nzbget_port: 6789            # Usenet (primary downloader; NOT behind VPN)
+arr_qbittorrent_port: 8080
+arr_prowlarr_port: 9696
+arr_sonarr_port: 8989
+arr_radarr_port: 7878
+arr_lidarr_port: 8686
+arr_bazarr_port: 6767
+
+arr_ls_image_tag: "latest"                      # linuxserver.io tag

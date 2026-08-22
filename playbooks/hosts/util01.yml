@@ -39,8 +39,8 @@
     - role: services/monitoring/dozzle
       tags: [dozzle, logs, monitoring]
 
-    - role: services/dashboard/glance
-      tags: [glance, dashboard]
+    - role: services/dashboard/homepage
+      tags: [homepage, dashboard]
 
     - role: services/dashboard/portainer
       tags: [portainer, dashboard]

@@ -1,0 +1,129 @@
+# Managed by Ansible — services/media/arr
+networks:
+  arr:
+    name: arr
+
+services:
+  # ---- VPN gateway: ONLY qbittorrent uses this netns ----
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      - arr
+    ports:
+      - "{{ arr_qbittorrent_port }}:{{ arr_qbittorrent_port }}"   # qbit web UI, via gluetun
+    volumes:
+      - {{ arr_root_dir }}/gluetun:/gluetun
+    env_file: [.env]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ping", "-c", "1", "www.google.com"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:{{ arr_ls_image_tag }}
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID={{ arr_puid }}
+      - PGID={{ arr_pgid }}
+      - TZ={{ timezone }}
+      - WEBUI_PORT={{ arr_qbittorrent_port }}
+    volumes:
+      - {{ arr_root_dir }}/qbittorrent:/config
+      - {{ arr_data_dir }}:/data
+    restart: unless-stopped
+
+  # ---- *arr apps: normal bridge network, NOT behind VPN ----
+  # ---- Usenet downloader (PRIMARY): bridge network, NOT behind VPN ----
+  nzbget:
+    image: lscr.io/linuxserver/nzbget:{{ arr_ls_image_tag }}
+    container_name: nzbget
+    networks: [arr]
+    ports: ["{{ arr_nzbget_port }}:6789"]
+    environment:
+      - PUID={{ arr_puid }}
+      - PGID={{ arr_pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      - {{ arr_root_dir }}/nzbget:/config
+      - {{ arr_data_dir }}:/data
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:{{ arr_ls_image_tag }}
+    container_name: prowlarr
+    networks: [arr]
+    ports: ["{{ arr_prowlarr_port }}:9696"]
+    environment:
+      - PUID={{ arr_puid }}
+      - PGID={{ arr_pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      - {{ arr_root_dir }}/prowlarr:/config
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:{{ arr_ls_image_tag }}
+    container_name: sonarr
+    networks: [arr]
+    ports: ["{{ arr_sonarr_port }}:8989"]
+    environment:
+      - PUID={{ arr_puid }}
+      - PGID={{ arr_pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      - {{ arr_root_dir }}/sonarr:/config
+      - {{ arr_data_dir }}:/data
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:{{ arr_ls_image_tag }}
+    container_name: radarr
+    networks: [arr]
+    ports: ["{{ arr_radarr_port }}:7878"]
+    environment:
+      - PUID={{ arr_puid }}
+      - PGID={{ arr_pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      - {{ arr_root_dir }}/radarr:/config
+      - {{ arr_data_dir }}:/data
+    restart: unless-stopped
+
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:{{ arr_ls_image_tag }}
+    container_name: lidarr
+    networks: [arr]
+    ports: ["{{ arr_lidarr_port }}:8686"]
+    environment:
+      - PUID={{ arr_puid }}
+      - PGID={{ arr_pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      - {{ arr_root_dir }}/lidarr:/config
+      - {{ arr_data_dir }}:/data
+    restart: unless-stopped
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:{{ arr_ls_image_tag }}
+    container_name: bazarr
+    networks: [arr]
+    ports: ["{{ arr_bazarr_port }}:6767"]
+    environment:
+      - PUID={{ arr_puid }}
+      - PGID={{ arr_pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      - {{ arr_root_dir }}/bazarr:/config
+      - {{ arr_data_dir }}:/data
+    restart: unless-stopped

@@ -1,0 +1,29 @@
+---
+- name: Assert media mount is present
+  ansible.builtin.command: "findmnt --target {{ kavita_data_dir }}"
+  changed_when: false
+- name: Create kavita directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ kavita_root_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ kavita_puid }}"
+    group: "{{ kavita_pgid }}"
+    mode: "0755"
+  loop: ["", compose, config]
+- name: Template kavita compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ kavita_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart kavita
+- name: Deploy kavita
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ kavita_root_dir }}/compose"
+    project_name: kavita
+    state: present
+    pull: missing

@@ -1,0 +1,25 @@
+---
+# services/documents/paperless — Paperless-ngx (documents) on cmp01.
+# DB + redis + document store on LOCAL disk (migrated from the old TrueNAS
+# deployment). Postgres pinned to 17 to match the migrated data dir.
+
+paperless_root_dir: "{{ service_root }}/paperless"     # /opt/homelab/paperless
+paperless_port: 8000
+paperless_url: "https://docs.{{ base_domain }}"
+paperless_puid: "{{ media_uid }}"     # 1001 — owns media/data
+paperless_pgid: "{{ media_gid }}"
+paperless_pg_image: "docker.io/library/postgres:17"
+paperless_redis_image: "docker.io/library/redis:7-alpine"
+paperless_image: "ghcr.io/paperless-ngx/paperless-ngx:latest"
+paperless_gotenberg_image: "docker.io/gotenberg/gotenberg:8"
+paperless_tika_image: "docker.io/apache/tika:latest"
+paperless_db_name: paperless
+paperless_db_user: paperless
+paperless_db_password: "{{ vault_paperless_db_password }}"
+paperless_secret_key: "{{ vault_paperless_secret_key }}"
+paperless_ocr_language: eng
+
+# --- Authentik OIDC (SSO for the web login; API tokens still work) ---
+paperless_oidc_client_id: "{{ vault_paperless_oidc_client_id }}"
+paperless_oidc_client_secret: "{{ vault_paperless_oidc_client_secret }}"
+paperless_oidc_issuer: "https://auth.{{ base_domain }}/application/o/paperless/"

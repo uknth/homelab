@@ -1,0 +1,7 @@
+---
+# services/media/kavita — books/comics/manga reader.
+kavita_root_dir: "{{ service_root }}/kavita"
+kavita_data_dir: "{{ media_data_dir }}"     # /mnt/media/data (library at /data/books)
+kavita_puid: "{{ media_uid }}"
+kavita_pgid: "{{ media_gid }}"
+kavita_port: 5000

@@ -21,7 +21,7 @@ Not every app authenticates the same way. Each service uses the highest tier it 
 
 | Tier | Mechanism | Use when | Examples |
 |---|---|---|---|
-| 1. Native OIDC/SAML | App delegates login to Authentik directly | app has first-class OIDC/OAuth support | Paperless-ngx, Portainer, Grafana-likes, n8n |
+| 1. Native OIDC/SAML | App delegates login to Authentik directly | app has first-class OIDC/OAuth support | **Paperless-ngx (live)**, Portainer, n8n (planned) |
 | 2. Forward-auth (proxy) | nginx `auth_request` → Authentik outpost; app sees a trusted header | app has no SSO but a proxy can gate it | Glance, Dozzle, Uptime Kuma, Prowlarr/Sonarr/Radarr UIs |
 | 3. Local auth + OIDC plugin | app keeps its own session but authenticates against Authentik | app forces its own login and can't be proxied cleanly | Jellyfin (SSO plugin) |
 
@@ -73,3 +73,24 @@ This snippet lives in the `services/network/nginx` role and is applied per-vhost
 Authentik must be up **before** the services it protects. It deploys in the util01 phase
 (observability/platform), ahead of the compute apps — see
 [`../plan/roadmap.md`](../plan/roadmap.md).
+
+
+## OIDC rollout status (2026-08-22)
+
+Reproducible OIDC provider creation lives in `services/auth/authentik_config`
+(`authentik_oidc_apps` list) — it bakes in the two API-creation gotchas that
+otherwise break every provider: **`grant_types`** (`authorization_code`+`refresh_token`)
+and **scope `property_mappings`** (openid/email/profile), plus fixed client
+credentials from the vault so providers are reproducible.
+
+| App | Authentik provider | App-side config | Status |
+|---|---|---|---|
+| Paperless | codified | role env (allauth OIDC) | 🟢 live |
+| Portainer | codified | via API (needs codifying in role) | 🟢 live (AuthMethod=OAuth, SSO) |
+| Kavita | codified | pending (0.8.2 OIDC support TBD) | ⏳ provider ready |
+| Beszel | codified | pending (PocketBase OAuth) | ⏳ provider ready |
+| Jellyfin | codified | pending (SSO plugin install) | ⏳ provider ready |
+| Dozzle | n/a | trusted-header (`forward-proxy`) | ⏳ pending |
+
+**Codification gap:** Portainer's OAuth settings were applied via the Portainer
+API by hand; fold into the `portainer` role for full reproducibility.

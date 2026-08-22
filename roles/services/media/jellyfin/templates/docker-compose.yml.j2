@@ -1,0 +1,43 @@
+# Managed by Ansible — services/media/jellyfin
+networks:
+  jellyfin:
+    name: jellyfin
+
+services:
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    networks: [jellyfin]
+    ports:
+      - "{{ jellyfin_port }}:8096"
+    environment:
+      - PUID={{ jellyfin_puid }}
+      - PGID={{ jellyfin_pgid }}
+      - TZ={{ timezone }}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - JELLYFIN_PublishedServerUrl={{ jellyfin_published_url }}
+    volumes:
+      - {{ jellyfin_root_dir }}/config:/config
+      - {{ jellyfin_data_dir }}:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    networks: [jellyfin]
+    ports:
+      - "{{ jellyseerr_port }}:5055"
+    environment:
+      - TZ={{ timezone }}
+      - LOG_LEVEL=info
+    volumes:
+      - {{ jellyfin_root_dir }}/jellyseerr:/app/config
+    restart: unless-stopped

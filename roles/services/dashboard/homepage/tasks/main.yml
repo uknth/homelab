@@ -1,0 +1,41 @@
+---
+- name: Create homepage dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ homepage_root_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop: ["", compose, config]
+- name: Template homepage config files
+  become: true
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ homepage_root_dir }}/config/{{ item }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  loop:
+    - settings.yaml
+    - widgets.yaml
+    - services.yaml
+    - bookmarks.yaml
+    - docker.yaml
+  notify: Restart homepage
+- name: Template homepage compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ homepage_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart homepage
+- name: Deploy homepage
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ homepage_root_dir }}/compose"
+    project_name: homepage
+    state: present
+    pull: missing

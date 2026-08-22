@@ -70,8 +70,23 @@
       name: "{{ authentik_fa_app_name }}"
       slug: "{{ authentik_fa_app_slug }}"
       provider: "{{ _fa_provider_pk | int }}"
+      meta_launch_url: "blank://blank"
     status_code: [200, 201]
   when: _existing_app.json.results | length == 0
+
+# forward-auth is infrastructure, not a launchable app — keep it hidden from
+# the user library even if it already existed.
+- name: Hide forward-auth app from the user library
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/core/applications/{{ authentik_fa_app_slug }}/"
+    method: PATCH
+    headers: "{{ _ak_headers }}"
+    body_format: json
+    body:
+      meta_launch_url: "blank://blank"
+    status_code: [200]
+  changed_when: false
+  no_log: true
   no_log: true
 
 - name: Get all outposts
@@ -95,3 +110,6 @@
       providers: "{{ (_embedded_outpost.providers + [_fa_provider_pk | int]) | unique }}"
     status_code: [200]
   when: (_fa_provider_pk | int) not in _embedded_outpost.providers
+
+- name: Configure OIDC providers + apps
+  ansible.builtin.import_tasks: oidc.yml

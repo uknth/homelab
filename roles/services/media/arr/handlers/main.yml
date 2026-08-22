@@ -1,0 +1,7 @@
+---
+- name: Restart arr
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ arr_root_dir }}/compose"
+    project_name: arr
+    state: restarted

@@ -1,0 +1,6 @@
+---
+- name: Restart docker for nvidia runtime
+  become: true
+  ansible.builtin.service:
+    name: docker
+    state: restarted

@@ -1,0 +1,71 @@
+# Managed by Ansible — services/dashboard/homepage
+- Media:
+    - Jellyfin:
+        href: https://video.{{ base_domain }}
+        description: Media server
+        icon: jellyfin.png
+    - Jellyseerr:
+        href: https://seer.{{ base_domain }}
+        description: Requests
+        icon: jellyseerr.png
+    - Kavita:
+        href: https://books.{{ base_domain }}
+        description: Books & comics
+        icon: kavita.png
+
+- Downloads:
+    - NZBGet:
+        href: https://nzbget.{{ base_domain }}
+        description: Usenet (primary)
+        icon: nzbget.png
+    - qBittorrent:
+        href: https://torrent.{{ base_domain }}
+        description: Torrents (VPN)
+        icon: qbittorrent.png
+    - Prowlarr:
+        href: https://prowlarr.{{ base_domain }}
+        icon: prowlarr.png
+    - Sonarr:
+        href: https://sonarr.{{ base_domain }}
+        icon: sonarr.png
+    - Radarr:
+        href: https://radarr.{{ base_domain }}
+        icon: radarr.png
+    - Lidarr:
+        href: https://lidarr.{{ base_domain }}
+        icon: lidarr.png
+    - Bazarr:
+        href: https://bazarr.{{ base_domain }}
+        icon: bazarr.png
+
+- Documents:
+    - Paperless:
+        href: https://docs.{{ base_domain }}
+        description: Documents (OIDC)
+        icon: paperless-ngx.png
+
+- Infrastructure:
+    - Authentik:
+        href: https://auth.{{ base_domain }}
+        description: SSO
+        icon: authentik.png
+    - Portainer:
+        href: https://docker.{{ base_domain }}
+        icon: portainer.png
+    - Beszel:
+        href: https://metrics.{{ base_domain }}
+        description: Metrics
+        icon: beszel.png
+    - Uptime Kuma:
+        href: https://synthetics.{{ base_domain }}
+        icon: uptime-kuma.png
+    - Dozzle:
+        href: https://logs.{{ base_domain }}
+        description: Logs
+        icon: dozzle.png
+    - n8n:
+        href: https://n8n.{{ base_domain }}
+        icon: n8n.png
+    - ntfy:
+        href: https://ntfy.{{ base_domain }}
+        icon: ntfy.png

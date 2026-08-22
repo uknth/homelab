@@ -1,0 +1,90 @@
+---
+# Reproducible OIDC provider + application creation (idempotent). Bakes in the
+# two API-creation gotchas: grant_types and scope property_mappings.
+
+- name: Resolve signing key
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/crypto/certificatekeypairs/?name={{ authentik_signing_key_name | urlencode }}"
+    headers: "{{ _ak_headers }}"
+  register: _signkey
+  no_log: true
+
+- name: Resolve OIDC scope mapping pks
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/propertymappings/provider/scope/"
+    headers: "{{ _ak_headers }}"
+  register: _scopes
+  no_log: true
+
+- name: Compute scope mapping pk list
+  ansible.builtin.set_fact:
+    _scope_pks: "{{ _scopes.json.results | selectattr('scope_name', 'in', authentik_oidc_scopes) | map(attribute='pk') | list }}"
+    _signkey_pk: "{{ _signkey.json.results[0].pk }}"
+
+- name: Look up existing OIDC providers
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/providers/oauth2/?ordering=name&page_size=100"
+    headers: "{{ _ak_headers }}"
+  register: _oauth_providers
+  no_log: true
+
+- name: Create/patch OIDC providers
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/providers/oauth2/{{ (_match.pk | string) + '/' if _match else '' }}"
+    method: "{{ 'PATCH' if _match else 'POST' }}"
+    headers: "{{ _ak_headers }}"
+    body_format: json
+    body:
+      name: "{{ item.slug }}"
+      authorization_flow: "{{ _authz_flow.json.results[0].pk }}"
+      invalidation_flow: "{{ _inval_flow.json.results[0].pk }}"
+      client_type: confidential
+      client_id: "{{ item.client_id }}"
+      client_secret: "{{ item.secret }}"
+      signing_key: "{{ _signkey_pk }}"
+      grant_types: "{{ authentik_oidc_grant_types }}"
+      property_mappings: "{{ _scope_pks }}"
+      sub_mode: user_email
+      redirect_uris: "{{ item.redirect | map('community.general.dict_kv', 'url') | map('combine', {'matching_mode': 'strict'}) | list }}"
+    status_code: [200, 201]
+  vars:
+    _match: "{{ (_oauth_providers.json.results | selectattr('name', 'equalto', item.slug) | list | first) | default(None) }}"
+  loop: "{{ authentik_oidc_apps }}"
+  loop_control:
+    label: "{{ item.slug }}"
+  register: _oidc_provs
+  no_log: true
+
+- name: Re-fetch OIDC providers (now includes newly created)
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/providers/oauth2/?ordering=name&page_size=100"
+    headers: "{{ _ak_headers }}"
+  register: _oauth_providers2
+  no_log: true
+
+- name: Look up existing applications
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/core/applications/?page_size=100"
+    headers: "{{ _ak_headers }}"
+  register: _apps_all
+  no_log: true
+
+- name: Create OIDC applications (bound to provider; idempotent)
+  ansible.builtin.uri:
+    url: "{{ authentik_api }}/core/applications/"
+    method: POST
+    headers: "{{ _ak_headers }}"
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      slug: "{{ item.slug }}"
+      provider: "{{ _oauth_providers2.json.results | selectattr('name','equalto',item.slug) | map(attribute='pk') | list | first }}"
+      meta_launch_url: "{{ item.launch }}"
+    status_code: [200, 201, 400]
+  loop: "{{ authentik_oidc_apps }}"
+  loop_control:
+    label: "{{ item.slug }}"
+  register: _appres
+  changed_when: _appres.status in [200, 201]
+  failed_when: _appres.status == 400 and 'already exists' not in (_appres.json | to_json)
+  no_log: true

@@ -16,3 +16,22 @@ authentik_fa_external_host: "https://auth.{{ base_domain }}"
 authentik_fa_cookie_domain: "{{ base_domain }}"
 authentik_fa_authz_flow_slug: "default-provider-authorization-implicit-consent"
 authentik_fa_invalidation_flow_slug: "default-provider-invalidation-flow"
+
+# --- OIDC apps (reproducible: fixed client creds from vault) ---
+authentik_signing_key_name: "authentik Self-signed Certificate"
+authentik_oidc_scopes: ["openid", "email", "profile"]
+authentik_oidc_grant_types: ["authorization_code", "refresh_token"]
+# Each entry: slug, name, redirect (list of URLs), launch, client_id, secret
+authentik_oidc_apps:
+  - slug: paperless
+    name: Paperless
+    redirect: ["https://docs.{{ base_domain }}/accounts/oidc/authentik/login/callback/"]
+    launch: "https://docs.{{ base_domain }}"
+    client_id: "{{ vault_paperless_oidc_client_id }}"
+    secret: "{{ vault_paperless_oidc_client_secret }}"
+  - slug: portainer
+    name: Portainer
+    redirect: ["https://docker.{{ base_domain }}"]
+    launch: "https://docker.{{ base_domain }}"
+    client_id: "{{ vault_portainer_oidc_client_id }}"
+    secret: "{{ vault_portainer_oidc_client_secret }}"

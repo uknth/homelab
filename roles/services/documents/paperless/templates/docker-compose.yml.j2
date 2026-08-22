@@ -1,0 +1,53 @@
+# Managed by Ansible — services/documents/paperless
+services:
+  broker:
+    image: {{ paperless_redis_image }}
+    container_name: paperless-redis
+    restart: unless-stopped
+    volumes:
+      - {{ paperless_root_dir }}/redis:/data
+
+  db:
+    image: {{ paperless_pg_image }}
+    container_name: paperless-db
+    restart: unless-stopped
+    volumes:
+      - {{ paperless_root_dir }}/pgdata:/var/lib/postgresql/data
+    env_file: [.env]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ paperless_db_user }}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  webserver:
+    image: {{ paperless_image }}
+    container_name: paperless
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      broker:
+        condition: service_started
+    ports:
+      - "{{ paperless_port }}:8000"
+    volumes:
+      - {{ paperless_root_dir }}/data:/usr/src/paperless/data
+      - {{ paperless_root_dir }}/media:/usr/src/paperless/media
+      - {{ paperless_root_dir }}/export:/usr/src/paperless/export
+      - {{ paperless_root_dir }}/consume:/usr/src/paperless/consume
+    env_file: [.env]
+
+  gotenberg:
+    image: {{ paperless_gotenberg_image }}
+    container_name: paperless-gotenberg
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+
+  tika:
+    image: {{ paperless_tika_image }}
+    container_name: paperless-tika
+    restart: unless-stopped

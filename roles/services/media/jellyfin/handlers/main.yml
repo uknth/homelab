@@ -1,0 +1,7 @@
+---
+- name: Restart jellyfin
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ jellyfin_root_dir }}/compose"
+    project_name: jellyfin
+    state: restarted

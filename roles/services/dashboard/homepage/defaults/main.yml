@@ -1,0 +1,8 @@
+---
+# services/dashboard/homepage — gethomepage/homepage on util01 (dash.puhome.net).
+# Replaces Glance. Service links + info widgets + Docker (util01) integration.
+# Live per-app widgets (arr/jellyfin/paperless) need API keys — add later.
+homepage_image: "ghcr.io/gethomepage/homepage:latest"
+homepage_root_dir: "{{ service_root }}/homepage"
+homepage_port: 8094
+homepage_allowed_hosts: "dash.{{ base_domain }}"

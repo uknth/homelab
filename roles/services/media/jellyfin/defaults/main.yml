@@ -1,0 +1,12 @@
+---
+# services/media/jellyfin — media server (GPU/NVENC) + Jellyseerr (requests).
+# NOT behind Authentik forward-auth: native clients (TV/mobile) can't do
+# interactive SSO, so Jellyfin uses its own auth (OIDC plugin = later, tier 3).
+
+jellyfin_root_dir: "{{ service_root }}/jellyfin"
+jellyfin_data_dir: "{{ media_data_dir }}"      # /mnt/media/data
+jellyfin_puid: "{{ media_uid }}"
+jellyfin_pgid: "{{ media_gid }}"
+jellyfin_port: 8096
+jellyseerr_port: 5055
+jellyfin_published_url: "https://video.{{ base_domain }}"

@@ -1,0 +1,16 @@
+# Managed by Ansible — services/media/kavita
+services:
+  kavita:
+    image: lscr.io/linuxserver/kavita:latest
+    container_name: kavita
+    environment:
+      - PUID={{ kavita_puid }}
+      - PGID={{ kavita_pgid }}
+      - TZ={{ timezone }}
+      - DOTNET_SYSTEM_NET_DISABLEIPV6=1
+    ports:
+      - "{{ kavita_port }}:5000"
+    volumes:
+      - {{ kavita_root_dir }}/config:/config
+      - {{ kavita_data_dir }}:/data
+    restart: unless-stopped

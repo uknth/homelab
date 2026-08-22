@@ -25,6 +25,7 @@ implementation exists in `archive/` to reference. Per user direction, v3 roles a
 | `system/unattended_upgrades` | linux | 🟢 built | net-new — maintenance layer 1 (security pocket, no auto-reboot) |
 | `system/tailscale` | linux | 🟡 planned | `artis3n.tailscale` |
 | `system/beszel_agent` | linux | 🟢 built + **active** | native install; hub key set, agents live fleet-wide |
+| `system/nvidia_docker` | cmp01 | 🟢 built | registers NVIDIA runtime with Docker (Jellyfin NVENC) |
 | `system/nfs_mounts` | cmp01 | 🟢 built | mounts nas01:/mnt/data-pool/media/data at /mnt/media/data (NFSv4.2, fstab); read/write as uid 1001 |
 | `services/storage/truenas_nfs` | nas01 (API) | 🟢 built | manages TrueNAS NFS export defs via REST API (create/update); restricts media export to cmp01 |
 | `system/brew` | macos | 🟡 planned | — |
@@ -47,11 +48,11 @@ names.
 
 | Service | Target role | Domain | Status | v2 reference |
 |---|---|---|---|---|
-| arr stack (qbittorrent, prowlarr, sonarr, radarr, lidarr, bazarr) | `services/media/arr` | per-app | 🟡 planned | `archive/roles/docker2/media/arr` |
-| gluetun (VPN, **qBittorrent only**) | part of `services/media/arr` | — | 🟡 planned | same — but v3 scopes VPN to qbit, not the whole stack |
-| Jellyfin + Jellyseerr | `services/media/jellyfin` | `video.puhome.net` (alias `media`) | 🟡 planned | `archive/roles/docker2/media/jellyfin` |
-| Kavita | `services/media/kavita` | `books.puhome.net` | 🔵 net-new | none |
-| Paperless-ngx | `services/documents/paperless` | `docs.puhome.net` | 🟡 planned | `archive/roles/docker2/services/paperless-ngx` |
+| arr stack (**nzbget (primary Usenet)**, qbittorrent, prowlarr, sonarr, radarr, lidarr, bazarr) | `services/media/arr` | per-app (SSO) | 🟢 built + live | VPN=qbit only (OpenVPN/PIA, port-fwd); nzbget + *arr on bridge |
+| gluetun (VPN, **qBittorrent only**) | part of `services/media/arr` | — | 🟢 built + live | PIA OpenVPN (not WireGuard); port-forwarding active; egress verified tunneled |
+| Jellyfin + Jellyseerr | `services/media/jellyfin` | `video.puhome.net`, `seer.puhome.net` | 🟢 built + live | NVENC via A4000 (GPU visible in-container); own auth (native clients) |
+| Kavita | `services/media/kavita` | `books.puhome.net` | 🟢 built + live | **pinned to 0.8.2** (0.9.x hangs on MigrateEmailTemplates first-boot) |
+| Paperless-ngx | `services/documents/paperless` | `docs.puhome.net` | 🟢 built + live | migrated (182 docs) to local disk; postgres:17 glibc; tika/gotenberg; **Authentik OIDC login** (tier-1) + API tokens |
 
 **Out of scope for v3 (user directive):** Immich (photos), Vaultwarden (passwords). Removed
 from `playbooks/hosts/cmp01.yml`.
@@ -72,7 +73,8 @@ helper is already PIA-shaped).
 | ntfy | `services/monitoring/ntfy` | `ntfy.puhome.net` | 🟢 built + live | notification sink (open pub/sub; token ACLs = later) |
 | Diun | `services/monitoring/diun` | — | 🟢 built + live | image-update notifier -> ntfy (6h) |
 | Dozzle | `services/monitoring/dozzle` | `logs.puhome.net` | 🟢 built + live | live container logs |
-| Glance | `services/dashboard/glance` | `dash.puhome.net` | 🟢 built + live | — |
+| Homepage | `services/dashboard/homepage` | `dash.puhome.net` | 🟢 built + live | service links + widgets + Docker(util01); replaced Glance |
+| Glance | `services/dashboard/glance` | — | ⚪ retired | replaced by Homepage (role kept in repo) |
 | Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
 | n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7) |
 

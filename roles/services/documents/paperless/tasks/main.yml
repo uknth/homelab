@@ -1,0 +1,34 @@
+---
+# Deploy Paperless-ngx. Assumes data already migrated to {{ paperless_root_dir }}.
+
+- name: Create paperless dirs (only the ones not migrated)
+  become: true
+  ansible.builtin.file:
+    path: "{{ paperless_root_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop: ["", compose, export, consume]
+
+- name: Template paperless compose + env
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ paperless_root_dir }}/compose/{{ item.dest }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0640"
+  loop:
+    - { src: docker-compose.yml.j2, dest: docker-compose.yml }
+    - { src: env.j2, dest: .env }
+  no_log: true
+  notify: Restart paperless
+
+- name: Deploy paperless
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ paperless_root_dir }}/compose"
+    project_name: paperless
+    state: present
+    pull: missing

@@ -1,0 +1,7 @@
+---
+- name: Restart kavita
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ kavita_root_dir }}/compose"
+    project_name: kavita
+    state: restarted

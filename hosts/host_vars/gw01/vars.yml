@@ -12,7 +12,7 @@ nginx_sites:
   # Observability / ops (util01) — admin UIs behind SSO
   - { name: metrics,    upstream: "http://10.0.2.8:8090", sso: true }    # Beszel hub
   - { name: synthetics, upstream: "http://10.0.2.8:3001", sso: true }    # Uptime Kuma
-  - { name: dash,       upstream: "http://10.0.2.8:8092", sso: true }    # Glance
+  - { name: dash,       upstream: "http://10.0.2.8:8094", sso: true }    # Homepage
   - { name: docker,     upstream: "http://10.0.2.8:9001", sso: true }    # Portainer
   - { name: logs,       upstream: "http://10.0.2.8:8093", sso: true }    # Dozzle
 
@@ -20,3 +20,18 @@ nginx_sites:
   - { name: ntfy,       upstream: "http://10.0.2.8:8091", sso: false }
   # n8n — own auth + receives webhooks (phase 7 GitOps); not forward-authed.
   - { name: n8n,        upstream: "http://10.0.2.8:5678", sso: false }
+
+  # Compute / media (cmp01) — native clients, so own auth (not forward-auth)
+  - { name: video,      upstream: "http://10.0.2.5:8096", sso: false }   # Jellyfin
+  - { name: seer,       upstream: "http://10.0.2.5:5055", sso: false }   # Jellyseerr
+  - { name: books,      upstream: "http://10.0.2.5:5000", sso: false }   # Kavita 0.8.2
+  - { name: docs,       upstream: "http://10.0.2.5:8000", sso: false }   # Paperless-ngx
+
+  # arr stack (cmp01) — admin web UIs behind SSO (inter-app APIs bypass nginx)
+  - { name: nzbget,     upstream: "http://10.0.2.5:6789", sso: true }    # Usenet (primary)
+  - { name: torrent,    upstream: "http://10.0.2.5:8080", sso: true }    # qBittorrent
+  - { name: prowlarr,   upstream: "http://10.0.2.5:9696", sso: true }
+  - { name: sonarr,     upstream: "http://10.0.2.5:8989", sso: true }
+  - { name: radarr,     upstream: "http://10.0.2.5:7878", sso: true }
+  - { name: lidarr,     upstream: "http://10.0.2.5:8686", sso: true }
+  - { name: bazarr,     upstream: "http://10.0.2.5:6767", sso: true }
