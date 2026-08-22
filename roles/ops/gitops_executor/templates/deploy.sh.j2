@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Managed by Ansible — ops/gitops_executor. On-LAN deploy for git.sr.ht main.
+#   deploy.sh          -> pull if changed, dry-run (--check), [apply if enabled], notify
+#   deploy.sh --check  -> force dry-run only
+set -uo pipefail
+
+REPO="{{ gitops_dir }}/repo"
+VENV="{{ gitops_dir }}/venv"
+BRANCH="{{ gitops_branch }}"
+NTFY="{{ gitops_ntfy_url }}"
+AUTO_APPLY="{{ 'true' if gitops_auto_apply else 'false' }}"
+[ "${1:-}" = "--check" ] && AUTO_APPLY="false"
+
+cd "$REPO" || { echo "repo not cloned at $REPO"; exit 1; }
+notify() { curl -fsS -m 15 -H "Title: $1" -d "$2" "$NTFY" >/dev/null 2>&1 || true; }
+
+git fetch --quiet origin "$BRANCH"
+LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse "origin/$BRANCH")
+if [ "$LOCAL" = "$REMOTE" ]; then echo "already up to date ($LOCAL)"; exit 0; fi
+
+echo "updating $LOCAL -> $REMOTE"
+git pull --ff-only --quiet origin "$BRANCH" || { notify "Deploy FAILED" "git pull failed"; exit 1; }
+SHORT=$(git rev-parse --short HEAD)
+
+echo "=== dry-run (--check --diff) ==="
+if ! "$VENV/bin/ansible-playbook" site.yml --check --diff > /tmp/gitops-check.log 2>&1; then
+  notify "Deploy dry-run FAILED @ $SHORT" "$(tail -c 800 /tmp/gitops-check.log)"
+  echo "dry-run failed; see /tmp/gitops-check.log"; exit 1
+fi
+
+if [ "$AUTO_APPLY" != "true" ]; then
+  notify "Deploy dry-run OK @ $SHORT (apply disabled)" "Review /tmp/gitops-check.log, then apply manually."
+  echo "dry-run OK; auto-apply disabled"; exit 0
+fi
+
+echo "=== apply ==="
+if "$VENV/bin/ansible-playbook" site.yml > /tmp/gitops-apply.log 2>&1; then
+  notify "Deploy OK @ $SHORT" "site.yml applied cleanly."
+else
+  notify "Deploy FAILED @ $SHORT" "$(tail -c 800 /tmp/gitops-apply.log)"; exit 1
+fi

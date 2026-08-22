@@ -1,0 +1,11 @@
+# Managed by Ansible — ops/gitops_executor
+[Unit]
+Description=Homelab GitOps deploy (poll git.sr.ht main -> check/apply)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ user }}
+Environment=HOME=/home/{{ user }}
+ExecStart={{ gitops_dir }}/deploy.sh

@@ -1,0 +1,69 @@
+---
+- name: Install git + python venv tooling
+  become: true
+  ansible.builtin.apt:
+    name: [git, python3-venv, python3-pip]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create gitops dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ gitops_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+
+- name: Create ansible venv for the executor
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.pip:
+    name: ansible
+    virtualenv: "{{ gitops_dir }}/venv"
+    virtualenv_command: "python3 -m venv"
+
+- name: Install deploy script
+  become: true
+  ansible.builtin.template:
+    src: deploy.sh.j2
+    dest: "{{ gitops_dir }}/deploy.sh"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+- name: Note manual prerequisites (repo clone + secret files)
+  become: true
+  ansible.builtin.stat:
+    path: "{{ gitops_dir }}/repo/.git"
+  register: _repo
+- name: Warn if repo not yet cloned
+  ansible.builtin.debug:
+    msg: >-
+      Executor script installed at {{ gitops_dir }}/deploy.sh. Before it can run,
+      clone the repo to {{ gitops_dir }}/repo, place the vault password at
+      {{ gitops_vault_pass }}, and the ansible SSH key at
+      {{ gitops_dir }}/repo/keys/ansible_rsa.private. See role defaults.
+  when: not _repo.stat.exists
+
+- name: Install gitops deploy systemd units
+  become: true
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - gitops-deploy.service
+    - gitops-deploy.timer
+  notify: Reload systemd
+
+- name: Enable/disable the deploy timer
+  become: true
+  ansible.builtin.systemd:
+    name: gitops-deploy.timer
+    enabled: "{{ gitops_timer_enabled }}"
+    state: "{{ 'started' if gitops_timer_enabled else 'stopped' }}"
+    daemon_reload: true

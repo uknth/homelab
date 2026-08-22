@@ -1,0 +1,28 @@
+---
+# ops/gitops_executor — turns util01 into the on-LAN deploy executor.
+#
+# n8n (also on util01) polls git.sr.ht for a new `main` commit and runs the
+# deploy script below, which git-pulls, does a --check dry-run, optionally
+# applies, and notifies ntfy. Ansible runs from a dedicated venv here (not the
+# system), against the repo clone. SAFE BY DEFAULT: dry-run only unless
+# gitops_auto_apply is true.
+#
+# Out-of-band prerequisites on util01 (secrets, never in git):
+#   - {{ gitops_dir }}/repo               : `git clone` of git.sr.ht:~uknth/homelab
+#     (read-only sr.ht deploy key, or public https)
+#   - ~/.config/homelab/.vault_pass       : ansible vault password (chmod 600)
+#   - {{ gitops_dir }}/repo/keys/ansible_rsa.private : the ansible SSH key (keys/ is git-ignored)
+
+gitops_dir: "{{ service_root }}/gitops"          # /opt/homelab/gitops
+gitops_repo_url: "git@git.sr.ht:~uknth/homelab"
+gitops_branch: "main"
+gitops_auto_apply: false                          # dry-run only until you flip this
+gitops_ntfy_url: "http://localhost:8091/homelab-deploy"
+gitops_vault_pass: "/home/{{ user }}/.config/homelab/.vault_pass"   # on util01, the executor user's home
+
+# Polling trigger: a systemd timer runs deploy.sh on a schedule (the robust,
+# no-extra-credentials option vs n8n SSH-ing into the host). Disabled by default
+# — enable once the repo clone + secret files are in place. deploy.sh is dry-run
+# only unless gitops_auto_apply is also true.
+gitops_timer_enabled: false
+gitops_timer_calendar: "*:0/10"    # every 10 minutes

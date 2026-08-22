@@ -1,0 +1,11 @@
+---
+# playbooks/ops/gitops.yml — set up util01 as the on-LAN deploy executor.
+#   ansible-playbook playbooks/ops/gitops.yml
+- name: GitOps executor (util01)
+  hosts: util01
+  become: true
+  gather_facts: true
+  tags: [gitops]
+  roles:
+    - role: ops/gitops_executor
+      tags: [gitops-executor]
