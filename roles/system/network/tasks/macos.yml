@@ -10,6 +10,7 @@
   ansible.builtin.command: networksetup -listallnetworkservices
   register: _network_services
   changed_when: false
+  check_mode: false      # read-only; must run in --check so auto-detect works
 
 - name: Show available network services
   ansible.builtin.debug:
@@ -41,6 +42,7 @@
   ansible.builtin.command: networksetup -getinfo "{{ _ethernet_service }}"
   register: _current_net_info
   changed_when: false
+  check_mode: false      # read-only; must run in --check
 
 - name: Set static IP address
   ansible.builtin.command: >
