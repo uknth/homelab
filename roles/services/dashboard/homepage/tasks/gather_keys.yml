@@ -106,3 +106,67 @@
 - name: Default jellyfin key empty if auth failed
   ansible.builtin.set_fact:
     hp_jellyfin_key: "{{ hp_jellyfin_key | default('') }}"
+
+# --- Portainer access token (mint fresh each run; raw key shown once) ---
+- name: Portainer auth
+  ansible.builtin.uri:
+    url: "http://localhost:9001/api/auth"
+    method: POST
+    body_format: json
+    body: { Username: "admin", Password: "{{ vault_portainer_admin_password }}" }
+  register: _pt_login
+  no_log: true
+  failed_when: false
+
+- name: Portainer - list existing tokens
+  ansible.builtin.uri:
+    url: "http://localhost:9001/api/users/1/tokens"
+    headers: { Authorization: "Bearer {{ _pt_login.json.jwt }}" }
+  register: _pt_tokens
+  when: _pt_login.json.jwt is defined
+  failed_when: false
+  no_log: true
+
+- name: Portainer - delete old homepage-dash tokens
+  ansible.builtin.uri:
+    url: "http://localhost:9001/api/users/1/tokens/{{ item.id }}"
+    method: DELETE
+    headers: { Authorization: "Bearer {{ _pt_login.json.jwt }}" }
+    status_code: [204, 200]
+  loop: "{{ _pt_tokens.json | default([]) | selectattr('description','equalto','homepage-dash') | list }}"
+  loop_control: { label: "{{ item.id }}" }
+  when: _pt_login.json.jwt is defined
+  no_log: true
+
+- name: Portainer - create homepage-dash token
+  ansible.builtin.uri:
+    url: "http://localhost:9001/api/users/1/tokens"
+    method: POST
+    headers: { Authorization: "Bearer {{ _pt_login.json.jwt }}" }
+    body_format: json
+    body: { description: "homepage-dash", password: "{{ vault_portainer_admin_password }}" }
+    status_code: [200, 201]
+  register: _pt_new
+  when: _pt_login.json.jwt is defined
+  no_log: true
+
+- name: Set portainer facts
+  ansible.builtin.set_fact:
+    hp_portainer_token: "{{ _pt_new.json.rawAPIKey | default('') }}"
+    hp_portainer_env: 1
+  no_log: true
+
+# --- Paperless DRF token (superuser uknth) ---
+- name: Paperless - mint DRF token for uknth
+  delegate_to: cmp01
+  become: true
+  ansible.builtin.command: docker exec paperless python manage.py drf_create_token uknth
+  register: _pl_tok
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Set paperless key fact
+  ansible.builtin.set_fact:
+    hp_paperless_key: "{{ (_pl_tok.stdout | regex_findall('Generated token (\\w+)') | first) | default('') }}"
+  no_log: true

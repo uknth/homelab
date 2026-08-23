@@ -9,6 +9,7 @@ pw = os.environ["KUMA_PASSWORD"]
 http_mons = json.loads(os.environ.get("KUMA_HTTP", "[]"))
 push_mons = json.loads(os.environ.get("KUMA_PUSH", "[]"))
 ntfy = json.loads(os.environ.get("KUMA_NTFY", "{}"))
+# status page slug passed via KUMA_STATUSPAGE
 
 api = UptimeKumaApi(url)
 api.login(user, pw)
@@ -43,6 +44,17 @@ try:
                 ntfyAuthenticationMethod="none",
             )
             created.append("notification:" + ntfy["name"])
+
+    # Public status page for the Homepage uptimekuma widget.
+    sp_slug = os.environ.get("KUMA_STATUSPAGE", "")
+    if sp_slug:
+        existing_sp = [p["slug"] for p in api.get_status_pages()]
+        if sp_slug not in existing_sp:
+            api.add_status_page(sp_slug, "Homelab")
+            mons = api.get_monitors()
+            api.save_status_page(sp_slug, title="Homelab", published=True,
+                publicGroupList=[{"name": "Services", "monitorList": [{"id": m["id"]} for m in mons]}])
+            created.append("statuspage:" + sp_slug)
 
     tokens = {m["name"]: m.get("pushToken") for m in api.get_monitors() if m.get("pushToken")}
     print(json.dumps({"created": created, "push_tokens": tokens}))

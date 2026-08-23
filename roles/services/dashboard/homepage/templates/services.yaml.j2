@@ -87,6 +87,12 @@
         href: https://docs.{{ base_domain }}
         description: Documents (OIDC)
         icon: paperless-ngx.png
+{% if hp_paperless_key %}
+        widget:
+          type: paperlessngx
+          url: http://{{ homepage_media_host }}:8000
+          key: {{ hp_paperless_key }}
+{% endif %}
     - Filebrowser:
         href: https://files.{{ base_domain }}
         description: Media file manager
@@ -123,6 +129,13 @@
     - Portainer:
         href: https://docker.{{ base_domain }}
         icon: portainer.png
+{% if hp_portainer_token %}
+        widget:
+          type: portainer
+          url: http://{{ hostvars['util01'].ansible_host }}:9001
+          env: {{ hp_portainer_env }}
+          key: {{ hp_portainer_token }}
+{% endif %}
     - Beszel:
         href: https://metrics.{{ base_domain }}
         description: Host metrics
@@ -130,6 +143,10 @@
     - Uptime Kuma:
         href: https://synthetics.{{ base_domain }}
         icon: uptime-kuma.png
+        widget:
+          type: uptimekuma
+          url: http://{{ hostvars['util01'].ansible_host }}:3001
+          slug: homelab
     - Dozzle:
         href: https://logs.{{ base_domain }}
         description: Logs

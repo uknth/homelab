@@ -131,7 +131,8 @@ roadmap phase first.
 > truenas/authentik/qbit from vault; mints a Jellyfin API key idempotently) and
 > renders them into the on-host `services.yaml` (never git). **Live widgets:**
 > Sonarr, Radarr, Lidarr, Prowlarr, Bazarr, NZBGet, qBittorrent, Jellyseerr,
-> Jellyfin, TrueNAS (pools), Authentik. **Tiles only (need a token/creds — add
-> later):** Portainer, Uptime Kuma, Paperless, Kavita, Synology, Pi-hole. Top:
+> Jellyfin, TrueNAS (pools), Authentik, **Portainer** (token minted at deploy),
+> **Paperless** (DRF token for uknth), **Uptime Kuma** (public status page `homelab`
+> created by uptime_kuma_config). **Tiles only (need creds):** Kavita, Synology, Pi-hole. Top:
 > greeting, datetime, util01 resources, Open-Meteo weather (Bengaluru — change in
 > defaults), search.
