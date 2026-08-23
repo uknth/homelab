@@ -135,3 +135,61 @@
   when:
     - _bz_users.json.totalItems | int > 0
     - item not in (_bz_systems.json['items'] | map(attribute='name') | list)
+
+# --- Host-health alerting: ntfy webhook + per-system alerts (idempotent) ---
+- name: Get user settings
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/user_settings/records?perPage=200"
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+  register: _bz_usettings
+  check_mode: false
+  when: _bz_users.json.totalItems | int > 0
+
+- name: Ensure ntfy webhook is in user settings
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/user_settings/records/{{ item.id }}"
+    method: PATCH
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+    body_format: json
+    body:
+      settings: "{{ item.settings | combine({'webhooks': [beszel_ntfy_webhook]}) }}"
+    status_code: [200]
+  loop: "{{ _bz_usettings.json['items'] | default([]) }}"
+  loop_control:
+    label: "{{ item.user }}"
+  when:
+    - _bz_users.json.totalItems | int > 0
+    - beszel_ntfy_webhook not in (item.settings.webhooks | default([]))
+
+- name: Get existing alerts
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/alerts/records?perPage=500"
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+  register: _bz_alerts
+  check_mode: false
+  when: _bz_users.json.totalItems | int > 0
+
+- name: Create per-system health alerts
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/alerts/records"
+    method: POST
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+    body_format: json
+    body:
+      user: "{{ _bz_users.json['items'][0].id }}"
+      system: "{{ item.0.id }}"
+      name: "{{ item.1.name }}"
+      value: "{{ item.1.value }}"
+      min: "{{ item.1.min }}"
+      triggered: false
+    status_code: [200, 400]
+  loop: "{{ (_bz_systems.json['items'] | default([])) | product(beszel_alert_specs) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}/{{ item.1.name }}"
+  when:
+    - _bz_users.json.totalItems | int > 0
+    - (_bz_alerts.json['items'] | default([]) | selectattr('system','equalto',item.0.id) | selectattr('name','equalto',item.1.name) | list | length) == 0

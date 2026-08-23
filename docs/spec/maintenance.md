@@ -80,3 +80,18 @@ Everything above publishes to **ntfy** on `util01` (one topic per concern):
 | n8n / GitOps | `homelab-deploy` | deploy started / succeeded / failed |
 
 One app on the phone, subscribed to those topics, covers the whole fleet.
+
+## Alerting (2026-08-23)
+
+Two layers, both pushing to the ntfy topic **`homelab-alerts`** (subscribe on your phone):
+
+- **Uptime Kuma → ntfy** (`uptime_kuma_config`): an `ntfy-alerts` notification (default +
+  applied to all monitors), so any DOWN service (`*.puhome.net`) or a silent **Backups**
+  push monitor alerts. Covers service availability and, indirectly, host-down.
+- **Beszel → ntfy** (`beszel_hub`): a shoutrrr `ntfy://` webhook in the user's settings +
+  per-system alerts (Status/CPU/Memory/Disk, 7 hosts × 4). Covers host health — a node down,
+  disk filling (relevant for nas01's degraded pool), sustained high CPU/memory. Beszel has no
+  sendmail, so email alerts don't work — the ntfy webhook is the channel.
+
+Existing per-source notifications remain: restic (`homelab-backup` + Kuma push), Diun
+(`homelab-updates`), GitOps deploy (`homelab-deploy`).

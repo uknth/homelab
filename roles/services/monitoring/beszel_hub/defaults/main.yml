@@ -23,3 +23,13 @@ beszel_user_creation: true
 beszel_hub_agent_port: 45876
 beszel_register_hosts: >-
   {{ (groups['linux'] | default([])) + (groups['macos'] | default([])) + ['nas01', 'nas02'] }}
+
+# Host-health alerting -> ntfy (shoutrrr). Beszel has no sendmail, so email
+# alerts silently fail; a shoutrrr ntfy webhook is the working channel. Alerts
+# are created per system for these metrics (value=threshold, min=minutes sustained).
+beszel_ntfy_webhook: "ntfy://{{ hostvars['util01'].ansible_host }}:8091/homelab-alerts?scheme=http&title=Beszel"
+beszel_alert_specs:
+  - { name: "Status",      value: 1,  min: 10 }   # agent down 10+ min
+  - { name: "CPU",         value: 90, min: 15 }
+  - { name: "Memory",      value: 90, min: 15 }
+  - { name: "Disk",        value: 90, min: 15 }
