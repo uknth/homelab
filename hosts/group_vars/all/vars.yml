@@ -34,6 +34,12 @@ media_nfs_export: "/mnt/data-pool/media/data"              # existing TrueNAS NF
 media_root: "/mnt/media"
 media_data_dir: "{{ media_root }}/data"                    # local mount point == the export
 
+# Scratch pool (separate healthy pool on nas01) for in-progress/incomplete
+# downloads — keeps write churn off the RAIDZ2 data-pool. Completed downloads
+# still land on data-pool (same fs as the library) so hardlinks/atomic moves work.
+scratch_nfs_export: "/mnt/scratch-pool/incomplete"
+scratch_incomplete_dir: "/mnt/scratch/incomplete"
+
 # Media ownership: the existing library on the NAS is already owned by uid/gid
 # 1001 (the `ansible` user on cmp01), so we align to that rather than forcing a
 # new GID and chowning 500+ items. Containers run PUID/PGID = these.

@@ -113,3 +113,24 @@ included, verification).
 data sets above are Restic'd — *not* all of `/opt/homelab`. Everything else
 (service config, DBs) is reproducible from this Ansible repo, so it is rebuilt by
 re-running the role, not restored from backup.
+
+## Scratch pool for in-progress downloads (2026-08-23)
+
+In-progress/incomplete downloads live on **`scratch-pool`** (a separate, healthy
+pool on nas01), not the RAIDZ2 `data-pool` — this keeps download write-churn and
+fragmentation off the main pool (and off the degraded array). **Completed**
+downloads still land on `data-pool` alongside the library, so hardlinks / atomic
+moves are preserved.
+
+- `scratch-pool/incomplete` (NFS) → mounted on cmp01 at `/mnt/scratch/incomplete`
+  (`system/nfs_mounts`), mounted into nzbget + qBittorrent as `/scratch`.
+- **nzbget:** `InterDir=/scratch/nzbget` (in-progress) → `DestDir=/data/downloads/usenet` (complete).
+- **qBittorrent:** `Session\TempPath=/scratch/qbittorrent` (in-progress) → `DefaultSavePath=/data/downloads/torrents` (complete).
+- On completion the client does a one-time cross-pool copy scratch→data-pool; the
+  *arr then hardlinks data-pool→library (same filesystem). Owned uid/gid 1001
+  (scratch dataset chowned to 1001 to match the media convention).
+
+**Not codified:** the client config-file settings (Inter/Dest/Temp/Save paths,
+qbit auth whitelist, nzbget creds) are live in each app's `/config`, not templated
+by the `arr` role — a rebuild would revert them. The mount + `/scratch` volume ARE
+codified.

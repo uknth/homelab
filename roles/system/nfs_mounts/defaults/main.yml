@@ -8,6 +8,11 @@ nfs_mounts:
     path: "{{ media_data_dir }}"
     # uid/gid 1001 already own the data; no maproot on the export, so plain sec=sys.
     opts: "rw,vers=4.2,hard,noatime,_netdev"
+  # In-progress downloads on the scratch pool (spares the data-pool).
+  - server: "{{ media_nfs_server }}"
+    export: "{{ scratch_nfs_export }}"
+    path: "{{ scratch_incomplete_dir }}"
+    opts: "rw,vers=4.2,hard,noatime,_netdev"
 
 nfs_mount_owner: "{{ media_uid }}"
 nfs_mount_group: "{{ media_gid }}"

@@ -41,6 +41,7 @@ services:
     volumes:
       - {{ arr_root_dir }}/qbittorrent:/config
       - {{ arr_data_dir }}:/data
+      - {{ scratch_incomplete_dir }}:/scratch
     restart: unless-stopped
 
   # ---- *arr apps: normal bridge network, NOT behind VPN ----
@@ -57,6 +58,7 @@ services:
     volumes:
       - {{ arr_root_dir }}/nzbget:/config
       - {{ arr_data_dir }}:/data
+      - {{ scratch_incomplete_dir }}:/scratch
     restart: unless-stopped
 
   prowlarr:
