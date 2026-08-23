@@ -1,7 +1,7 @@
 ---
-# Enforce download-client config (paths + qbit auth). LSIO apps rewrite their conf
-# from memory on shutdown, so we edit ONLY while the container is stopped, and only
-# when the conf actually drifts (keeps it idempotent + non-disruptive).
+# Enforce download-client config (paths, qbit auth + WebUI login). LSIO apps
+# rewrite their conf from memory on shutdown, so we edit ONLY while the container
+# is stopped, and only when the conf drifts (idempotent + non-disruptive).
 
 - name: Wait for client configs to be generated
   become: true
@@ -64,14 +64,39 @@
     src: "{{ arr_qbit_conf }}"
   register: _qbit_raw
 
+# qbit stores the WebUI password as PBKDF2-HMAC-SHA512 (100k). Deterministic salt
+# (derived from the password) keeps the resulting line stable => idempotent.
+- name: Compute qbit WebUI password hash
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import hashlib,base64,os
+        pw=os.environ['QBPW'].encode()
+        salt=hashlib.sha256(pw).digest()[:16]
+        dk=hashlib.pbkdf2_hmac('sha512',pw,salt,100000,64)
+        print('@ByteArray('+base64.b64encode(salt).decode()+':'+base64.b64encode(dk).decode()+')')
+  environment:
+    QBPW: "{{ arr_qbit_password }}"
+  register: _qbit_pwhash
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: arr_qbit_password | length > 0
+
 - name: Compute qbit desired lines
   ansible.builtin.set_fact:
-    _qbit_desired:
-      - 'Session\TempPath={{ arr_qbit_temp_path }}'
-      - 'Session\TempPathEnabled=true'
-      - 'Session\DefaultSavePath={{ arr_qbit_save_path }}'
-      - 'WebUI\AuthSubnetWhitelistEnabled=true'
-      - 'WebUI\AuthSubnetWhitelist={{ arr_qbit_auth_whitelist }}'
+    _qbit_desired: >-
+      {{ ['Session\\TempPath=' ~ arr_qbit_temp_path,
+          'Session\\TempPathEnabled=true',
+          'Session\\DefaultSavePath=' ~ arr_qbit_save_path,
+          'WebUI\\AuthSubnetWhitelistEnabled=true',
+          'WebUI\\AuthSubnetWhitelist=' ~ arr_qbit_auth_whitelist]
+         + (['WebUI\\Username=' ~ arr_qbit_username,
+             'WebUI\\Password_PBKDF2="' ~ _qbit_pwhash.stdout ~ '"']
+            if (arr_qbit_password | length > 0) else []) }}
+  no_log: true
 
 - name: Enforce qbit config (stop, edit, start) when drifted
   when: "_qbit_desired | difference((_qbit_raw.content | b64decode).split('\n') | map('trim') | list) | length > 0"
@@ -90,7 +115,7 @@
         - { re: 'Session\\TempPath',        line: 'Session\TempPath={{ arr_qbit_temp_path }}' }
         - { re: 'Session\\TempPathEnabled', line: 'Session\TempPathEnabled=true' }
         - { re: 'Session\\DefaultSavePath', line: 'Session\DefaultSavePath={{ arr_qbit_save_path }}' }
-    - name: Set qbit [Preferences] keys
+    - name: Set qbit [Preferences] auth-whitelist keys
       ansible.builtin.lineinfile:
         path: "{{ arr_qbit_conf }}"
         regexp: "^{{ item.re }}="
@@ -99,6 +124,17 @@
       loop:
         - { re: 'WebUI\\AuthSubnetWhitelistEnabled', line: 'WebUI\AuthSubnetWhitelistEnabled=true' }
         - { re: 'WebUI\\AuthSubnetWhitelist',        line: 'WebUI\AuthSubnetWhitelist={{ arr_qbit_auth_whitelist }}' }
+    - name: Set qbit WebUI login (if password provided)
+      ansible.builtin.lineinfile:
+        path: "{{ arr_qbit_conf }}"
+        regexp: "^{{ item.re }}="
+        line: "{{ item.line }}"
+        insertafter: '^\[Preferences\]'
+      loop:
+        - { re: 'WebUI\\Username',        line: 'WebUI\Username={{ arr_qbit_username }}' }
+        - { re: 'WebUI\\Password_PBKDF2', line: 'WebUI\Password_PBKDF2="{{ _qbit_pwhash.stdout }}"' }
+      when: arr_qbit_password | length > 0
+      no_log: true
     - name: Start qbittorrent
       ansible.builtin.command: docker start qbittorrent
       changed_when: true

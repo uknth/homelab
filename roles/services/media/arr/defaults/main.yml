@@ -47,3 +47,6 @@ arr_qbit_conf: "{{ arr_root_dir }}/qbittorrent/qBittorrent/qBittorrent.conf"
 arr_qbit_temp_path: "/scratch/qbittorrent"       # in-progress (scratch-pool)
 arr_qbit_save_path: "/data/downloads/torrents"   # completed (data-pool)
 arr_qbit_auth_whitelist: "172.25.0.0/16"         # arr docker net; *arr apps skip qbit login
+# WebUI login (for humans at torrent.puhome.net). Password stored as qbit PBKDF2.
+arr_qbit_username: "admin"
+arr_qbit_password: "{{ vault_qbittorrent_password | default('') }}"
