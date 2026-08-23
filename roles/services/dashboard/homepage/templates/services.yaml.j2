@@ -4,57 +4,128 @@
         href: https://video.{{ base_domain }}
         description: Media server
         icon: jellyfin.png
+{% if hp_jellyfin_key %}
+        widget:
+          type: jellyfin
+          url: http://{{ homepage_media_host }}:8096
+          key: {{ hp_jellyfin_key }}
+          enableBlocks: true
+          enableNowPlaying: true
+{% endif %}
     - Jellyseerr:
         href: https://seer.{{ base_domain }}
         description: Requests
         icon: jellyseerr.png
+        widget:
+          type: jellyseerr
+          url: http://{{ homepage_media_host }}:5055
+          key: {{ hp_jseerr_key }}
     - Kavita:
         href: https://books.{{ base_domain }}
         description: Books & comics
         icon: kavita.png
 
 - Downloads:
+    - Prowlarr:
+        href: https://prowlarr.{{ base_domain }}
+        icon: prowlarr.png
+        widget:
+          type: prowlarr
+          url: http://{{ homepage_media_host }}:9696
+          key: {{ hp_keys.prowlarr }}
+    - Sonarr:
+        href: https://sonarr.{{ base_domain }}
+        icon: sonarr.png
+        widget:
+          type: sonarr
+          url: http://{{ homepage_media_host }}:8989
+          key: {{ hp_keys.sonarr }}
+    - Radarr:
+        href: https://radarr.{{ base_domain }}
+        icon: radarr.png
+        widget:
+          type: radarr
+          url: http://{{ homepage_media_host }}:7878
+          key: {{ hp_keys.radarr }}
+    - Lidarr:
+        href: https://lidarr.{{ base_domain }}
+        icon: lidarr.png
+        widget:
+          type: lidarr
+          url: http://{{ homepage_media_host }}:8686
+          key: {{ hp_keys.lidarr }}
+    - Bazarr:
+        href: https://bazarr.{{ base_domain }}
+        icon: bazarr.png
+{% if hp_bazarr_key %}
+        widget:
+          type: bazarr
+          url: http://{{ homepage_media_host }}:6767
+          key: {{ hp_bazarr_key }}
+{% endif %}
     - NZBGet:
         href: https://nzbget.{{ base_domain }}
         description: Usenet (primary)
         icon: nzbget.png
+        widget:
+          type: nzbget
+          url: http://{{ homepage_media_host }}:6789
+          username: {{ hp_nzb_user }}
+          password: {{ hp_nzb_pass }}
     - qBittorrent:
         href: https://torrent.{{ base_domain }}
         description: Torrents (VPN)
         icon: qbittorrent.png
-    - Prowlarr:
-        href: https://prowlarr.{{ base_domain }}
-        icon: prowlarr.png
-    - Sonarr:
-        href: https://sonarr.{{ base_domain }}
-        icon: sonarr.png
-    - Radarr:
-        href: https://radarr.{{ base_domain }}
-        icon: radarr.png
-    - Lidarr:
-        href: https://lidarr.{{ base_domain }}
-        icon: lidarr.png
-    - Bazarr:
-        href: https://bazarr.{{ base_domain }}
-        icon: bazarr.png
+        widget:
+          type: qbittorrent
+          url: http://{{ homepage_media_host }}:8080
+          username: {{ arr_qbit_username | default('admin') }}
+          password: {{ vault_qbittorrent_password }}
 
-- Documents:
+- Documents & Files:
     - Paperless:
         href: https://docs.{{ base_domain }}
         description: Documents (OIDC)
         icon: paperless-ngx.png
+    - Filebrowser:
+        href: https://files.{{ base_domain }}
+        description: Media file manager
+        icon: filebrowser.png
+    - Syncthing:
+        href: https://sync.{{ base_domain }}
+        description: File sync
+        icon: syncthing.png
+
+- Storage:
+    - TrueNAS:
+        href: https://{{ hostvars['nas01'].ansible_host }}
+        description: nas01 · RAIDZ2
+        icon: truenas.png
+        widget:
+          type: truenas
+          url: {{ homepage_truenas_url }}
+          key: {{ vault_truenas_api_key }}
+          enablePools: true
+    - Synology:
+        href: https://{{ hostvars['nas02'].ansible_host }}:5001
+        description: nas02 · backup target
+        icon: synology.png
 
 - Infrastructure:
     - Authentik:
         href: https://auth.{{ base_domain }}
         description: SSO
         icon: authentik.png
+        widget:
+          type: authentik
+          url: {{ homepage_authentik_url }}
+          key: {{ vault_authentik_api_token }}
     - Portainer:
         href: https://docker.{{ base_domain }}
         icon: portainer.png
     - Beszel:
         href: https://metrics.{{ base_domain }}
-        description: Metrics
+        description: Host metrics
         icon: beszel.png
     - Uptime Kuma:
         href: https://synthetics.{{ base_domain }}

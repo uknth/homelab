@@ -6,3 +6,13 @@ homepage_image: "ghcr.io/gethomepage/homepage:latest"
 homepage_root_dir: "{{ service_root }}/homepage"
 homepage_port: 8094
 homepage_allowed_hosts: "dash.{{ base_domain }}"
+
+# Hosts the widgets talk to (direct app ports, not the reverse proxy).
+homepage_media_host: "cmp01.host.puhome.net"
+homepage_util_host: "util01.host.puhome.net"
+homepage_truenas_url: "https://{{ hostvars['nas01'].ansible_host }}"
+homepage_authentik_url: "http://{{ hostvars['util01'].ansible_host }}:9000"
+# Weather (Open-Meteo, no key). Default Bengaluru; change lat/long as needed.
+homepage_weather_label: "Bengaluru"
+homepage_weather_lat: 12.9716
+homepage_weather_long: 77.5946

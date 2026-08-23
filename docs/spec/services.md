@@ -124,3 +124,14 @@ roadmap phase first.
 > - **Portainer** now manages all docker hosts: local `primary` (util01) + **Agent** envs on cmp01/gw01 (`services/dashboard/portainer_agent`, codified registration in the portainer role).
 > - **Dozzle** aggregates logs from every docker host via remote agents (`services/monitoring/dozzle_agent` on cmp01/gw01 + `DOZZLE_REMOTE_AGENT`).
 > - Agents deploy via `playbooks/ops/agents.yml` (`docker_hosts:!util01`), wired into `site.yml`.
+
+> **Homepage dashboard widgets (2026-08-23):** `dash.puhome.net` now has live
+> widgets. The `homepage` role fetches keys at deploy (arr `config.xml`, bazarr
+> `config.yaml`, nzbget.conf, jellyseerr `settings.json` via slurp on cmp01;
+> truenas/authentik/qbit from vault; mints a Jellyfin API key idempotently) and
+> renders them into the on-host `services.yaml` (never git). **Live widgets:**
+> Sonarr, Radarr, Lidarr, Prowlarr, Bazarr, NZBGet, qBittorrent, Jellyseerr,
+> Jellyfin, TrueNAS (pools), Authentik. **Tiles only (need a token/creds — add
+> later):** Portainer, Uptime Kuma, Paperless, Kavita, Synology, Pi-hole. Top:
+> greeting, datetime, util01 resources, Open-Meteo weather (Bengaluru — change in
+> defaults), search.

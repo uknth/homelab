@@ -1,0 +1,108 @@
+---
+# Fetch per-app keys at deploy time so nothing secret lands in git. Stable keys
+# are read from each app's config (slurp on cmp01); truenas/authentik/qbit come
+# from vault; jellyfin/portainer tokens are minted best-effort.
+
+- name: Read *arr config.xml files (cmp01)
+  delegate_to: cmp01
+  become: true
+  ansible.builtin.slurp:
+    src: "/opt/homelab/arr/{{ item }}/config.xml"
+  register: _arr_cfg
+  loop: [sonarr, radarr, lidarr, prowlarr]
+  no_log: true
+
+- name: Extract *arr API keys
+  ansible.builtin.set_fact:
+    hp_keys: "{{ hp_keys | default({}) | combine({ item.item: (item.content | b64decode | regex_findall('<ApiKey>([^<]+)</ApiKey>') | first) }) }}"
+  loop: "{{ _arr_cfg.results }}"
+  loop_control: { label: "{{ item.item }}" }
+  no_log: true
+
+- name: Read bazarr config.yaml (cmp01)
+  delegate_to: cmp01
+  become: true
+  ansible.builtin.slurp:
+    src: /opt/homelab/arr/bazarr/config/config.yaml
+  register: _bazarr_cfg
+  no_log: true
+
+- name: Read nzbget.conf (cmp01)
+  delegate_to: cmp01
+  become: true
+  ansible.builtin.slurp:
+    src: /opt/homelab/arr/nzbget/nzbget.conf
+  register: _nzb_cfg
+  no_log: true
+
+- name: Read jellyseerr settings.json (cmp01)
+  delegate_to: cmp01
+  become: true
+  ansible.builtin.slurp:
+    src: /opt/homelab/jellyfin/jellyseerr/settings.json
+  register: _jseerr_cfg
+  no_log: true
+
+- name: Set fetched keys
+  ansible.builtin.set_fact:
+    hp_bazarr_key: "{{ (_bazarr_cfg.content | b64decode | regex_findall('apikey: *([0-9a-f]+)') | first) | default('') }}"
+    hp_nzb_user: "{{ (_nzb_cfg.content | b64decode | regex_findall('ControlUsername=(.*)') | first | trim) | default('') }}"
+    hp_nzb_pass: "{{ (_nzb_cfg.content | b64decode | regex_findall('ControlPassword=(.*)') | first | trim) | default('') }}"
+    hp_jseerr_key: "{{ (_jseerr_cfg.content | b64decode | from_json).main.apiKey }}"
+  no_log: true
+
+# --- Jellyfin API key (mint 'homepage' if missing) ---
+- name: Jellyfin admin auth
+  delegate_to: cmp01
+  ansible.builtin.uri:
+    url: "http://localhost:8096/Users/AuthenticateByName"
+    method: POST
+    headers: { Authorization: 'MediaBrowser Client="hp", Device="hp", DeviceId="hp", Version="1"' }
+    body_format: json
+    body: { Username: "admin", Pw: "{{ vault_jellyfin_admin_password }}" }
+  register: _jf_auth
+  no_log: true
+  failed_when: false
+
+- name: Jellyfin - list existing API keys
+  delegate_to: cmp01
+  ansible.builtin.uri:
+    url: "http://localhost:8096/Auth/Keys"
+    headers: { Authorization: 'MediaBrowser Token="{{ _jf_auth.json.AccessToken }}"' }
+  register: _jf_keys
+  when: _jf_auth.json.AccessToken is defined
+  failed_when: false
+  no_log: true
+
+- name: Jellyfin - create 'homepage' key if missing
+  delegate_to: cmp01
+  ansible.builtin.uri:
+    url: "http://localhost:8096/Auth/Keys?App=homepage"
+    method: POST
+    headers: { Authorization: 'MediaBrowser Token="{{ _jf_auth.json.AccessToken }}"' }
+    status_code: [200, 204]
+  when:
+    - _jf_auth.json.AccessToken is defined
+    - (_jf_keys.json.Items | default([]) | selectattr('AppName','equalto','homepage') | list | length) == 0
+  failed_when: false
+  no_log: true
+
+- name: Jellyfin - re-read keys
+  delegate_to: cmp01
+  ansible.builtin.uri:
+    url: "http://localhost:8096/Auth/Keys"
+    headers: { Authorization: 'MediaBrowser Token="{{ _jf_auth.json.AccessToken }}"' }
+  register: _jf_keys2
+  when: _jf_auth.json.AccessToken is defined
+  failed_when: false
+  no_log: true
+
+- name: Set jellyfin key fact
+  ansible.builtin.set_fact:
+    hp_jellyfin_key: "{{ (_jf_keys2.json.Items | selectattr('AppName','equalto','homepage') | map(attribute='AccessToken') | first) | default('') }}"
+  no_log: true
+  when: _jf_auth.json.AccessToken is defined
+
+- name: Default jellyfin key empty if auth failed
+  ansible.builtin.set_fact:
+    hp_jellyfin_key: "{{ hp_jellyfin_key | default('') }}"

@@ -1,4 +1,7 @@
 ---
+- name: Gather per-app widget keys
+  ansible.builtin.import_tasks: gather_keys.yml
+
 - name: Create homepage dirs
   become: true
   ansible.builtin.file:
@@ -22,6 +25,7 @@
     - services.yaml
     - bookmarks.yaml
     - docker.yaml
+  no_log: true
   notify: Restart homepage
 - name: Template homepage compose
   become: true
