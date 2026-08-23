@@ -1,10 +1,20 @@
 ---
 # cmp01 host vars
 
-# ops/restic — Paperless is the only thing cmp01 backs up (user directive).
-# document_exporter writes an engine-independent copy into paperless/export,
-# which is what restic then snapshots.
+# ops/restic — Paperless (engine-independent export) + the media-app config that
+# isn't codified (Jellyfin/Jellyseerr settings, SSO plugin, arr wiring). Bulk
+# media itself is NOT backed up (TrueNAS snapshots handle that).
 restic_paths:
   - "{{ service_root }}/paperless/export"
+  - "{{ service_root }}/jellyfin"
+  - "{{ service_root }}/arr"
 restic_pre_commands:
   - "docker exec -t paperless document_exporter /usr/src/paperless/export --delete"
+# Skip disposable/large-churn caches so the repo stays lean.
+restic_excludes:
+  - "**/cache"
+  - "**/transcodes"
+  - "**/MediaCover"
+  - "**/log"
+  - "**/logs"
+  - "gluetun"

@@ -29,6 +29,8 @@ restic_known_hosts: "/root/.ssh/known_hosts"
 
 # What this host backs up. OVERRIDE per host in host_vars. Empty => host skipped.
 restic_paths: []
+# Exclude patterns (restic --exclude), e.g. disposable caches.
+restic_excludes: []
 # Shell commands run (as root) before the snapshot, e.g. Paperless export.
 restic_pre_commands: []
 

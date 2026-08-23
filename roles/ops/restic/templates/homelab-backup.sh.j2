@@ -48,7 +48,8 @@ if ! {{ cmd }}; then fail "pre-hook failed: {{ cmd | replace('"','') }}"; fi
 {% endif %}
 
 log "snapshotting: {{ restic_paths | join(' ') }}"
-if ! "${RESTIC[@]}" backup --tag homelab --host {{ inventory_hostname }} {{ restic_paths | join(' ') }}; then
+EXCLUDES=({% for e in restic_excludes | default([]) %}--exclude "{{ e }}" {% endfor %})
+if ! "${RESTIC[@]}" backup --tag homelab --host {{ inventory_hostname }} "${EXCLUDES[@]}" {{ restic_paths | join(' ') }}; then
   fail "restic backup failed"
 fi
 
