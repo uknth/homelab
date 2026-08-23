@@ -9,5 +9,6 @@ services:
     environment:
       - SESSION_SECRET={{ mixarr_session_secret }}
       - BASE_URL=https://mixarr.{{ base_domain }}
+      - MIXARR_SKIP_NETWORK_PREFLIGHT=1   # homelab is IPv4-only (AAAA filtered)
     volumes:
       - {{ mixarr_root_dir }}/data:/data
