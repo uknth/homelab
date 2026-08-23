@@ -82,6 +82,20 @@
           username: {{ arr_qbit_username | default('admin') }}
           password: {{ vault_qbittorrent_password }}
 
+- Music:
+    - Mixarr:
+        href: https://mixarr.{{ base_domain }}
+        description: Discovery → Lidarr
+        icon: mdi-music-note-plus
+    - slskd:
+        href: https://soulseek.{{ base_domain }}
+        description: Soulseek daemon
+        icon: slskd.png
+    - Soularr:
+        href: https://soularr.{{ base_domain }}
+        description: Lidarr ↔ Soulseek
+        icon: mdi-sync
+
 - Documents & Files:
     - Paperless:
         href: https://docs.{{ base_domain }}

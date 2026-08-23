@@ -1,0 +1,31 @@
+# Managed by Ansible — services/media/soularr
+[Lidarr]
+api_key = {{ _lidarr_key }}
+host_url = http://lidarr:8686
+download_dir = {{ soularr_download_dir }}
+
+[Slskd]
+api_key = {{ slskd_api_key }}
+host_url = http://slskd:5030
+download_dir = {{ soularr_download_dir }}
+delete_searches = False
+stalled_timeout = 3600
+
+[Search Settings]
+search_timeout = 5000
+maximum_peer_queue = 50
+minimum_peer_upload_speed = 0
+minimum_filename_match_ratio = 0.5
+allowed_filetypes = flac,mp3
+ignored_users =
+search_for_tracks = True
+album_prepend_artist = False
+number_of_albums_to_grab = 5
+remove_wanted_on_failure = False
+title_blacklist =
+
+[Release Settings]
+use_most_common_tracknum = True
+allow_multi_disc = True
+accepted_countries = Europe,Japan,United Kingdom,United States,[Worldwide],Australia,Canada
+accepted_formats = CD,Digital Media,Vinyl,Cassette

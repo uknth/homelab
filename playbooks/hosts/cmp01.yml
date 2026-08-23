@@ -37,3 +37,12 @@
 
     - role: services/productivity/filebrowser
       tags: [filebrowser, files]
+
+    - role: services/media/slskd
+      tags: [slskd, music, downloader]
+
+    - role: services/media/soularr
+      tags: [soularr, music]
+
+    - role: services/media/mixarr
+      tags: [mixarr, music, discovery]

@@ -1,0 +1,20 @@
+# Managed by Ansible — services/media/slskd
+networks:
+  arr:
+    external: true
+services:
+  slskd:
+    image: {{ slskd_image }}
+    container_name: slskd
+    user: "{{ slskd_puid }}:{{ slskd_pgid }}"
+    restart: unless-stopped
+    networks: [arr]
+    ports:
+      - "{{ slskd_web_port }}:5030"
+      - "{{ slskd_listen_port }}:{{ slskd_listen_port }}"
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - {{ slskd_root_dir }}/config:/app
+      - {{ media_data_dir }}:/data
+      - {{ scratch_incomplete_dir }}:/scratch

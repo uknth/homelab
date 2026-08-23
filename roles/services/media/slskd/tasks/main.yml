@@ -1,0 +1,52 @@
+---
+- name: Create slskd dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ slskd_puid }}"
+    group: "{{ slskd_pgid }}"
+    mode: "0755"
+  loop:
+    - "{{ slskd_root_dir }}"
+    - "{{ slskd_root_dir }}/compose"
+    - "{{ slskd_root_dir }}/config"
+
+- name: Ensure soulseek download + incomplete dirs exist (run as media uid; NFS)
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ media_data_dir }}/downloads/soulseek"          # complete (data-pool)
+    - "{{ scratch_incomplete_dir }}/soulseek"            # incomplete (scratch)
+
+- name: Template slskd config
+  become: true
+  ansible.builtin.template:
+    src: slskd.yml.j2
+    dest: "{{ slskd_root_dir }}/config/slskd.yml"
+    owner: "{{ slskd_puid }}"
+    group: "{{ slskd_pgid }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart slskd
+
+- name: Template slskd compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ slskd_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart slskd
+
+- name: Deploy slskd
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ slskd_root_dir }}/compose"
+    project_name: "slskd"
+    state: present
+    pull: missing

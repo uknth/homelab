@@ -1,0 +1,13 @@
+# Managed by Ansible — services/media/mixarr
+services:
+  mixarr:
+    image: {{ mixarr_image }}
+    container_name: mixarr
+    restart: unless-stopped
+    ports:
+      - "{{ mixarr_port }}:3010"
+    environment:
+      - SESSION_SECRET={{ mixarr_session_secret }}
+      - BASE_URL=https://mixarr.{{ base_domain }}
+    volumes:
+      - {{ mixarr_root_dir }}/data:/data

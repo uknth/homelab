@@ -1,0 +1,15 @@
+---
+# services/media/slskd — Soulseek daemon; primary music download source (via Soularr).
+# Joins the existing "arr" docker network so Soularr/Lidarr reach it by name.
+slskd_image: "slskd/slskd:latest"
+slskd_root_dir: "{{ service_root }}/slskd"
+slskd_web_port: 5030
+slskd_listen_port: 50300
+slskd_puid: "{{ media_uid }}"
+slskd_pgid: "{{ media_gid }}"
+# Soulseek account (create a free one at soulseek.org, then add to vault).
+slskd_username: "{{ vault_slskd_username | default('') }}"
+slskd_password: "{{ vault_slskd_password | default('') }}"
+slskd_download_dir: "/data/downloads/soulseek"      # complete (data-pool -> hardlinks to /data/music)
+slskd_incomplete_dir: "/scratch/soulseek"           # in-progress (scratch-pool)
+slskd_share_dir: "/data/music"                       # share the library back (Soulseek etiquette)

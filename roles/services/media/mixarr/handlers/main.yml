@@ -1,0 +1,7 @@
+---
+- name: Restart mixarr
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ mixarr_root_dir }}/compose"
+    project_name: "mixarr"
+    state: restarted

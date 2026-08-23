@@ -1,0 +1,10 @@
+---
+# services/media/soularr — bridges Lidarr's "wanted" list to slskd (Soulseek):
+# searches, downloads, and imports back to Lidarr. Runs on a loop (SCRIPT_INTERVAL).
+soularr_image: "mrusse08/soularr:latest"
+soularr_root_dir: "{{ service_root }}/soularr"
+soularr_webui_port: 8265
+soularr_interval: 300              # seconds between runs
+soularr_puid: "{{ media_uid }}"
+soularr_pgid: "{{ media_gid }}"
+soularr_download_dir: "/data/downloads/soulseek"   # shared view (Lidarr + slskd + soularr)

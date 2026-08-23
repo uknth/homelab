@@ -1,0 +1,8 @@
+---
+# services/media/mixarr — self-hosted music discovery for Lidarr (Spotify/Last.fm/
+# ListenBrainz/charts/AI). Feeds approved artists/albums to Lidarr's wanted list.
+# Full-stack image (API+Web+MariaDB+Redis+Caddy in one container).
+mixarr_image: "ghcr.io/aquantumofdonuts/mixarr:latest"
+mixarr_root_dir: "{{ service_root }}/mixarr"
+mixarr_port: 3010                    # HTTP (nginx terminates TLS in front)
+mixarr_session_secret: "{{ vault_mixarr_session_secret | default('changeme-mixarr-session-secret-0192') }}"

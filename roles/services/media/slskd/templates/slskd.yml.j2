@@ -1,0 +1,21 @@
+# Managed by Ansible — services/media/slskd
+soulseek:
+  username: {{ slskd_username }}
+  password: {{ slskd_password }}
+  listen_port: {{ slskd_listen_port }}
+web:
+  authentication:
+    # Web UI is gated by Authentik forward-auth at soulseek.puhome.net; the API
+    # key below is what Soularr uses.
+    disabled: true
+    api_keys:
+      soularr:
+        key: {{ slskd_api_key }}
+        role: readwrite
+        cidr: 0.0.0.0/0,::/0
+directories:
+  downloads: {{ slskd_download_dir }}
+  incomplete: {{ slskd_incomplete_dir }}
+shares:
+  directories:
+    - {{ slskd_share_dir }}

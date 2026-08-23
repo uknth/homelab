@@ -1,0 +1,54 @@
+---
+- name: Create soularr dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ soularr_puid }}"
+    group: "{{ soularr_pgid }}"
+    mode: "0755"
+  loop:
+    - "{{ soularr_root_dir }}"
+    - "{{ soularr_root_dir }}/compose"
+    - "{{ soularr_root_dir }}/config"
+
+- name: Read Lidarr API key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ arr_root_dir }}/lidarr/config.xml"
+  register: _lidarr_cfg
+  no_log: true
+
+- name: Extract Lidarr key
+  ansible.builtin.set_fact:
+    _lidarr_key: "{{ (_lidarr_cfg.content | b64decode | regex_findall('<ApiKey>([^<]+)</ApiKey>') | first) }}"
+  no_log: true
+
+- name: Template soularr config.ini
+  become: true
+  ansible.builtin.template:
+    src: config.ini.j2
+    dest: "{{ soularr_root_dir }}/config/config.ini"
+    owner: "{{ soularr_puid }}"
+    group: "{{ soularr_pgid }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart soularr
+
+- name: Template soularr compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ soularr_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart soularr
+
+- name: Deploy soularr
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ soularr_root_dir }}/compose"
+    project_name: "soularr"
+    state: present
+    pull: missing
