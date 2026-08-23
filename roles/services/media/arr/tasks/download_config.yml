@@ -86,15 +86,17 @@
   when: arr_qbit_password | length > 0
 
 - name: Compute qbit desired lines
+  vars:
+    _bs: "\\"   # a single literal backslash (avoids jinja escape ambiguity)
   ansible.builtin.set_fact:
     _qbit_desired: >-
-      {{ ['Session\\TempPath=' ~ arr_qbit_temp_path,
-          'Session\\TempPathEnabled=true',
-          'Session\\DefaultSavePath=' ~ arr_qbit_save_path,
-          'WebUI\\AuthSubnetWhitelistEnabled=true',
-          'WebUI\\AuthSubnetWhitelist=' ~ arr_qbit_auth_whitelist]
-         + (['WebUI\\Username=' ~ arr_qbit_username,
-             'WebUI\\Password_PBKDF2="' ~ _qbit_pwhash.stdout ~ '"']
+      {{ ['Session' ~ _bs ~ 'TempPath=' ~ arr_qbit_temp_path,
+          'Session' ~ _bs ~ 'TempPathEnabled=true',
+          'Session' ~ _bs ~ 'DefaultSavePath=' ~ arr_qbit_save_path,
+          'WebUI' ~ _bs ~ 'AuthSubnetWhitelistEnabled=true',
+          'WebUI' ~ _bs ~ 'AuthSubnetWhitelist=' ~ arr_qbit_auth_whitelist]
+         + (['WebUI' ~ _bs ~ 'Username=' ~ arr_qbit_username,
+             'WebUI' ~ _bs ~ 'Password_PBKDF2="' ~ _qbit_pwhash.stdout ~ '"']
             if (arr_qbit_password | length > 0) else []) }}
   no_log: true
 
