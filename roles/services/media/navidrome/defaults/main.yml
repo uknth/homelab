@@ -1,0 +1,28 @@
+---
+# services/media/navidrome — self-hosted music server (Subsonic API).
+# Reads the Lidarr-managed library at /data/music (read-only) and serves it to
+# the web UI + any Subsonic-compatible client (Symfonium, Feishin, play:Sub, ...).
+# Native auth (sso:false at the proxy) so mobile Subsonic clients can log in;
+# see docs/runbooks/music-stack.md.
+navidrome_image: "deluan/navidrome:latest"
+navidrome_root_dir: "{{ service_root }}/navidrome"
+navidrome_port: 4533
+navidrome_puid: "{{ media_uid }}"
+navidrome_pgid: "{{ media_gid }}"
+
+# Library (read-only) — the folder Lidarr fills. Navidrome only reads it.
+navidrome_music_dir: "{{ media_data_dir }}/music"
+
+# Behaviour
+navidrome_scan_schedule: "@every 1h"     # rescan the library hourly
+navidrome_session_timeout: "24h"
+navidrome_log_level: "info"
+
+# Stable AES key for the stored-password field so the DB is portable/restorable.
+navidrome_encryption_key: "{{ vault_navidrome_encryption_key | default('homelab-navidrome-key') }}"
+
+# Intended admin login. Navidrome has no seed-admin env/API — the FIRST user is
+# created via the web first-run form; use these values there so the vault stays
+# the source of truth. See tasks note.
+navidrome_admin_user: "uknth"
+navidrome_admin_password: "{{ vault_navidrome_password | default('') }}"

@@ -29,8 +29,8 @@ nginx_sites:
   - { name: docs,       upstream: "http://10.0.2.5:8000", sso: false }   # Paperless-ngx
   - { name: files,      upstream: "http://10.0.2.5:8085", sso: true }    # Filebrowser (media mgmt)
   - { name: soulseek,   upstream: "http://10.0.2.5:5030", sso: true }    # slskd (Soulseek)
+  - { name: music,      upstream: "http://10.0.2.5:4533", sso: false }   # Navidrome (native auth for Subsonic clients)
   - { name: soularr,    upstream: "http://10.0.2.5:8265", sso: true }    # Soularr (music bridge UI)
-  - { name: mixarr,     upstream: "https://10.0.2.5:3010", sso: true }   # Mixarr (Caddy TLS)
 
   # arr stack (cmp01) — admin web UIs behind SSO (inter-app APIs bypass nginx)
   - { name: nzbget,     upstream: "http://10.0.2.5:6789", sso: true }    # Usenet (primary)

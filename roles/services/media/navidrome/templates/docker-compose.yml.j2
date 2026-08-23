@@ -1,0 +1,25 @@
+# Managed by Ansible — services/media/navidrome
+networks:
+  arr:
+    external: true
+services:
+  navidrome:
+    image: {{ navidrome_image }}
+    container_name: navidrome
+    user: "{{ navidrome_puid }}:{{ navidrome_pgid }}"
+    restart: unless-stopped
+    networks: [arr]
+    ports:
+      - "{{ navidrome_port }}:4533"
+    environment:
+      - TZ={{ timezone }}
+      - ND_MUSICFOLDER=/music
+      - ND_DATAFOLDER=/data
+      - ND_SCANSCHEDULE={{ navidrome_scan_schedule }}
+      - ND_SESSIONTIMEOUT={{ navidrome_session_timeout }}
+      - ND_LOGLEVEL={{ navidrome_log_level }}
+      - ND_ENCRYPTIONKEY={{ navidrome_encryption_key }}
+      - ND_ENABLESHARING=true
+    volumes:
+      - {{ navidrome_root_dir }}/data:/data
+      - {{ navidrome_music_dir }}:/music:ro

@@ -44,5 +44,6 @@
     - role: services/media/soularr
       tags: [soularr, music]
 
-    - role: services/media/mixarr
-      tags: [mixarr, music, discovery]
+    - role: services/media/navidrome
+      tags: [navidrome, music, player]
+

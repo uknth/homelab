@@ -1,0 +1,36 @@
+---
+- name: Create navidrome dirs (local disk — its own SQLite DB + cache)
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ navidrome_puid }}"
+    group: "{{ navidrome_pgid }}"
+    mode: "0755"
+  loop:
+    - "{{ navidrome_root_dir }}"
+    - "{{ navidrome_root_dir }}/compose"
+    - "{{ navidrome_root_dir }}/data"
+
+- name: Template navidrome compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ navidrome_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart navidrome
+
+- name: Deploy navidrome
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ navidrome_root_dir }}/compose"
+    project_name: "navidrome"
+    state: present
+    pull: missing
+
+# First-run admin: Navidrome creates the initial admin via its web form only
+# (no seed env/API). Visit https://music.puhome.net once and create
+# {{ navidrome_admin_user }} with vault_navidrome_password. That single account
+# then works in every Subsonic mobile/desktop client.
