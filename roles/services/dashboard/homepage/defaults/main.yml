@@ -16,3 +16,8 @@ homepage_authentik_url: "http://{{ hostvars['util01'].ansible_host }}:9000"
 homepage_weather_label: "Bengaluru"
 homepage_weather_lat: 12.9716
 homepage_weather_long: 77.5946
+
+# Look & feel
+homepage_theme: "light"
+homepage_color: "slate"
+homepage_greeting: "Welcome home, Ujjwal"

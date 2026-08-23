@@ -1,21 +1,22 @@
 # Managed by Ansible — services/dashboard/homepage
 - greeting:
-    text_size: xl
-    text: Homelab
+    text_size: 4xl
+    text: "{{ homepage_greeting }}"
 - datetime:
     text_size: xl
-    format: { dateStyle: long, timeStyle: short, hour12: false }
-- resources:
-    label: util01
-    cpu: true
-    memory: true
-    disk: /
+    format: { dateStyle: full, timeStyle: short, hour12: false }
 - openmeteo:
     label: {{ homepage_weather_label }}
     latitude: {{ homepage_weather_lat }}
     longitude: {{ homepage_weather_long }}
     units: metric
     cache: 5
+- resources:
+    label: util01
+    cpu: true
+    memory: true
+    disk: /
+    expanded: true
 - search:
     provider: duckduckgo
     target: _blank

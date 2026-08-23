@@ -1,11 +1,32 @@
 # Managed by Ansible — services/dashboard/homepage
 title: Homelab
-theme: dark
-color: slate
-headerStyle: boxed
+description: Home services
+theme: {{ homepage_theme }}
+color: {{ homepage_color }}
+headerStyle: clean
+target: _blank
+hideVersion: true
+disableUpdateCheck: true
+useEqualHeights: true
+# Service groups organised into tabs (declutters the page).
 layout:
-  Media: { style: row, columns: 3 }
-  Downloads: { style: row, columns: 4 }
-  Documents & Files: { style: row, columns: 3 }
-  Storage: { style: row, columns: 2 }
-  Infrastructure: { style: row, columns: 4 }
+  Media:
+    tab: Media
+    style: row
+    columns: 3
+  Documents & Files:
+    tab: Media
+    style: row
+    columns: 3
+  Downloads:
+    tab: Downloads
+    style: row
+    columns: 4
+  Storage:
+    tab: Storage
+    style: row
+    columns: 2
+  Infrastructure:
+    tab: System
+    style: row
+    columns: 4
