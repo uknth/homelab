@@ -138,3 +138,31 @@
     status_code: [200, 409]
   loop: "{{ portainer_agent_hosts }}"
   when: item not in (_pt_eps.json | map(attribute='Name') | list)
+
+# --- Promote OAuth users to admin (idempotent) ---
+# OAuth auto-creates standard users (Role 2) with no environment access, so the
+# owner sees nothing. Grant admin to the configured usernames.
+- name: Get Portainer users
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/users"
+    headers:
+      Authorization: "Bearer {{ _pt_jwt.json.jwt }}"
+  register: _pt_users
+  check_mode: false
+
+- name: Promote configured OAuth users to admin
+  ansible.builtin.uri:
+    url: "http://localhost:{{ portainer_port }}/api/users/{{ item.Id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ _pt_jwt.json.jwt }}"
+    body_format: json
+    body:
+      Role: 1
+    status_code: [200]
+  loop: "{{ _pt_users.json }}"
+  loop_control:
+    label: "{{ item.Username }}"
+  when:
+    - item.Username in portainer_admin_users
+    - item.Role != 1

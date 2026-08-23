@@ -14,3 +14,8 @@ portainer_url: "https://docker.{{ base_domain }}"
 # local socket environment. Defaults to docker_hosts minus util01.
 portainer_agent_hosts: "{{ groups['docker_hosts'] | difference(['util01']) }}"
 portainer_agent_port: 9001
+
+# OAuth-provisioned users to grant Portainer admin (Role 1). Standard OAuth users
+# see no environments, so the homelab owner must be an admin. Portainer CE does
+# not reset roles on OAuth login, so this sticks.
+portainer_admin_users: ["uknth"]

@@ -167,3 +167,12 @@ plugin stops managing roles, then promote `uknth` once (sticks). Runtime change 
 `SSO-Auth.xml` (not codified). Group-based alternative for multi-user later: add
 the `groups` scope to the provider + plugin and set `AdminRoles` to an Authentik
 admin group.
+
+### Portainer OAuth users need admin (2026-08-23)
+
+Same class as Jellyfin: Portainer OAuth auto-creates **standard** users (Role 2)
+with no environment access, so the owner logs in and sees *no environments* even
+though they exist. Fix (codified in the portainer role, `portainer_admin_users`):
+promote configured OAuth usernames to admin (Role 1). Portainer CE doesn't reset
+roles on login, so it persists. Environments themselves (local `primary` + cmp01/gw01
+agents) were fine all along.
