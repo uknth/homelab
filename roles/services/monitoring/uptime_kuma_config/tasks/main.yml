@@ -25,6 +25,7 @@
     KUMA_PASSWORD: "{{ kuma_config_password }}"
     KUMA_HTTP: "{{ kuma_http_monitors | to_json }}"
     KUMA_PUSH: "{{ kuma_push_monitors | to_json }}"
+    KUMA_NTFY: "{{ kuma_ntfy | to_json }}"
   register: _kuma_sync
   changed_when: "'\"created\": []' not in _kuma_sync.stdout"
   no_log: true

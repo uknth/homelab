@@ -22,3 +22,13 @@ kuma_http_monitors: >-
 # Push monitors (restic backup verification). ~25h heartbeat window.
 kuma_push_monitors:
   - { name: "Backups", type: "push", interval: 90000 }
+
+# Failure alerting: a single ntfy notification channel attached to every monitor
+# (isDefault+applyExisting), so any DOWN monitor (service or the Backups push)
+# pushes to ntfy. Topic 'homelab-alerts' per docs/spec/maintenance.md. Kuma
+# reaches ntfy on the util01 host directly (both are util01 containers).
+kuma_ntfy:
+  name: "ntfy-alerts"
+  url: "http://{{ hostvars['util01'].ansible_host }}:8091"
+  topic: "homelab-alerts"
+  priority: 5

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Idempotently ensure Uptime Kuma monitors exist. Config via env (JSON)."""
 import os, sys, json
-from uptime_kuma_api import UptimeKumaApi, MonitorType
+from uptime_kuma_api import UptimeKumaApi, MonitorType, NotificationType
 
 url = os.environ["KUMA_URL"]
 user = os.environ["KUMA_USER"]
 pw = os.environ["KUMA_PASSWORD"]
 http_mons = json.loads(os.environ.get("KUMA_HTTP", "[]"))
 push_mons = json.loads(os.environ.get("KUMA_PUSH", "[]"))
+ntfy = json.loads(os.environ.get("KUMA_NTFY", "{}"))
 
 api = UptimeKumaApi(url)
 api.login(user, pw)
@@ -27,6 +28,22 @@ try:
         api.add_monitor(type=MonitorType.PUSH, name=m["name"],
                         interval=int(m.get("interval", 90000)), maxretries=0)
         created.append(m["name"])
+    # Failure alerting: one ntfy notification, default + applied to all monitors.
+    if ntfy:
+        existing_notifs = {n["name"]: n for n in api.get_notifications()}
+        if ntfy["name"] not in existing_notifs:
+            api.add_notification(
+                name=ntfy["name"],
+                type=NotificationType.NTFY,
+                isDefault=True,
+                applyExisting=True,
+                ntfyserverurl=ntfy["url"],
+                ntfytopic=ntfy["topic"],
+                ntfyPriority=int(ntfy.get("priority", 5)),
+                ntfyAuthenticationMethod="none",
+            )
+            created.append("notification:" + ntfy["name"])
+
     tokens = {m["name"]: m.get("pushToken") for m in api.get_monitors() if m.get("pushToken")}
     print(json.dumps({"created": created, "push_tokens": tokens}))
 finally:
