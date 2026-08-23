@@ -156,3 +156,14 @@ SSO (the Authentik button) only works in the **web** player; native clients
 a local password on `uknth` (currently = the Jellyfin admin password) — web SSO
 still works, native clients use `uknth` + password. Not codified (per-user secret);
 recorded here.
+
+### Jellyfin SSO kept demoting the admin (2026-08-23)
+
+`uknth` reverted to non-admin after each Authentik login: the SSO plugin had
+`EnableAuthorization: true` with an **empty `AdminRoles`** (and wasn't even
+requesting the `groups` scope), so every login recomputed roles, matched no admin
+group, and demoted the user. Fix: set **`EnableAuthorization: false`** so the
+plugin stops managing roles, then promote `uknth` once (sticks). Runtime change to
+`SSO-Auth.xml` (not codified). Group-based alternative for multi-user later: add
+the `groups` scope to the provider + plugin and set `AdminRoles` to an Authentik
+admin group.
