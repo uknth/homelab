@@ -5,7 +5,7 @@ services:
     container_name: mixarr
     restart: unless-stopped
     ports:
-      - "{{ mixarr_port }}:3010"
+      - "{{ mixarr_port }}:443"   # container serves TLS on 443 (Caddy); nginx proxies https
     environment:
       - SESSION_SECRET={{ mixarr_session_secret }}
       - BASE_URL=https://mixarr.{{ base_domain }}
