@@ -12,6 +12,17 @@
     - "{{ arr_nzbget_conf }}"
     - "{{ arr_qbit_conf }}"
 
+- name: Ensure download category dirs exist (health checks want them pre-created;
+        run as the media uid since NFS squashes root)
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: >-
+    {{ (arr_nzbget_categories | map('regex_replace','^(.*)$', media_data_dir ~ '/downloads/usenet/\1') | list)
+       + (arr_qbit_categories | map('regex_replace','^(.*)$', media_data_dir ~ '/downloads/torrents/\1') | list) }}
+
 # ---------- nzbget ----------
 - name: Read nzbget.conf
   become: true

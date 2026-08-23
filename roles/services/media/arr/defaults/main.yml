@@ -38,6 +38,8 @@ arr_ls_image_tag: "latest"                      # linuxserver.io tag
 arr_nzbget_conf: "{{ arr_root_dir }}/nzbget/nzbget.conf"
 arr_nzbget_interdir: "/scratch/nzbget"           # in-progress (scratch-pool)
 arr_nzbget_destdir: "/data/downloads/usenet"     # completed (data-pool)
+arr_nzbget_categories: ["Movies", "Series", "Music", "Software"]
+arr_qbit_categories: ["tv", "movies"]
 # nzbget control creds used by the *arr download clients. Set BOTH in vault to
 # have the role enforce them; leave empty to leave nzbget's creds untouched.
 arr_nzbget_username: "{{ vault_nzbget_username | default('') }}"
