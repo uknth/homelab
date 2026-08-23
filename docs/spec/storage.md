@@ -130,7 +130,10 @@ moves are preserved.
   *arr then hardlinks data-pool→library (same filesystem). Owned uid/gid 1001
   (scratch dataset chowned to 1001 to match the media convention).
 
-**Not codified:** the client config-file settings (Inter/Dest/Temp/Save paths,
-qbit auth whitelist, nzbget creds) are live in each app's `/config`, not templated
-by the `arr` role — a rebuild would revert them. The mount + `/scratch` volume ARE
-codified.
+**Codified (2026-08-23):** the `arr` role now enforces the client config-file
+settings (nzbget Inter/DestDir + optional creds; qbit Temp/DefaultSavePath +
+`AuthSubnetWhitelist`) via `tasks/download_config.yml`. LSIO apps rewrite their
+conf from memory on shutdown, so the role edits **only while the container is
+stopped**, and only when the conf **drifts** (idempotent + non-disruptive; verified
+it self-heals a broken path and no-ops when correct). nzbget creds are enforced
+only if `vault_nzbget_username`/`vault_nzbget_password` are set (else left as-is).

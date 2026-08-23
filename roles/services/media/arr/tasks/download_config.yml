@@ -1,0 +1,104 @@
+---
+# Enforce download-client config (paths + qbit auth). LSIO apps rewrite their conf
+# from memory on shutdown, so we edit ONLY while the container is stopped, and only
+# when the conf actually drifts (keeps it idempotent + non-disruptive).
+
+- name: Wait for client configs to be generated
+  become: true
+  ansible.builtin.wait_for:
+    path: "{{ item }}"
+    timeout: 90
+  loop:
+    - "{{ arr_nzbget_conf }}"
+    - "{{ arr_qbit_conf }}"
+
+# ---------- nzbget ----------
+- name: Read nzbget.conf
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ arr_nzbget_conf }}"
+  register: _nzb_raw
+
+- name: Compute nzbget desired lines
+  ansible.builtin.set_fact:
+    _nzb_desired: >-
+      {{ ['InterDir=' ~ arr_nzbget_interdir, 'DestDir=' ~ arr_nzbget_destdir]
+         + (['ControlUsername=' ~ arr_nzbget_username, 'ControlPassword=' ~ arr_nzbget_password]
+            if (arr_nzbget_username | length > 0) else []) }}
+  no_log: true
+
+- name: Enforce nzbget config (stop, edit, start) when drifted
+  when: "_nzb_desired | difference((_nzb_raw.content | b64decode).split('\n') | map('trim') | list) | length > 0"
+  become: true
+  block:
+    - name: Stop nzbget
+      ansible.builtin.command: docker stop nzbget
+      changed_when: true
+    - name: Set nzbget keys
+      ansible.builtin.lineinfile:
+        path: "{{ arr_nzbget_conf }}"
+        regexp: "^{{ item.k }}="
+        line: "{{ item.k }}={{ item.v }}"
+      loop:
+        - { k: InterDir, v: "{{ arr_nzbget_interdir }}" }
+        - { k: DestDir,  v: "{{ arr_nzbget_destdir }}" }
+      no_log: true
+    - name: Set nzbget control creds (if provided)
+      ansible.builtin.lineinfile:
+        path: "{{ arr_nzbget_conf }}"
+        regexp: "^{{ item.k }}="
+        line: "{{ item.k }}={{ item.v }}"
+      loop:
+        - { k: ControlUsername, v: "{{ arr_nzbget_username }}" }
+        - { k: ControlPassword, v: "{{ arr_nzbget_password }}" }
+      when: arr_nzbget_username | length > 0
+      no_log: true
+    - name: Start nzbget
+      ansible.builtin.command: docker start nzbget
+      changed_when: true
+
+# ---------- qBittorrent ----------
+- name: Read qBittorrent.conf
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ arr_qbit_conf }}"
+  register: _qbit_raw
+
+- name: Compute qbit desired lines
+  ansible.builtin.set_fact:
+    _qbit_desired:
+      - 'Session\TempPath={{ arr_qbit_temp_path }}'
+      - 'Session\TempPathEnabled=true'
+      - 'Session\DefaultSavePath={{ arr_qbit_save_path }}'
+      - 'WebUI\AuthSubnetWhitelistEnabled=true'
+      - 'WebUI\AuthSubnetWhitelist={{ arr_qbit_auth_whitelist }}'
+
+- name: Enforce qbit config (stop, edit, start) when drifted
+  when: "_qbit_desired | difference((_qbit_raw.content | b64decode).split('\n') | map('trim') | list) | length > 0"
+  become: true
+  block:
+    - name: Stop qbittorrent
+      ansible.builtin.command: docker stop qbittorrent
+      changed_when: true
+    - name: Set qbit [BitTorrent] keys
+      ansible.builtin.lineinfile:
+        path: "{{ arr_qbit_conf }}"
+        regexp: "^{{ item.re }}="
+        line: "{{ item.line }}"
+        insertafter: '^\[BitTorrent\]'
+      loop:
+        - { re: 'Session\\TempPath',        line: 'Session\TempPath={{ arr_qbit_temp_path }}' }
+        - { re: 'Session\\TempPathEnabled', line: 'Session\TempPathEnabled=true' }
+        - { re: 'Session\\DefaultSavePath', line: 'Session\DefaultSavePath={{ arr_qbit_save_path }}' }
+    - name: Set qbit [Preferences] keys
+      ansible.builtin.lineinfile:
+        path: "{{ arr_qbit_conf }}"
+        regexp: "^{{ item.re }}="
+        line: "{{ item.line }}"
+        insertafter: '^\[Preferences\]'
+      loop:
+        - { re: 'WebUI\\AuthSubnetWhitelistEnabled', line: 'WebUI\AuthSubnetWhitelistEnabled=true' }
+        - { re: 'WebUI\\AuthSubnetWhitelist',        line: 'WebUI\AuthSubnetWhitelist={{ arr_qbit_auth_whitelist }}' }
+    - name: Start qbittorrent
+      ansible.builtin.command: docker start qbittorrent
+      changed_when: true

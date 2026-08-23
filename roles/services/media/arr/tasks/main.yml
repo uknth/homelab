@@ -46,3 +46,6 @@
     project_name: arr
     state: present
     pull: missing
+
+- name: Enforce download-client config (paths + qbit auth)
+  ansible.builtin.import_tasks: download_config.yml

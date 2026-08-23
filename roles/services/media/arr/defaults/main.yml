@@ -31,3 +31,19 @@ arr_lidarr_port: 8686
 arr_bazarr_port: 6767
 
 arr_ls_image_tag: "latest"                      # linuxserver.io tag
+
+# --- Download-client config enforced by the role (LSIO apps generate these
+# confs; without enforcement a rebuild reverts paths to /downloads + resets auth).
+# In-progress -> scratch-pool, completed -> data-pool (hardlinks). storage.md. ---
+arr_nzbget_conf: "{{ arr_root_dir }}/nzbget/nzbget.conf"
+arr_nzbget_interdir: "/scratch/nzbget"           # in-progress (scratch-pool)
+arr_nzbget_destdir: "/data/downloads/usenet"     # completed (data-pool)
+# nzbget control creds used by the *arr download clients. Set BOTH in vault to
+# have the role enforce them; leave empty to leave nzbget's creds untouched.
+arr_nzbget_username: "{{ vault_nzbget_username | default('') }}"
+arr_nzbget_password: "{{ vault_nzbget_password | default('') }}"
+
+arr_qbit_conf: "{{ arr_root_dir }}/qbittorrent/qBittorrent/qBittorrent.conf"
+arr_qbit_temp_path: "/scratch/qbittorrent"       # in-progress (scratch-pool)
+arr_qbit_save_path: "/data/downloads/torrents"   # completed (data-pool)
+arr_qbit_auth_whitelist: "172.25.0.0/16"         # arr docker net; *arr apps skip qbit login
