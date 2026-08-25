@@ -52,3 +52,13 @@ arr_qbit_auth_whitelist: "172.25.0.0/16"         # arr docker net; *arr apps ski
 # WebUI login (for humans at torrent.puhome.net). Password stored as qbit PBKDF2.
 arr_qbit_username: "admin"
 arr_qbit_password: "{{ vault_qbittorrent_password | default('') }}"
+
+# ---- protocol priority (prefer Usenet/NZB over torrents) ----
+# Applied to each *arr's default delay profile: usenet grabs immediately, torrents
+# wait arr_torrent_delay minutes and never bypass on quality — so NZB wins whenever
+# it has the release; torrent stays a fallback. See tasks/protocol_priority.yml.
+arr_usenet_delay: 0
+arr_torrent_delay: 30
+arr_protocol_apps:
+  - { name: radarr, port: "{{ arr_radarr_port }}", api: v3 }
+  - { name: sonarr, port: "{{ arr_sonarr_port }}", api: v3 }

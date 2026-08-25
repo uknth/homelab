@@ -1,0 +1,63 @@
+---
+# Prefer Usenet (NZB) over torrents. The default delay profile (id=1) is the
+# catch-all (no tags). We keep preferredProtocol=usenet, hold torrents for
+# arr_torrent_delay minutes (usenet stays at 0), and disable the highest-quality
+# bypass so a fast torrent can't jump the queue. Drift-gated => idempotent.
+
+- name: Read *arr API keys (config.xml)
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ arr_root_dir }}/{{ item.name }}/config.xml"
+  register: _arr_cfg
+  loop: "{{ arr_protocol_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Build app -> {url, key} map
+  ansible.builtin.set_fact:
+    _arr_api: "{{ _arr_api | default({}) | combine({ item.item.name: {
+        'url': 'http://localhost:' ~ item.item.port ~ '/api/' ~ item.item.api,
+        'key': (item.content | b64decode | regex_findall('<ApiKey>([a-f0-9]+)</ApiKey>') | first) } }) }}"
+  loop: "{{ _arr_cfg.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  no_log: true
+
+- name: Get current default delay profile
+  ansible.builtin.uri:
+    url: "{{ _arr_api[item.name].url }}/delayprofile/1"
+    method: GET
+    headers:
+      X-Api-Key: "{{ _arr_api[item.name].key }}"
+    return_content: true
+  register: _delay_get
+  loop: "{{ arr_protocol_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  check_mode: false
+
+- name: Prefer Usenet — update delay profile when drifted
+  ansible.builtin.uri:
+    url: "{{ _arr_api[item.item.name].url }}/delayprofile/1"
+    method: PUT
+    headers:
+      X-Api-Key: "{{ _arr_api[item.item.name].key }}"
+    body_format: json
+    body: "{{ item.json | combine({
+        'preferredProtocol': 'usenet',
+        'enableUsenet': true,
+        'enableTorrent': true,
+        'usenetDelay': arr_usenet_delay,
+        'torrentDelay': arr_torrent_delay,
+        'bypassIfHighestQuality': false }) }}"
+    status_code: [200, 202]
+  loop: "{{ _delay_get.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: >-
+    item.json.preferredProtocol != 'usenet'
+    or item.json.torrentDelay != arr_torrent_delay
+    or item.json.usenetDelay != arr_usenet_delay
+    or item.json.bypassIfHighestQuality != false
+    or (item.json.enableUsenet | default(true)) != true
