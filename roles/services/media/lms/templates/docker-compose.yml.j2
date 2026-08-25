@@ -1,0 +1,18 @@
+# Managed by Ansible — services/media/lms
+# Host networking: LMS binds cmp01's LAN interface directly so slimproto (3483)
+# discovery + correct stream-IP advertising to the WiiM work without docker NAT.
+services:
+  lms:
+    image: {{ lms_image }}
+    container_name: lms
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PUID={{ lms_puid }}
+      - PGID={{ lms_pgid }}
+      - TZ={{ timezone }}
+      - HTTP_PORT={{ lms_http_port }}
+      - EXTRA_ARGS=--cliport {{ lms_cli_port }}
+    volumes:
+      - {{ lms_root_dir }}/config:/config
+      - {{ lms_music_dir }}:/music:ro

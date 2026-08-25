@@ -30,6 +30,7 @@ nginx_sites:
   - { name: files,      upstream: "http://10.0.2.5:8085", sso: true }    # Filebrowser (media mgmt)
   - { name: soulseek,   upstream: "http://10.0.2.5:5030", sso: true }    # slskd (Soulseek)
   - { name: music,      upstream: "http://10.0.2.5:4533", sso: false }   # Navidrome (native auth for Subsonic clients)
+  - { name: lms,        upstream: "http://10.0.2.5:9000", sso: true }    # Lyrion Music Server (WiiM); admin UI only
   - { name: soularr,    upstream: "http://10.0.2.5:8265", sso: true }    # Soularr (music bridge UI)
 
   # arr stack (cmp01) — admin web UIs behind SSO (inter-app APIs bypass nginx)

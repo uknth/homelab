@@ -1,0 +1,18 @@
+---
+# services/media/lms — Lyrion Music Server (formerly Logitech Media Server).
+# Bridges the /data/music library to the WiiM's built-in Squeezelite player so the
+# WiiM streams directly (phone is only a remote). Host networking so LMS advertises
+# cmp01's real LAN IP for streaming + slimproto discovery works on-subnet.
+# See docs/runbooks/music-stack.md.
+lms_image: "lmscommunity/lyrionmusicserver:stable"
+lms_root_dir: "{{ service_root }}/lms"
+lms_puid: "{{ media_uid }}"
+lms_pgid: "{{ media_gid }}"
+
+# Library (read-only) — same folder Navidrome/Lidarr use.
+lms_music_dir: "{{ media_data_dir }}/music"
+
+# Ports (host networking): 9000 web+stream, 3483 slimproto (tcp+udp discovery).
+# CLI moved off 9090 (Cockpit owns it on cmp01).
+lms_http_port: 9000
+lms_cli_port: 9091

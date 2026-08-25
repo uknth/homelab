@@ -47,3 +47,21 @@ web UI. Point each at `https://music.puhome.net`, user `uknth`, the vault passwo
 ## Notes
 - Only fetch music you're entitled to; slskd/indexers are just transports.
 - slskd/soularr/navidrome config is codified (keys read at deploy / vault).
+
+## Play on WiiM — LMS (Lyrion Music Server)
+
+WiiM has no Subsonic support, so Navidrome can't stream to it directly. `services/media/lms`
+runs Lyrion Music Server on cmp01 (`host` networking) pointed read-only at the same
+`/data/music`; the WiiM's built-in Squeezelite connects and streams directly — the phone is
+only a remote (and with LMS presets, not needed at all).
+
+- Ports (on cmp01 `10.0.2.5`): **9000** web+stream, **3483** tcp/udp slimproto (the WiiM),
+  **9091** CLI (moved off 9090 — Cockpit owns it, via `EXTRA_ARGS=--cliport`).
+- Library folder defaults to `/music`; LMS auto-scans on first boot (hourly thereafter).
+- Admin UI: `lms.puhome.net` (SSO) — the WiiM itself talks to `10.0.2.5:9000/3483` directly,
+  not through nginx (it can't do Authentik).
+
+**WiiM setup:** WiiM Home app → your device → Music Sources / Services → **Logitech/Lyrion
+Media Server**. If the WiiM shares cmp01's subnet it auto-discovers; if it's on another
+VLAN/subnet, add the server manually by IP **`10.0.2.5`** (port 9000). Then browse the library
+and play — audio streams cmp01 → WiiM. Set WiiM **presets** to start playback with no phone.

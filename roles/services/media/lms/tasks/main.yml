@@ -1,0 +1,36 @@
+---
+- name: Create lms dirs (local disk — its own DB/cache/prefs)
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ lms_puid }}"
+    group: "{{ lms_pgid }}"
+    mode: "0755"
+  loop:
+    - "{{ lms_root_dir }}"
+    - "{{ lms_root_dir }}/compose"
+    - "{{ lms_root_dir }}/config"
+
+
+- name: Template lms compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ lms_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart lms
+
+- name: Deploy lms
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ lms_root_dir }}/compose"
+    project_name: "lms"
+    state: present
+    pull: missing
+
+# WiiM setup: WiiM Home app -> device -> Services/Music Server -> add LMS server.
+# If the WiiM is on a different subnet than cmp01 (10.0.2.5), auto-discovery
+# won't cross it — add the server manually by IP 10.0.2.5:9000.

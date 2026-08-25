@@ -1,0 +1,7 @@
+---
+- name: Restart lms
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ lms_root_dir }}/compose"
+    project_name: "lms"
+    state: restarted

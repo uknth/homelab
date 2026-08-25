@@ -47,3 +47,6 @@
     - role: services/media/navidrome
       tags: [navidrome, music, player]
 
+    - role: services/media/lms
+      tags: [lms, music, wiim]
+
