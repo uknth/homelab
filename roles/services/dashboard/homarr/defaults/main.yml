@@ -1,0 +1,22 @@
+---
+# services/dashboard/homarr — homarr-labs/homarr v1 on util01 (dash.puhome.net).
+# Replaces gethomepage/homepage. Homarr is DB-driven: the board layout, tiles and
+# integrations are configured in its UI and persisted in /appdata (SQLite). We
+# codify the deployment (image, secret, Authentik OIDC, docker integration); the
+# board itself is set up once in the UI. See docs/runbooks/homarr-dashboard.md.
+homarr_image: "ghcr.io/homarr-labs/homarr:latest"
+homarr_root_dir: "{{ service_root }}/homarr"
+homarr_port: 7575
+
+# DB field-encryption key (openssl rand -hex 32). MUST stay stable or the DB
+# becomes unreadable — hence vault-pinned.
+homarr_secret_encryption_key: "{{ vault_homarr_secret_encryption_key }}"
+
+# Auth: credentials (guaranteed admin bootstrap) + Authentik OIDC (SSO button).
+# Tier-1 OIDC => the dash vhost is sso:false (nginx must not intercept the callback).
+homarr_auth_providers: "credentials,oidc"
+homarr_oidc_client_id: "{{ vault_homarr_oidc_client_id }}"
+homarr_oidc_client_secret: "{{ vault_homarr_oidc_client_secret }}"
+homarr_oidc_issuer: "{{ authentik_url }}/application/o/homarr"   # no trailing slash
+homarr_oidc_name: "Authentik"
+homarr_oidc_auto_login: "false"   # show the login screen; flip to true for 1-click SSO

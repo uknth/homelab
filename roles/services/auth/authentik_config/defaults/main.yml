@@ -53,3 +53,9 @@ authentik_oidc_apps:
     launch: "https://books.{{ base_domain }}"
     client_id: "{{ vault_kavita_oidc_client_id }}"
     secret: "{{ vault_kavita_oidc_client_secret }}"
+  - slug: homarr
+    name: Homarr
+    redirect: ["https://dash.{{ base_domain }}/api/auth/callback/oidc"]
+    launch: "https://dash.{{ base_domain }}"
+    client_id: "{{ vault_homarr_oidc_client_id }}"
+    secret: "{{ vault_homarr_oidc_client_secret }}"

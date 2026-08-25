@@ -1,0 +1,32 @@
+---
+- name: Create homarr dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ homarr_root_dir }}"
+    - "{{ homarr_root_dir }}/compose"
+    - "{{ homarr_root_dir }}/appdata"
+
+- name: Template homarr compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ homarr_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart homarr
+
+- name: Deploy homarr
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ homarr_root_dir }}/compose"
+    project_name: "homarr"
+    state: present
+    pull: missing

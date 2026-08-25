@@ -1,0 +1,7 @@
+---
+- name: Restart homarr
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ homarr_root_dir }}/compose"
+    project_name: "homarr"
+    state: restarted
