@@ -42,11 +42,8 @@
     - role: services/monitoring/dozzle
       tags: [dozzle, logs, monitoring]
 
-    # Homepage replaced by Homarr (dash.puhome.net) — role kept for revert.
-    # - role: services/dashboard/homepage
-    #   tags: [homepage, dashboard]
-    - role: services/dashboard/homarr
-      tags: [homarr, dashboard]
+    - role: services/dashboard/homepage
+      tags: [homepage, dashboard]
 
     - role: services/dashboard/portainer
       tags: [portainer, dashboard]

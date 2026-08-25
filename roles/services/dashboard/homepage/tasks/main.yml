@@ -25,6 +25,7 @@
     - services.yaml
     - bookmarks.yaml
     - docker.yaml
+    - custom.css
   no_log: true
   notify: Restart homepage
 - name: Template homepage compose
