@@ -6,21 +6,23 @@ headerStyle: clean
 target: _blank
 hideVersion: true
 disableUpdateCheck: true
-useEqualHeights: true
-# Two tabs. Per tab: link groups (bookmarks) first, then widget groups (2-column).
+useEqualHeights: false
+# Two tabs. Links (bookmarks) on top; widget groups (services) below, arranged into
+# two panes by custom.css (#services columns:2). Widget groups use columns:1 so their
+# widgets stack vertically within each pane. Group render order follows this block.
 layout:
-  # ---- Home (family) — links ----
-  Watch: { tab: Home, style: row, columns: 4 }
-  Listen & Read: { tab: Home, style: row, columns: 4 }
-  Files: { tab: Home, style: row, columns: 4 }
-  # ---- Home — widgets (2-col) ----
-  Media: { tab: Home, style: row, columns: 2 }
-  Documents: { tab: Home, style: row, columns: 2 }
-  Weather: { tab: Home, style: row, columns: 2 }
+  # ---- Home (family) — links (wider boxes) ----
+  Watch: { tab: Home, style: row, columns: 3 }
+  Listen & Read: { tab: Home, style: row, columns: 3 }
+  Files: { tab: Home, style: row, columns: 3 }
+  # ---- Home — widgets (left pane: Media | right pane: Weather, Documents) ----
+  Media: { tab: Home, style: column, columns: 1 }
+  Weather: { tab: Home, style: column, columns: 1 }
+  Documents: { tab: Home, style: column, columns: 1 }
   # ---- System (admin) — links ----
-  Downloaders: { tab: System, style: row, columns: 5 }
+  Downloaders: { tab: System, style: row, columns: 4 }
   Storage & Sync: { tab: System, style: row, columns: 3 }
   Admin: { tab: System, style: row, columns: 4 }
-  # ---- System — widgets (2-col) ----
-  Download Activity: { tab: System, style: row, columns: 2 }
-  System Health: { tab: System, style: row, columns: 2 }
+  # ---- System — widgets (two panes) ----
+  Download Activity: { tab: System, style: column, columns: 1 }
+  System Health: { tab: System, style: column, columns: 1 }
