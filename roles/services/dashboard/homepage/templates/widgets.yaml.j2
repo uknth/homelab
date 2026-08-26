@@ -1,16 +1,11 @@
 # Managed by Ansible — services/dashboard/homepage
+# Global top bar (all tabs). Weather moved to a tab-1 service tile; search shrunk via custom.css.
 - greeting:
     text_size: 3xl
     text: "{{ homepage_greeting }}"
 - datetime:
     text_size: l
     format: { dateStyle: long, timeStyle: short, hour12: false }
-- openmeteo:
-    label: {{ homepage_weather_label }}
-    latitude: {{ homepage_weather_lat }}
-    longitude: {{ homepage_weather_long }}
-    units: metric
-    cache: 5
 - search:
     provider: duckduckgo
     target: _blank

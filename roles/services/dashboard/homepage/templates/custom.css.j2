@@ -2,9 +2,7 @@
 body {
   background: linear-gradient(160deg, #f6f8fc 0%, #edf1f8 50%, #e8eef7 100%) fixed !important;
 }
-#page_container,
-main,
-#page_wrapper { background: transparent !important; }
+#page_container, main, #page_wrapper { background: transparent !important; }
 
 /* soft, rounded, low-contrast cards */
 .service-card,
@@ -16,7 +14,13 @@ main,
 }
 .service-card:hover { box-shadow: 0 3px 8px rgba(16, 24, 40, 0.08) !important; }
 
-/* tab bar + group titles: quieter, more breathing room */
-#myTab { gap: .25rem; }
+/* group titles + spacing */
 .services-group { margin-bottom: 1.25rem; }
 h2 { font-weight: 600; letter-spacing: .01em; }
+
+/* #7 — shrink the search widget (placeholder until LLM search in Phase 8) */
+.information-widget-search { max-width: 280px; margin-left: auto; }
+.information-widget-search input {
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.9rem !important;
+}

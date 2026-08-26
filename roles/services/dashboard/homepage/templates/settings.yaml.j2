@@ -7,29 +7,19 @@ target: _blank
 hideVersion: true
 disableUpdateCheck: true
 useEqualHeights: true
-# Three tabs only. Each group below is a titled section under its tab.
+# Two tabs. Within each tab: link groups (bookmarks) first, widget groups (services) below.
 layout:
-  Media:
-    tab: Media
-    style: row
-    columns: 3
-  Music:
-    tab: Media
-    style: row
-    columns: 4
-  Downloads:
-    tab: Downloads
-    style: row
-    columns: 4
-  Documents & Files:
-    tab: System
-    style: row
-    columns: 3
-  Storage:
-    tab: System
-    style: row
-    columns: 2
-  Infrastructure:
-    tab: System
-    style: row
-    columns: 4
+  # ---- Home (family) — links ----
+  Watch: { tab: Home, style: row, columns: 4 }
+  Listen & Read: { tab: Home, style: row, columns: 4 }
+  Files: { tab: Home, style: row, columns: 4 }
+  # ---- Home — widgets ----
+  Weather: { tab: Home, style: row, columns: 1 }
+  Media: { tab: Home, style: row, columns: 2 }
+  # ---- System (admin) — links ----
+  Downloaders: { tab: System, style: row, columns: 5 }
+  Storage & Sync: { tab: System, style: row, columns: 3 }
+  Admin: { tab: System, style: row, columns: 4 }
+  # ---- System — widgets ----
+  Download Activity: { tab: System, style: row, columns: 4 }
+  System Health: { tab: System, style: row, columns: 4 }

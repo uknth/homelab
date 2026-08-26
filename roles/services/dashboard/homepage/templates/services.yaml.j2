@@ -1,8 +1,46 @@
 # Managed by Ansible — services/dashboard/homepage
+# WIDGETS block (live data). App launcher links live in bookmarks.yaml.
+# Groups placed into tabs by settings.yaml (rendered below the link groups).
+
+# ===== Home tab =====
+- Weather:
+    - Bengaluru:
+        icon: mdi-weather-partly-cloudy
+        widget:
+          type: customapi
+          url: https://api.open-meteo.com/v1/forecast?latitude={{ homepage_weather_lat }}&longitude={{ homepage_weather_long }}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m
+          refreshInterval: 600000
+          display: block
+          mappings:
+            - { field: current.temperature_2m, label: Temp, format: float, suffix: "°C" }
+            - { field: current.apparent_temperature, label: Feels, format: float, suffix: "°C" }
+            - { field: current.relative_humidity_2m, label: Humidity, format: number, suffix: "%" }
+            - { field: current.wind_speed_10m, label: Wind, format: number, suffix: " km/h" }
+            - field: current.weather_code
+              label: Sky
+              format: number
+              remap:
+                - { value: 0, to: Clear }
+                - { value: 1, to: Mainly clear }
+                - { value: 2, to: Partly cloudy }
+                - { value: 3, to: Overcast }
+                - { value: 45, to: Fog }
+                - { value: 48, to: Fog }
+                - { value: 51, to: Drizzle }
+                - { value: 53, to: Drizzle }
+                - { value: 55, to: Drizzle }
+                - { value: 61, to: Rain }
+                - { value: 63, to: Rain }
+                - { value: 65, to: Heavy rain }
+                - { value: 80, to: Showers }
+                - { value: 81, to: Showers }
+                - { value: 82, to: Heavy showers }
+                - { value: 95, to: Thunderstorm }
+                - { any: true, to: "—" }
+
 - Media:
     - Jellyfin:
         href: https://video.{{ base_domain }}
-        description: Media server
         icon: jellyfin.png
 {% if hp_jellyfin_key %}
         widget:
@@ -14,18 +52,14 @@
 {% endif %}
     - Jellyseerr:
         href: https://seer.{{ base_domain }}
-        description: Requests
         icon: jellyseerr.png
         widget:
           type: jellyseerr
           url: http://{{ homepage_media_host }}:5055
           key: {{ hp_jseerr_key }}
-    - Kavita:
-        href: https://books.{{ base_domain }}
-        description: Books & comics
-        icon: kavita.png
 
-- Downloads:
+# ===== System tab =====
+- Download Activity:
     - Prowlarr:
         href: https://prowlarr.{{ base_domain }}
         icon: prowlarr.png
@@ -54,10 +88,10 @@
           type: lidarr
           url: http://{{ homepage_media_host }}:8686
           key: {{ hp_keys.lidarr }}
+{% if hp_bazarr_key %}
     - Bazarr:
         href: https://bazarr.{{ base_domain }}
         icon: bazarr.png
-{% if hp_bazarr_key %}
         widget:
           type: bazarr
           url: http://{{ homepage_media_host }}:6767
@@ -65,7 +99,6 @@
 {% endif %}
     - NZBGet:
         href: https://nzbget.{{ base_domain }}
-        description: Usenet (primary)
         icon: nzbget.png
         widget:
           type: nzbget
@@ -74,7 +107,6 @@
           password: {{ hp_nzb_pass }}
     - qBittorrent:
         href: https://torrent.{{ base_domain }}
-        description: Torrents (VPN)
         icon: qbittorrent.png
         widget:
           type: qbittorrent
@@ -82,82 +114,15 @@
           username: {{ arr_qbit_username | default('admin') }}
           password: {{ vault_qbittorrent_password }}
 
-- Music:
-    - Navidrome:
-        href: https://music.{{ base_domain }}
-        description: Music player (Subsonic)
-        icon: navidrome.png
-    - LMS (WiiM):
-        href: https://lms.{{ base_domain }}
-        description: Lyrion server → WiiM
-        icon: lyrion.png
-    - slskd:
-        href: https://soulseek.{{ base_domain }}
-        description: Soulseek daemon
-        icon: slskd.png
-    - Soularr:
-        href: https://soularr.{{ base_domain }}
-        description: Lidarr ↔ Soulseek
-        icon: mdi-sync
-
-- Documents & Files:
-    - Paperless:
-        href: https://docs.{{ base_domain }}
-        description: Documents (OIDC)
-        icon: paperless-ngx.png
-{% if hp_paperless_key %}
-        widget:
-          type: paperlessngx
-          url: http://{{ homepage_media_host }}:8000
-          key: {{ hp_paperless_key }}
-{% endif %}
-    - Filebrowser:
-        href: https://files.{{ base_domain }}
-        description: Media file manager
-        icon: filebrowser.png
-    - Syncthing:
-        href: https://sync.{{ base_domain }}
-        description: File sync
-        icon: syncthing.png
-
-- Storage:
+- System Health:
     - TrueNAS:
         href: https://{{ hostvars['nas01'].ansible_host }}
-        description: nas01 · RAIDZ2
         icon: truenas.png
         widget:
           type: truenas
           url: {{ homepage_truenas_url }}
           key: {{ vault_truenas_api_key }}
           enablePools: true
-    - Synology:
-        href: https://{{ hostvars['nas02'].ansible_host }}:5001
-        description: nas02 · backup target
-        icon: synology.png
-
-- Infrastructure:
-    - Authentik:
-        href: https://auth.{{ base_domain }}
-        description: SSO
-        icon: authentik.png
-        widget:
-          type: authentik
-          url: {{ homepage_authentik_url }}
-          key: {{ vault_authentik_api_token }}
-    - Portainer:
-        href: https://docker.{{ base_domain }}
-        icon: portainer.png
-{% if hp_portainer_token %}
-        widget:
-          type: portainer
-          url: http://{{ hostvars['util01'].ansible_host }}:9001
-          env: {{ hp_portainer_env }}
-          key: {{ hp_portainer_token }}
-{% endif %}
-    - Beszel:
-        href: https://metrics.{{ base_domain }}
-        description: Host metrics
-        icon: beszel.png
     - Uptime Kuma:
         href: https://synthetics.{{ base_domain }}
         icon: uptime-kuma.png
@@ -165,13 +130,20 @@
           type: uptimekuma
           url: http://{{ hostvars['util01'].ansible_host }}:3001
           slug: homelab
-    - Dozzle:
-        href: https://logs.{{ base_domain }}
-        description: Logs
-        icon: dozzle.png
-    - n8n:
-        href: https://n8n.{{ base_domain }}
-        icon: n8n.png
-    - ntfy:
-        href: https://ntfy.{{ base_domain }}
-        icon: ntfy.png
+    - Authentik:
+        href: https://auth.{{ base_domain }}
+        icon: authentik.png
+        widget:
+          type: authentik
+          url: {{ homepage_authentik_url }}
+          key: {{ vault_authentik_api_token }}
+{% if hp_portainer_token %}
+    - Portainer:
+        href: https://docker.{{ base_domain }}
+        icon: portainer.png
+        widget:
+          type: portainer
+          url: http://{{ hostvars['util01'].ansible_host }}:9001
+          env: {{ hp_portainer_env }}
+          key: {{ hp_portainer_token }}
+{% endif %}

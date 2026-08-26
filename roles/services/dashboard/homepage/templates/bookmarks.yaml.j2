@@ -1,6 +1,66 @@
 # Managed by Ansible — services/dashboard/homepage
-- Admin:
+# LINKS block. Grouped app shortcuts; placed into tabs by settings.yaml.
+
+# ===== Home tab =====
+- Watch:
+    - Jellyfin:
+        - { icon: jellyfin.png, href: "https://video.{{ base_domain }}" }
+    - Jellyseerr:
+        - { icon: jellyseerr.png, href: "https://seer.{{ base_domain }}" }
+- Listen & Read:
+    - Navidrome:
+        - { icon: navidrome.png, href: "https://music.{{ base_domain }}" }
+    - LMS (WiiM):
+        - { icon: lyrion.png, href: "https://lms.{{ base_domain }}" }
+    - Kavita:
+        - { icon: kavita.png, href: "https://books.{{ base_domain }}" }
+- Files:
+    - Paperless:
+        - { icon: paperless-ngx.png, href: "https://docs.{{ base_domain }}" }
+    - Filebrowser:
+        - { icon: filebrowser.png, href: "https://files.{{ base_domain }}" }
+
+# ===== System tab =====
+- Downloaders:
+    - Prowlarr:
+        - { icon: prowlarr.png, href: "https://prowlarr.{{ base_domain }}" }
+    - Sonarr:
+        - { icon: sonarr.png, href: "https://sonarr.{{ base_domain }}" }
+    - Radarr:
+        - { icon: radarr.png, href: "https://radarr.{{ base_domain }}" }
+    - Lidarr:
+        - { icon: lidarr.png, href: "https://lidarr.{{ base_domain }}" }
+    - Bazarr:
+        - { icon: bazarr.png, href: "https://bazarr.{{ base_domain }}" }
+    - NZBGet:
+        - { icon: nzbget.png, href: "https://nzbget.{{ base_domain }}" }
+    - qBittorrent:
+        - { icon: qbittorrent.png, href: "https://torrent.{{ base_domain }}" }
+    - slskd:
+        - { icon: slskd.png, href: "https://soulseek.{{ base_domain }}" }
+    - Soularr:
+        - { icon: mdi-sync, href: "https://soularr.{{ base_domain }}" }
+- Storage & Sync:
     - TrueNAS:
-        - { abbr: NAS, href: "https://10.0.2.6" }
+        - { icon: truenas.png, href: "https://{{ hostvars['nas01'].ansible_host }}" }
+    - Synology:
+        - { icon: synology.png, href: "https://{{ hostvars['nas02'].ansible_host }}:5001" }
+    - Syncthing:
+        - { icon: syncthing.png, href: "https://sync.{{ base_domain }}" }
+- Admin:
+    - Authentik:
+        - { icon: authentik.png, href: "https://auth.{{ base_domain }}" }
+    - Portainer:
+        - { icon: portainer.png, href: "https://docker.{{ base_domain }}" }
+    - Beszel:
+        - { icon: beszel.png, href: "https://metrics.{{ base_domain }}" }
+    - Uptime Kuma:
+        - { icon: uptime-kuma.png, href: "https://synthetics.{{ base_domain }}" }
+    - Dozzle:
+        - { icon: dozzle.png, href: "https://logs.{{ base_domain }}" }
+    - n8n:
+        - { icon: n8n.png, href: "https://n8n.{{ base_domain }}" }
+    - ntfy:
+        - { icon: ntfy.png, href: "https://ntfy.{{ base_domain }}" }
     - Omada:
         - { abbr: NET, href: "https://10.0.2.21" }
