@@ -1,8 +1,48 @@
 # Managed by Ansible — services/dashboard/homepage
 # WIDGETS block (live data). App launcher links live in bookmarks.yaml.
-# Groups placed into tabs by settings.yaml (rendered below the link groups).
+# Groups placed into tabs (2-column) by settings.yaml.
 
 # ===== Home tab =====
+- Media:
+    - Jellyfin:
+        href: https://video.{{ base_domain }}
+        icon: jellyfin.png
+{% if hp_jellyfin_key %}
+        widget:
+          type: jellyfin
+          url: http://{{ homepage_media_host }}:8096
+          key: {{ hp_jellyfin_key }}
+          enableBlocks: true
+          enableNowPlaying: true
+{% endif %}
+    - Jellyseerr:
+        href: https://seer.{{ base_domain }}
+        icon: jellyseerr.png
+        widget:
+          type: jellyseerr
+          url: http://{{ homepage_media_host }}:5055
+          key: {{ hp_jseerr_key }}
+    - Navidrome:
+        href: https://music.{{ base_domain }}
+        icon: navidrome.png
+        widget:
+          type: navidrome
+          url: http://{{ homepage_media_host }}:4533
+          user: {{ homepage_navidrome_user }}
+          salt: {{ homepage_navidrome_salt }}
+          token: {{ (vault_navidrome_password ~ homepage_navidrome_salt) | hash('md5') }}
+
+- Documents:
+{% if hp_paperless_key %}
+    - Paperless:
+        href: https://docs.{{ base_domain }}
+        icon: paperless-ngx.png
+        widget:
+          type: paperlessngx
+          url: http://{{ homepage_media_host }}:8000
+          key: {{ hp_paperless_key }}
+{% endif %}
+
 - Weather:
     - Bengaluru:
         icon: mdi-weather-partly-cloudy
@@ -37,26 +77,6 @@
                 - { value: 82, to: Heavy showers }
                 - { value: 95, to: Thunderstorm }
                 - { any: true, to: "—" }
-
-- Media:
-    - Jellyfin:
-        href: https://video.{{ base_domain }}
-        icon: jellyfin.png
-{% if hp_jellyfin_key %}
-        widget:
-          type: jellyfin
-          url: http://{{ homepage_media_host }}:8096
-          key: {{ hp_jellyfin_key }}
-          enableBlocks: true
-          enableNowPlaying: true
-{% endif %}
-    - Jellyseerr:
-        href: https://seer.{{ base_domain }}
-        icon: jellyseerr.png
-        widget:
-          type: jellyseerr
-          url: http://{{ homepage_media_host }}:5055
-          key: {{ hp_jseerr_key }}
 
 # ===== System tab =====
 - Download Activity:
@@ -123,6 +143,15 @@
           url: {{ homepage_truenas_url }}
           key: {{ vault_truenas_api_key }}
           enablePools: true
+    - Beszel:
+        href: https://metrics.{{ base_domain }}
+        icon: beszel.png
+        widget:
+          type: beszel
+          url: http://{{ hostvars['util01'].ansible_host }}:8090
+          username: {{ vault_certbot_email }}
+          password: {{ vault_beszel_superuser_password }}
+          version: 2
     - Uptime Kuma:
         href: https://synthetics.{{ base_domain }}
         icon: uptime-kuma.png

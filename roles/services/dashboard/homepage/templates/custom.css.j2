@@ -1,10 +1,18 @@
 /* Managed by Ansible — services/dashboard/homepage : clean light aesthetic */
+
+/* #1 — scale the whole UI up a few points (rem-based) */
+html { font-size: 18px; }
+
 body {
   background: linear-gradient(160deg, #f6f8fc 0%, #edf1f8 50%, #e8eef7 100%) fixed !important;
 }
 #page_container, main, #page_wrapper { background: transparent !important; }
 
-/* soft, rounded, low-contrast cards */
+/* #2 — horizontal padding so the header/content aren't flush to the edges */
+#information-widgets { padding: 0.75rem 1.75rem !important; }
+#page_container { padding-left: 1.75rem !important; padding-right: 1.75rem !important; }
+
+/* soft, rounded, low-contrast cards (a touch more padding for size) */
 .service-card,
 #information-widgets > div {
   background: #ffffff !important;
@@ -12,15 +20,16 @@ body {
   border-radius: 12px !important;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05) !important;
 }
+.service-card { padding: 0.9rem 1rem !important; }
 .service-card:hover { box-shadow: 0 3px 8px rgba(16, 24, 40, 0.08) !important; }
 
 /* group titles + spacing */
-.services-group { margin-bottom: 1.25rem; }
+.services-group { margin-bottom: 1.4rem; }
 h2 { font-weight: 600; letter-spacing: .01em; }
 
-/* #7 — shrink the search widget (placeholder until LLM search in Phase 8) */
-.information-widget-search { max-width: 280px; margin-left: auto; }
+/* #7 — keep the search box compact (placeholder until LLM search in Phase 8) */
+.information-widget-search { max-width: 300px; margin-left: auto; }
 .information-widget-search input {
-  padding: 0.5rem 0.75rem !important;
-  font-size: 0.9rem !important;
+  padding: 0.5rem 0.85rem !important;
+  font-size: 0.95rem !important;
 }

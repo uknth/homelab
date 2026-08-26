@@ -21,3 +21,9 @@ homepage_weather_long: 77.5946
 homepage_theme: "light"
 homepage_color: "slate"
 homepage_greeting: "Welcome home, Ujjwal"
+
+# Widget auth for apps with no gathered API key. Best-guess admin usernames —
+# override here if your admin account differs. Navidrome uses Subsonic token auth
+# (token = md5(password + salt)).
+homepage_navidrome_user: "uknth"
+homepage_navidrome_salt: "homepagewidget"

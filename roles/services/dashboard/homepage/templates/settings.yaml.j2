@@ -7,19 +7,20 @@ target: _blank
 hideVersion: true
 disableUpdateCheck: true
 useEqualHeights: true
-# Two tabs. Within each tab: link groups (bookmarks) first, widget groups (services) below.
+# Two tabs. Per tab: link groups (bookmarks) first, then widget groups (2-column).
 layout:
   # ---- Home (family) — links ----
   Watch: { tab: Home, style: row, columns: 4 }
   Listen & Read: { tab: Home, style: row, columns: 4 }
   Files: { tab: Home, style: row, columns: 4 }
-  # ---- Home — widgets ----
-  Weather: { tab: Home, style: row, columns: 1 }
+  # ---- Home — widgets (2-col) ----
   Media: { tab: Home, style: row, columns: 2 }
+  Documents: { tab: Home, style: row, columns: 2 }
+  Weather: { tab: Home, style: row, columns: 2 }
   # ---- System (admin) — links ----
   Downloaders: { tab: System, style: row, columns: 5 }
   Storage & Sync: { tab: System, style: row, columns: 3 }
   Admin: { tab: System, style: row, columns: 4 }
-  # ---- System — widgets ----
-  Download Activity: { tab: System, style: row, columns: 4 }
-  System Health: { tab: System, style: row, columns: 4 }
+  # ---- System — widgets (2-col) ----
+  Download Activity: { tab: System, style: row, columns: 2 }
+  System Health: { tab: System, style: row, columns: 2 }
