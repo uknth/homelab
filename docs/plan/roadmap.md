@@ -3,6 +3,9 @@
 Build-out phases for v3, in dependency order. Status reflects what's actually wired into
 `site.yml` and present under `roles/`. Update this doc as phases complete.
 
+> **Resuming?** Start with [`../HANDOFF.md`](../HANDOFF.md) — the latest context dump
+> (tag `v3.0.0`, Phase 8 next).
+
 ## Prerequisites (not phases, but blockers)
 
 - [x] **Fleet bootstrap (`init.yml`)** — DONE 2026-08-22. The `ansible` user exists on all
@@ -30,7 +33,17 @@ Build-out phases for v3, in dependency order. Status reflects what's actually wi
 | 5c | `cmp01`: Paperless-ngx | 🟢 done 2026-08-22 — migrated existing DB+docs (182) from TrueNAS to local disk; postgres:17 glibc; collation refreshed |
 | 6 | **Maintenance**: `ops/restic` → nas02 (SFTP) — scoped to **Paperless + Syncthing**; `--tags patch` play; Uptime Kuma verification | 🟢 done 2026-08-22 — backups **live**: repos init'd, nightly timers armed, first snapshots verified (Paperless 1.45 GiB, Syncthing). Repo path is `/restic/<host>` (Synology SFTP chroot). `uptime_kuma_config` role added: HTTP monitor per service (all green) + **Backups** push monitor restic pings. Also this pass: **Syncthing** (util01), **Filebrowser** (cmp01, media mgmt), **Portainer/Dozzle agents** (fleet-wide), **Beszel** agents on macOS+nas01. |
 | 7 | **GitOps**: builds.sr.ht CI + on-LAN executor (see [gitops](gitops.md)) | 🟢 done 2026-08-23 — CI live (builds.sr.ht runs on push). Executor on util01: full-fleet `--check` dry-run **verified clean (0 failures across all 7 hosts)**; poll timer **enabled in dry-run mode** (`gitops_auto_apply` off — flip to enable auto-apply). Hardened ~6 roles to be check-mode-safe (read-only API/`networksetup` lookups run under `--check`). Executor secrets on util01: vault-pass + `ansible_rsa.private` + `restic_backup_ed25519`. |
-| 8 | `ai01`: Ollama native + Qwen + paperless-ai · `ctl01`: dev toolchain | 🔵/🟡 planned |
+| 8 | `ai01`: Ollama native + Qwen + paperless-ai · `ctl01`: dev toolchain | 🟡 **next** — see [`../HANDOFF.md`](../HANDOFF.md) |
+
+## Post-Phase-7 enhancements (2026-08-29, tag v3.0.0)
+
+Within phases 5–6, layered on after GitOps:
+- **Music stack** (cmp01): Navidrome + LMS/Lyrion (WiiM) + slskd/Soularr (Soulseek);
+  Mixarr dropped. NZB prioritised over torrents (arr delay profiles).
+- **Dashboard**: Homarr trialled then reverted (not config-driven); Homepage reworked
+  into 2 tabs (Home/System) with a links block + two-pane widgets block, restyled.
+
+Full detail + open items in [`../HANDOFF.md`](../HANDOFF.md).
 
 ## Why this order
 
