@@ -1,0 +1,100 @@
+---
+# paperless-ai prerequisites: the GGUF on disk, and a Paperless API token.
+
+- name: Create paperless-ai dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ paperless_root_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop: [models, ai-data]
+
+# Fetched on the host, not in the container, so the inference container can stay
+# on an internal-only network with no outbound access. Checksum-pinned: the file
+# is ~2.3 GiB and a truncated download would otherwise surface as llama-server
+# crash-looping on a corrupt model.
+- name: Download the GGUF model
+  become: true
+  ansible.builtin.get_url:
+    url: >-
+      https://huggingface.co/{{ paperless_llama_model_repo }}/resolve/main/{{ paperless_llama_model_file }}
+    dest: "{{ paperless_root_dir }}/models/{{ paperless_llama_model_file }}"
+    checksum: "sha256:{{ paperless_llama_model_sha256 }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+    timeout: 120
+  register: _llama_model
+  retries: 3
+  delay: 10
+  until: _llama_model is succeeded
+
+# paperless-ai authenticates to Paperless with a DRF token. Rather than keeping
+# that token in the vault (where it would drift from reality the moment anyone
+# rotated it), derive it from Paperless itself: ensure a dedicated service
+# account exists and read back its token. Idempotent — get_or_create on both.
+#
+# The account is a superuser because paperless-ai must read and re-tag every
+# document regardless of owner; Paperless has no narrower role that allows this.
+# It is a *separate* account from uknth precisely so it can be revoked on its
+# own without disturbing anyone's real login.
+- name: Ensure the paperless-ai service account exists and read its API token
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - paperless
+      - python3
+      - manage.py
+      - shell
+      - -c
+      - |
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+        u, created = User.objects.get_or_create(
+            username="{{ paperless_ai_service_user }}",
+            defaults={"is_superuser": True, "is_staff": False},
+        )
+        if created:
+            u.set_unusable_password()
+            u.save()
+        t, _ = Token.objects.get_or_create(user=u)
+        print(t.key)
+  register: _paperless_ai_token_cmd
+  changed_when: false
+  # Must run under --check too: the GitOps executor dry-runs the whole fleet, and
+  # without the token the compose template below cannot render at all. Safe to
+  # run in check mode — get_or_create on an account that already exists is a read.
+  check_mode: false
+  no_log: true
+
+- name: Register the token for the compose template
+  ansible.builtin.set_fact:
+    _paperless_ai_token: "{{ _paperless_ai_token_cmd.stdout_lines | last | trim }}"
+  no_log: true
+
+- name: Assert the token looks like a DRF token
+  ansible.builtin.assert:
+    that:
+      - _paperless_ai_token | length == 40
+    fail_msg: >-
+      Expected a 40-character DRF token from Paperless, got
+      {{ _paperless_ai_token | length }} characters. Check that the `paperless`
+      container is running and healthy.
+    quiet: true
+
+# Written after the token is known, before the compose deploy. The app reads its
+# core config from here rather than the container environment.
+- name: Template the paperless-ai .env
+  become: true
+  ansible.builtin.template:
+    src: paperless-ai.env.j2
+    dest: "{{ paperless_root_dir }}/ai-data/.env"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart paperless

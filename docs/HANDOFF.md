@@ -129,27 +129,106 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
   [`spec/auth.md`](spec/auth.md).
 - **GitOps auto-apply** still off (dry-run). Enable when confident.
 
-## Phase 8 (in progress — scope being expanded 2026-08-30)
-- **8a · ai01**: Ollama (native, Homebrew + launchd — Docker on macOS gets no Metal accel)
-  + a Qwen model + **paperless-ai** (auto-tag/OCR-assist Paperless docs). Same LLM backs the
-  **Homepage LLM search** (replace the placeholder search box).
-- **8b · ctl01**: dev toolchain (`system/colima` + `dev/{go,node,kubectl,helm,kind,awscli}`).
-  Prereqs now **done** — 10.0.2.4 reserved, inventory updated. Remaining: run
-  `init.yml -l ctl01` then `site.yml -l ctl01`.
+## Session 2026-08-31 — Phase 8a: paperless-ai + local inference (cmp01)
+
+Deployed and verified. Runs **inside the Paperless compose project** (not a separate
+role) so it shares Paperless's lifecycle and reaches it as `webserver` over the project
+network rather than a host IP.
+
+- **llama.cpp, not Ollama.** Ollama *is* llama.cpp wrapped in a model registry and
+  load/unload logic — all dead weight for one permanently-pinned model, and less
+  declarative (the model becomes runtime state in a volume). With `llama-server` the
+  exact GGUF and every flag are literal values in the role.
+- **Gemma 3 4B Q4_K_M** (`ggml-org/gemma-3-4b-it-GGUF`, sha256-pinned, 2.3 GiB),
+  using ~3.3 GB of the A4000's 16 GB. Sub-2B models were rejected: the job needs
+  strict JSON and they fail it intermittently, which shows up as documents silently
+  going untagged. Measured: **1785 prompt tokens → valid JSON in 1.4 s.**
+- **Network isolation.** `llama` sits on an `internal: true` network with no LAN
+  route, no published port and no internet; Ansible fetches the GGUF to a bind mount
+  so the container needs no outbound access. Only paperless-ai can reach it.
+- **The token is derived, not stored.** The role ensures a dedicated `paperless-ai`
+  Paperless service account and reads its DRF token back at deploy time, so nothing
+  lands in the vault and it cannot drift if rotated. It is a superuser (Paperless has
+  no narrower role that can re-tag documents it does not own) and deliberately
+  separate from `uknth` so it is revocable on its own.
+- **`docs-ai.puhome.net`**, SSO-gated — unlike Paperless itself, which stays open for
+  API/mobile clients. Verified redirecting to Authentik.
+
+### Gotchas found the hard way (all now handled in the role)
+1. **Docker env does NOT configure paperless-ai**, contrary to upstream's claim. The
+   app logs "No .env file found. Starting setup process..." and aborts scanning
+   regardless of container environment — it reads core config from `/app/data/.env`
+   only. Ansible now templates that file directly (same declarative outcome, the
+   source the app actually honours); the setup wizard never runs.
+2. **`PROCESS_PREDEFINED_DOCUMENTS` is inverted.** `yes` is the *restrictive* setting
+   (process only documents carrying `TAGS`); `no` turns it loose on the whole archive.
+   Set to `yes` with trigger tag **`ai-process`** — nothing is touched until a document
+   is deliberately tagged. Verified: 0 of 182 documents modified after the initial scan.
+3. **The RAG service reads different variable names** than the Node app writes
+   (upstream issue #896) and reports "Server: Offline" without `PAPERLESS_URL` /
+   `PAPERLESS_NGX_URL` / `PAPERLESS_HOST` / `PAPERLESS_TOKEN` / `PAPERLESS_APIKEY`
+   aliases (base URL, no `/api`). All set.
+4. **Bundled ChromaDB phones home** by default; `ANONYMIZED_TELEMETRY=false` set —
+   the whole point of local inference here is that these are financial records.
+5. **Upstream is unmaintained** (paused for a rewrite). It holds a superuser token and
+   writes to every document, so it is excluded from the `ops/maintenance` auto-upgrade
+   allowlist — review before bumping the image.
+
+**To start using it:** tag a document `ai-process` in Paperless. Within 30 minutes
+(`*/30` cron) it is analysed, rewritten, and tagged `ai-processed` — filter on that tag
+to review or undo everything it has touched. Widen the rollout only once tag quality
+looks right.
+
+## Phase 8 (in progress)
+- **8a · cmp01 — DONE 2026-08-31**: paperless-ai + llama.cpp (Gemma 3 4B) on the A4000.
+  See the session notes above.
+- **8b · ai01 — blocked on a decision**: native Ollama (Homebrew + launchd; Docker on macOS
+  gets no Metal accel) serving the **agent** model at 64k+ context. Also intended to back the
+  **Homepage LLM search** (still a placeholder box). Not started — the user is reviewing the
+  agent options first, and the choice determines the model and context budget.
+- **8c · ctl01**: dev toolchain (`system/colima` + `dev/{go,node,kubectl,helm,kind,awscli}`)
+  plus the agent itself. Prereqs **done** — 10.0.2.4 reserved, inventory updated, and
+  `ansible` is now in the macOS `admin` group. Remaining: `site.yml -l ctl01`.
 - Build per [`spec/conventions.md`](spec/conventions.md); wire into `site.yml`; update the roadmap.
 
-### Phase 8 design questions (unresolved in the docs — decide before building)
-1. **`hermes` vs `paperless-ai`.** `playbooks/hosts/ai01.yml` (scaffolding, commented out of
-   `site.yml`) lists `services/ai/ollama` + `services/ai/hermes` — but `hermes` appears in no
-   spec, only `plan/migration.md:51` ("no v2 implementation"). Meanwhile `spec/services.md:84`
-   lists **paperless-ai**, which is absent from the playbook. The two disagree.
-2. **paperless-ai has no runtime on ai01.** It is Docker-only, and `spec/hosts.md:80` explicitly
-   keeps Colima *off* ai01. Either Colima goes on ai01 (contradicting the spec) or the container
-   runs on cmp01 next to Paperless and talks to `ai01:11434` over the LAN. Latter is preferred.
-3. **`system/brew` is commented out** of `playbooks/bootstrap/macos.yml`. Every Phase 8 role on
-   both Macs is Homebrew-driven, so that role is an unstated prerequisite for the whole phase.
-4. **Nothing is built**: no `roles/dev/`, no `roles/services/ai/`. Both host playbooks are
-   scaffolding referencing 9 roles that do not exist.
+### Agent decision (8b/8c) — researched 2026-08-31, awaiting the user
+Requirement: web UI primary, Telegram/WhatsApp secondary; agent on **ctl01**, LLM on **ai01**.
+
+- **Hermes Agent** (Nous Research, MIT) — recommended. Web UI is the community
+  [`nesquena/hermes-webui`](https://github.com/nesquena/hermes-webui) (three-panel, port 8787,
+  **native OIDC** so it drops into Authentik). Native cron. Model-agnostic; documented Ollama path.
+- **OpenClaw** (formerly Clawdbot/Moltbot) — built-in dashboard, human-authored skills (a better
+  fit for the declarative principle), but third-party reports of a March 2026 CVE cluster incl.
+  CVSS 9.9 make it the riskier choice for something executing shell commands on the LAN.
+- **Open tension:** Hermes *writes its own skills* into `~/.hermes/skills/` — mutable state the
+  roles do not own, the same objection that killed Homarr. Treat `~/.hermes` as restic-backed
+  data, or prefer OpenClaw's authored skills.
+- **Sharp edges:** Hermes needs **≥64k context**, and `OLLAMA_CONTEXT_LENGTH` can only be set
+  server-side at startup (the OpenAI API cannot raise it per-request) — the most common failure.
+  Ollama also binds `127.0.0.1` by default; reaching it from ctl01 needs `OLLAMA_HOST=0.0.0.0`
+  in the launchd plist, and it has **no auth**. WhatsApp bridges are unofficial and risk a ban —
+  prefer Telegram's bot API.
+- **Biggest risk:** ctl01 holds the vault password and `ansible_rsa.private` — fleet-wide root.
+  An agent with shell access there, fed untrusted web/document/message input, is a
+  prompt-injection path to full compromise. Run its tools under the Docker backend via Colima
+  (already in 8c scope) and keep those credentials off its reachable filesystem — or host it on
+  util01, which carries no fleet-wide secrets.
+
+### Phase 8 design questions — status
+1. **`hermes` vs `paperless-ai`** — RESOLVED. They were never alternatives: `hermes` is
+   [hermes-agent](https://hermes-agent.nousresearch.com/) (a personal agent), paperless-ai is
+   document tagging. Both are wanted, on different hosts. `playbooks/hosts/ai01.yml` is still
+   stale scaffolding referencing `services/ai/hermes` and `services/ai/ollama`, neither of
+   which exists; fix it when 8b is built.
+2. **paperless-ai's runtime** — RESOLVED. It runs on **cmp01** inside the Paperless compose
+   project with its own llama.cpp, so Colima never goes near ai01 and the spec line holds.
+3. **`system/brew` is commented out** of `playbooks/bootstrap/macos.yml` — STILL OPEN, and a
+   prerequisite for every Homebrew-driven role in 8b/8c. `ansible` is now in the macOS `admin`
+   group so it *can* write to `/opt/homebrew`, but git still rejects the repo as "dubious
+   ownership" for that user (`brew --version` reports "shallow or no git repository"). The
+   `system/brew` role must set `safe.directory` for `/opt/homebrew` and its taps.
+4. **Nothing built for ai01/ctl01** — STILL OPEN. No `roles/dev/`, no `roles/services/ai/`.
+
 
 ## Memory (persisted preferences — /Users/uknth/.claude/.../memory/)
 - **dashboard-must-be-declarative**: dashboards/infra must be YAML/config-driven, not UI/DB-driven

@@ -56,6 +56,8 @@ names.
 | Jellyfin + Jellyseerr | `services/media/jellyfin` | `video.puhome.net`, `seer.puhome.net` | 🟢 built + live | NVENC via A4000 (GPU visible in-container); own auth (native clients) |
 | Kavita | `services/media/kavita` | `books.puhome.net` | 🟢 built + live | **pinned to 0.8.2** (0.9.x hangs on MigrateEmailTemplates first-boot) |
 | Paperless-ngx | `services/documents/paperless` | `docs.puhome.net` | 🟢 built + live | migrated (182 docs) to local disk; postgres:17 glibc; tika/gotenberg; **Authentik OIDC login** (tier-1) + API tokens |
+| paperless-ai | part of `services/documents/paperless` | `docs-ai.puhome.net` | 🟢 built + live | LLM auto-tagging + RAG chat. **Opt-in**: only touches documents tagged `ai-process`. SSO-gated (holds a Paperless superuser token). Upstream unmaintained — excluded from auto-upgrades |
+| llama.cpp (`llama-server`) | part of `services/documents/paperless` | — (no published port) | 🟢 built + live | Gemma 3 4B Q4_K_M on the A4000 (~3.3 GB VRAM). On an `internal: true` network — no LAN route, no internet |
 
 **Out of scope for v3 (user directive):** Immich (photos), Vaultwarden (passwords). Removed
 from `playbooks/hosts/cmp01.yml`.
@@ -84,11 +86,19 @@ helper is already PIA-shaped).
 
 ## `ai01` — AI workloads
 
+> **Inference is split across two hosts.** Document classification runs on **cmp01**
+> (llama.cpp + Gemma 3 4B on the A4000): it is short-context, high-volume, and CUDA
+> suits it. `ai01` is reserved for the long-context (64k+) agent model, which will not
+> fit alongside anything else in 24 GB of unified memory. This qualifies the original
+> "inference lives on ai01, not cmp01" line in [hosts](hosts.md) — that reasoning was
+> about VRAM for a *large* model and does not apply to a 2.3 GiB tagging model.
+
+
 | Service | Target role | Status | Notes |
 |---|---|---|---|
 | Ollama (native) | `services/ai/ollama` | 🔵 net-new | Homebrew + launchd, **not Docker** (Metal accel) |
 | Qwen model pull | part of `services/ai/ollama` | 🔵 net-new | latest Qwen |
-| paperless-ai | `services/ai/paperless_ai` | 🔵 net-new | auto-tagging, points at Ollama here |
+| ~~paperless-ai~~ | — | ⚫ **moved to cmp01** | Deployed 2026-08-31 inside the Paperless compose project with its own llama.cpp, not here — see the cmp01 table above |
 
 ## `ctl01` — Dev toolchain
 

@@ -23,3 +23,68 @@ paperless_ocr_language: eng
 paperless_oidc_client_id: "{{ vault_paperless_oidc_client_id }}"
 paperless_oidc_client_secret: "{{ vault_paperless_oidc_client_secret }}"
 paperless_oidc_issuer: "https://auth.{{ base_domain }}/application/o/paperless/"
+
+# --- paperless-ai + local inference (deployed inside this compose project) ---
+#
+# paperless-ai watches Paperless for newly-ingested documents, sends the OCR'd
+# text to an LLM, and writes back title / correspondent / tags / document type.
+# It also serves a RAG chat over the archive.
+#
+# Deployed here rather than as its own role so it comes up and goes down with
+# Paperless, reaches it as `webserver` over the project network instead of a
+# host IP, and shares its lifecycle.
+#
+# UPSTREAM IS UNMAINTAINED (paused pending a rewrite). It holds a superuser API
+# token and writes to every document, so it is deliberately excluded from the
+# ops/maintenance auto-upgrade allowlist — review before bumping the image.
+paperless_ai_enabled: true
+paperless_ai_image: "docker.io/clusterzx/paperless-ai:latest"
+paperless_ai_port: 3000
+paperless_ai_url: "https://docs-ai.{{ base_domain }}"
+
+# Its own API key (guards paperless-ai's HTTP endpoints, not Paperless's).
+# Derived deterministically from an existing vault secret rather than adding a
+# new vault entry: stable across runs, never in plaintext in the repo, and one
+# less secret to rotate by hand.
+paperless_ai_api_key: "{{ (vault_paperless_secret_key ~ '::paperless-ai') | hash('sha256') }}"
+
+# OPT-IN ROLLOUT. Note the inverted sense: PROCESS_PREDEFINED_DOCUMENTS=yes is
+# the *restrictive* setting — it confines processing to documents carrying
+# paperless_ai_trigger_tag. "no" means process the entire archive on the first
+# scan. Kept opt-in so nothing is rewritten until a document is deliberately
+# tagged, and everything it touches gets paperless_ai_processed_tag so its work
+# is reversible with a single Paperless filter.
+paperless_ai_scan_interval: "*/30 * * * *"
+paperless_ai_process_predefined: "yes"
+paperless_ai_trigger_tag: "ai-process"
+paperless_ai_add_processed_tag: "yes"
+paperless_ai_processed_tag: "ai-processed"
+
+# --- Local inference: llama.cpp (llama-server) ---
+#
+# llama.cpp rather than Ollama: Ollama *is* llama.cpp wrapped in a model
+# registry and load/unload logic, all of which is dead weight when exactly one
+# model is pinned forever. It is also more declarative — the exact GGUF and
+# every inference flag are literal values here, instead of runtime state pulled
+# into a volume.
+#
+# The container sits on an `internal: true` network with no LAN route, no
+# published port and no internet: Ansible fetches the GGUF to a bind mount, so
+# the container never needs outbound access. Only paperless-ai can reach it.
+paperless_llama_image: "ghcr.io/ggml-org/llama.cpp:server-cuda"
+paperless_llama_port: 8080
+
+# Gemma 3 4B (Q4_K_M) — ~2.3 GiB of the A4000's 16 GB, leaving the rest free
+# for Jellyfin transcodes and anything else. Sub-2B models were rejected: the
+# job requires strict JSON (title/correspondent/tags/date/language) and they
+# fail it intermittently, which shows up as documents silently going untagged.
+paperless_llama_model_repo: "ggml-org/gemma-3-4b-it-GGUF"
+paperless_llama_model_file: "gemma-3-4b-it-Q4_K_M.gguf"
+paperless_llama_model_sha256: "882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863"
+paperless_llama_model_alias: "gemma-3-4b-it"
+paperless_llama_context: 8192
+
+# Service account paperless-ai authenticates to Paperless as. Created and its
+# token read back at deploy time (tasks/paperless_ai.yml), so the token is
+# derived from Paperless itself and never has to live in the vault.
+paperless_ai_service_user: "paperless-ai"

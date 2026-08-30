@@ -11,6 +11,12 @@
     mode: "0755"
   loop: ["", compose, export, consume]
 
+# Must run before the compose template: it supplies _paperless_ai_token.
+- name: Prepare paperless-ai (model + API token)
+  ansible.builtin.import_tasks: paperless_ai.yml
+  when: paperless_ai_enabled | bool
+  tags: [paperless-ai]
+
 - name: Template paperless compose + env
   become: true
   ansible.builtin.template:

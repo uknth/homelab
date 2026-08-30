@@ -27,6 +27,10 @@ nginx_sites:
   - { name: seer,       upstream: "http://10.0.2.5:5055", sso: false }   # Jellyseerr
   - { name: books,      upstream: "http://10.0.2.5:5000", sso: false }   # Kavita 0.8.2
   - { name: docs,       upstream: "http://10.0.2.5:8000", sso: false }   # Paperless-ngx
+  # paperless-ai holds a Paperless superuser token and can rewrite every
+  # document, so its UI is SSO-gated even though Paperless itself is not
+  # (Paperless stays open for API/mobile clients that cannot do forward-auth).
+  - { name: docs-ai,    upstream: "http://10.0.2.5:3000", sso: true }    # paperless-ai (LLM tagging + RAG chat)
   - { name: files,      upstream: "http://10.0.2.5:8085", sso: true }    # Filebrowser (media mgmt)
   - { name: soulseek,   upstream: "http://10.0.2.5:5030", sso: true }    # slskd (Soulseek)
   - { name: music,      upstream: "http://10.0.2.5:4533", sso: false }   # Navidrome (native auth for Subsonic clients)

@@ -51,3 +51,78 @@ services:
     image: {{ paperless_tika_image }}
     container_name: paperless-tika
     restart: unless-stopped
+
+{% if paperless_ai_enabled %}
+  # --- Local inference -------------------------------------------------------
+  # On the `ai` network ONLY: internal:true, so no LAN route, no internet, and
+  # no published port. The GGUF is bind-mounted read-only from the host, so this
+  # container never needs outbound access. Only paperless-ai can reach it.
+  llama:
+    image: {{ paperless_llama_image }}
+    container_name: paperless-llama
+    restart: unless-stopped
+    networks: [ai]
+    volumes:
+      - {{ paperless_root_dir }}/models:/models:ro
+    command:
+      - "-m"
+      - "/models/{{ paperless_llama_model_file }}"
+      - "--alias"
+      - "{{ paperless_llama_model_alias }}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "{{ paperless_llama_port }}"
+      # Offload every layer; a 2.3 GiB model fits the A4000 many times over.
+      - "--n-gpu-layers"
+      - "99"
+      - "--ctx-size"
+      - "{{ paperless_llama_context }}"
+      # Gemma 3 needs its own chat template applied, which --jinja reads from
+      # the GGUF metadata. Without it the model is prompted in the wrong format
+      # and returns plausible-looking but consistently malformed output.
+      - "--jinja"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  paperless-ai:
+    image: {{ paperless_ai_image }}
+    container_name: paperless-ai
+    restart: unless-stopped
+    # Bridges both networks: `default` to reach Paperless by service name,
+    # `ai` to reach the inference container.
+    networks: [default, ai]
+    depends_on:
+      webserver:
+        condition: service_started
+      llama:
+        condition: service_started
+    ports:
+      - "{{ paperless_ai_port }}:{{ paperless_ai_port }}"
+    security_opt:
+      - no-new-privileges=true
+    volumes:
+      - {{ paperless_root_dir }}/ai-data:/app/data
+    # Core config comes from the Ansible-written .env in the data volume — the
+    # app reads that file, not the container environment (see the template).
+    environment:
+      - TZ={{ timezone }}
+      - PAPERLESS_AI_PORT={{ paperless_ai_port }}
+      - RAG_SERVICE_ENABLED=true
+      - RAG_SERVICE_URL=http://localhost:8000
+      # The bundled ChromaDB phones home by default. The entire reason this
+      # stack is local is that these are personal financial records, so opt out.
+      - ANONYMIZED_TELEMETRY=false
+{% endif %}
+
+networks:
+  default:
+{% if paperless_ai_enabled %}
+  ai:
+    internal: true
+{% endif %}
