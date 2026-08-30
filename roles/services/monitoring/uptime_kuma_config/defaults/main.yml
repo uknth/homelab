@@ -8,6 +8,10 @@
 # push monitor that ops/restic pings.
 
 kuma_config_url: "http://{{ hostvars['util01'].ansible_host }}:3001"
+# Public URL, used to give push monitors a valid link. Kuma's ntfy provider
+# attaches a "view" action built from the monitor URL and ntfy 400s the whole
+# message when it is empty, so a URL-less push monitor can never alert.
+kuma_config_public_url: "https://synthetics.{{ base_domain }}"
 kuma_config_user: "uknth"
 kuma_config_password: "{{ vault_uptime_kuma_password }}"
 kuma_config_venv: "{{ lookup('env','HOME') }}/.cache/homelab/kuma-venv"
@@ -19,9 +23,18 @@ kuma_http_monitors: >-
      | map('regex_replace', '^(.*)$', '{"name": "\1", "type": "http", "url": "https://\1.' ~ base_domain ~ '"}')
      | map('from_json') | list }}
 
-# Push monitors (restic backup verification). ~25h heartbeat window.
-kuma_push_monitors:
-  - { name: "Backups", type: "push", interval: 90000 }
+# Push monitors. Interval is the heartbeat window in seconds: miss it and Kuma
+# calls the monitor down.
+#   Backups  — restic verification, ~25h window.
+#   WAN1/WAN2 — ops/wanwatch pings these from gw01 with a source-IP-pinned
+#     probe, so "WAN2 down" means that ISP specifically, not "the internet".
+#     A real outage is reported actively (the probe pushes status=down), so the
+#     300s window only has to survive one skipped n8n run; maxretries 1 keeps a
+#     single blip from paging. Names are derived from the same wanwatch_links
+#     the probe and the dashboard widget read.
+kuma_push_monitors: >-
+  {{ [{"name": "Backups", "type": "push", "interval": 90000}]
+     + (wanwatch_links | default([]) | map(attribute='kuma_monitor') | map('regex_replace', '^(.*)$', '{"name": "\1", "type": "push", "interval": 300, "maxretries": 1}') | map('from_json') | list) }}
 
 # Failure alerting: a single ntfy notification channel attached to every monitor
 # (isDefault+applyExisting), so any DOWN monitor (service or the Backups push)
