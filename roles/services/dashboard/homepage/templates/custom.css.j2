@@ -50,3 +50,84 @@ body { background: linear-gradient(160deg, #f6f8fc 0%, #edf1f8 50%, #e8eef7 100%
 h2 { font-weight: 600; letter-spacing: .01em; }
 .information-widget-search { max-width: 300px; margin-left: auto; }
 .information-widget-search input { padding: 0.5rem 0.85rem !important; font-size: 0.95rem !important; }
+
+/* ===== Status band (System tab) =====
+   The widget block is a 2-column masonry (#services above); this spans one
+   group across both columns so it reads as a full-width band under the Admin
+   shortcuts. Homepage gives groups no id or per-group class, and a positional
+   :first-child rule would also stretch the first group on every OTHER tab, so
+   custom.js tags the right group by its heading text instead. */
+#services > .hl-fullwidth { column-span: all !important; }
+
+/* ===== Bottom status bar ===== */
+body { padding-bottom: 2.6rem; }
+
+#hl-statusbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 1rem;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(16, 24, 40, 0.10);
+  box-shadow: 0 -1px 6px rgba(16, 24, 40, 0.05);
+}
+.hl-sb-left { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.hl-sb-label { font-weight: 600; letter-spacing: .04em; opacity: .55; font-size: .72rem; }
+.hl-sb-items { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.hl-pill {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  cursor: default;
+}
+.hl-pill::before { content: "●"; font-size: 0.7em; }
+/* Colour carries the state, but the dot + text keep it readable without it. */
+.hl-up      { background: rgba(22, 163, 74, 0.10);  color: #15803d; border-color: rgba(22,163,74,.22); }
+.hl-down    { background: rgba(220, 38, 38, 0.12);  color: #b91c1c; border-color: rgba(220,38,38,.28); font-weight: 600; }
+.hl-stale   { background: rgba(217, 119, 6, 0.12);  color: #b45309; border-color: rgba(217,119,6,.26); }
+.hl-unknown { background: rgba(100, 116, 139, 0.10); color: #475569; }
+
+#hl-sb-alerts {
+  color: inherit; opacity: .7; text-decoration: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw;
+}
+#hl-sb-alerts:hover { opacity: 1; text-decoration: underline; }
+#hl-sb-alerts.hl-has-alerts { opacity: .95; }
+
+/* ===== Live ntfy toasts ===== */
+#hl-toasts {
+  position: fixed; right: 1rem; bottom: 3.1rem;
+  z-index: 70; display: flex; flex-direction: column; gap: 0.5rem;
+  max-width: min(26rem, 90vw);
+}
+.hl-toast {
+  background: #fff;
+  border: 1px solid rgba(16, 24, 40, 0.12);
+  border-left: 3px solid #64748b;
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.12);
+  cursor: pointer;
+  animation: hl-toast-in .18s ease-out;
+}
+.hl-toast-high { border-left-color: #dc2626; }
+.hl-toast-title { font-weight: 600; font-size: 0.85rem; }
+.hl-toast-msg {
+  font-size: 0.8rem; opacity: .75; margin-top: .15rem;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+@keyframes hl-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 640px) {
+  #hl-statusbar { font-size: 0.76rem; padding: 0.3rem 0.6rem; }
+  #hl-sb-alerts { max-width: 45vw; }
+}

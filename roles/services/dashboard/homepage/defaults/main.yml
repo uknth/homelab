@@ -17,6 +17,23 @@ homepage_weather_label: "Bengaluru"
 homepage_weather_lat: 12.9716
 homepage_weather_long: 77.5946
 
+# Dual-WAN widget refresh. The n8n webhook only replays the last stored probe,
+# so polling it faster than ops/wanwatch actually probes buys nothing.
+homepage_wan_refresh: 60000 # ms
+
+# Bottom status bar + live ntfy toasts (custom.js). Topics mirror n8n_alert_topics.
+homepage_alert_topics:
+  - "homelab-alerts"
+  - "homelab-updates"
+  - "homelab-jobs"
+homepage_alerts_refresh: 120000    # ms, Alerts widget
+homepage_statusbar_refresh: 60000  # ms, bottom bar poll (toasts arrive push-wise)
+homepage_toast_duration: 12000     # ms a toast stays before auto-dismissing
+# Name of the System-tab group rendered as a full-width band. Must match the
+# group name in services.yaml AND its entry in the settings.yaml layout block --
+# custom.js finds it by heading text.
+homepage_status_group: "Status"
+
 # Look & feel
 homepage_theme: "light"
 homepage_color: "slate"

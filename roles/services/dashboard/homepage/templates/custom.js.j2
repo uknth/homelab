@@ -1,0 +1,151 @@
+// Managed by Ansible — services/dashboard/homepage
+//
+// Adds a persistent status bar across the bottom of every tab:
+//   left  — one pill per WAN, live from the n8n wan-watch replay endpoint
+//   right — ntfy volume over the last {{ n8n_alerts_window | default('12h') }}
+// plus a toast whenever a new ntfy message arrives, so an alert is visible
+// without watching a tab.
+//
+// Both sources are fetched from the BROWSER, so both must be same-scheme HTTPS
+// (the page is HTTPS; plain http:// would be blocked as mixed content) and
+// must allow this origin. ntfy sends `Access-Control-Allow-Origin: *`; the n8n
+// webhook sets the header explicitly in its Respond node.
+(function () {
+  "use strict";
+
+  var WAN_URL    = "https://n8n.{{ base_domain }}/webhook/wan-status";
+  var NTFY_BASE  = "https://ntfy.{{ base_domain }}";
+  var TOPICS     = "{{ homepage_alert_topics | join(',') }}";
+  var WINDOW     = "{{ n8n_alerts_window | default('12h') }}";
+  var POLL_MS    = {{ homepage_statusbar_refresh }};
+  var TOAST_MS   = {{ homepage_toast_duration }};
+  var BAND_GROUP = "{{ homepage_status_group }}";
+
+  if (window.__homelabStatusBar) return;   // Next.js re-renders; build once
+  window.__homelabStatusBar = true;
+
+  var bar = document.createElement("div");
+  bar.id = "hl-statusbar";
+  bar.innerHTML =
+    '<div class="hl-sb-left"><span class="hl-sb-label">WAN</span>' +
+    '<span id="hl-sb-wan" class="hl-sb-items"><span class="hl-pill hl-unknown">…</span></span></div>' +
+    '<div class="hl-sb-right"><a id="hl-sb-alerts" href="' + NTFY_BASE + '/' +
+    TOPICS.split(",")[0] + '" target="_blank" rel="noreferrer">…</a></div>';
+  document.body.appendChild(bar);
+
+  var toasts = document.createElement("div");
+  toasts.id = "hl-toasts";
+  document.body.appendChild(toasts);
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // --- WAN pills ------------------------------------------------------------
+  function renderWan(d) {
+    var el = document.getElementById("hl-sb-wan");
+    if (!el) return;
+    if (!d || !d.links || !d.links.length) {
+      el.innerHTML = '<span class="hl-pill hl-unknown">no data</span>';
+      return;
+    }
+    // A probe that stopped running must not read as healthy just because the
+    // last stored answer was good.
+    var stale = d.stale === true;
+    el.innerHTML = d.links.map(function (l) {
+      var cls = stale ? "hl-stale" : (l.status === "up" ? "hl-up" : "hl-down");
+      var rtt = l.status === "up" && l.rtt_ms ? " " + Math.round(l.rtt_ms) + "ms" : "";
+      var tip = l.probe_ip + (l.public_ip ? " → " + l.public_ip : "") +
+                (stale ? " (stale: last probe " + d.age_seconds + "s ago)" : "");
+      return '<span class="hl-pill ' + cls + '" title="' + esc(tip) + '">' +
+             esc(l.name) + rtt + "</span>";
+    }).join("");
+  }
+
+  function pollWan() {
+    fetch(WAN_URL, { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(renderWan)
+      .catch(function () { renderWan(null); });
+  }
+
+  // --- ntfy aggregate -------------------------------------------------------
+  function renderAlerts(n, latest) {
+    var el = document.getElementById("hl-sb-alerts");
+    if (!el) return;
+    var txt = n + " alert" + (n === 1 ? "" : "s") + " · " + WINDOW;
+    if (latest) txt += " — " + latest;
+    el.textContent = txt;
+    el.className = n > 0 ? "hl-has-alerts" : "";
+  }
+
+  function pollAlerts() {
+    // Straight from ntfy rather than the n8n summary: the bar wants the newest
+    // message text, and this keeps the bar working even if n8n is down.
+    fetch(NTFY_BASE + "/" + TOPICS + "/json?poll=1&since=" + WINDOW, { cache: "no-store" })
+      .then(function (r) { return r.text(); })
+      .then(function (body) {
+        var msgs = body.split("\n").filter(Boolean).map(function (l) {
+          try { return JSON.parse(l); } catch (e) { return null; }
+        }).filter(function (m) { return m && m.event === "message"; });
+        msgs.sort(function (a, b) { return (b.time || 0) - (a.time || 0); });
+        var top = msgs[0];
+        renderAlerts(msgs.length, top ? (top.title || top.topic) : null);
+      })
+      .catch(function () { renderAlerts(0, null); });
+  }
+
+  // --- live toasts ----------------------------------------------------------
+  function toast(m) {
+    var pri = m.priority || 3;
+    var d = document.createElement("div");
+    d.className = "hl-toast" + (pri >= 4 ? " hl-toast-high" : "");
+    d.innerHTML = '<div class="hl-toast-title">' + esc(m.title || m.topic) + "</div>" +
+                  '<div class="hl-toast-msg">' + esc(m.message || "") + "</div>";
+    d.onclick = function () { d.remove(); };
+    toasts.appendChild(d);
+    setTimeout(function () { d.remove(); }, TOAST_MS);
+    pollAlerts();   // keep the counter in step with what just arrived
+  }
+
+  function subscribe() {
+    var es = new EventSource(NTFY_BASE + "/" + TOPICS + "/sse");
+    es.onmessage = function (ev) {
+      try {
+        var m = JSON.parse(ev.data);
+        if (m.event === "message") toast(m);
+      } catch (e) { /* keepalive */ }
+    };
+    // EventSource retries on its own, but a dropped ntfy restart can leave it
+    // closed for good -- reopen explicitly.
+    es.onerror = function () {
+      if (es.readyState === 2) { es.close(); setTimeout(subscribe, 15000); }
+    };
+  }
+
+  // --- full-width status band ----------------------------------------------
+  // #services is a 2-column masonry. Span the status group across both columns
+  // by matching its heading, not its position: Homepage renders every group
+  // with the same class and no id, and a positional rule would also stretch
+  // whichever group happens to come first on the other tabs.
+  function markBand() {
+    var svc = document.getElementById("services");
+    if (!svc) return;
+    Array.prototype.forEach.call(svc.children, function (g) {
+      var h = g.querySelector("h2");
+      if (h && h.textContent.trim() === BAND_GROUP) g.classList.add("hl-fullwidth");
+    });
+  }
+
+  // The dashboard is a SPA -- tab switches replace the group list wholesale.
+  new MutationObserver(markBand).observe(document.body, { childList: true, subtree: true });
+  markBand();
+
+  pollWan();
+  pollAlerts();
+  setInterval(pollWan, POLL_MS);
+  setInterval(pollAlerts, POLL_MS);
+  subscribe();
+})();

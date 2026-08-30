@@ -79,6 +79,50 @@
                 - { any: true, to: "—" }
 
 # ===== System tab =====
+# Status band -- full width above the two-pane widget masonry (see custom.css).
+- Status:
+{% if wanwatch_links | default([]) | length > 0 %}
+    # Per-ISP reachability. The Uptime Kuma tile counts how many monitors are
+    # down; this names which uplink it is. Source: the n8n wan-watch workflow,
+    # which replays the last gw01 probe rather than probing on every refresh.
+    - Internet:
+        href: https://synthetics.{{ base_domain }}
+        icon: mdi-wan
+        description: per-ISP reachability (dual WAN)
+        widget:
+          type: customapi
+          url: http://{{ hostvars['util01'].ansible_host }}:{{ n8n_port | default(5678) }}/webhook/wan-status
+          refreshInterval: {{ homepage_wan_refresh }}
+          display: block
+          mappings:
+{% for l in wanwatch_links %}
+            - field: links.{{ loop.index0 }}.status
+              label: {{ l.name }}
+              remap:
+                - { value: up, to: up }
+                - { value: down, to: DOWN }
+            - { field: links.{{ loop.index0 }}.rtt_ms, label: "{{ l.name }} rtt", format: float, suffix: " ms" }
+{% endfor %}
+{% endif %}
+    # ntfy volume, aggregated by n8n (ntfy answers NDJSON, which customapi
+    # cannot parse). Window is capped by ntfy's 12h cache-duration.
+    - Alerts:
+        href: https://ntfy.{{ base_domain }}/{{ homepage_alert_topics | first }}
+        icon: mdi-bell-alert
+        description: ntfy volume, last {{ n8n_alerts_window | default('12h') }}
+        widget:
+          type: customapi
+          url: http://{{ hostvars['util01'].ansible_host }}:{{ n8n_port | default(5678) }}/webhook/alerts-summary
+          refreshInterval: {{ homepage_alerts_refresh }}
+          display: block
+          mappings:
+            - { field: total, label: Total, format: number }
+            - { field: critical, label: High/Max, format: number }
+            - { field: by_topic.homelab-alerts, label: Monitors, format: number }
+            - { field: by_topic.homelab-updates, label: Updates, format: number }
+            - { field: latest_title, label: Latest }
+            - { field: latest_ago_min, label: Age, format: number, suffix: " min" }
+
 - Download Activity:
     - Prowlarr:
         href: https://prowlarr.{{ base_domain }}
