@@ -26,8 +26,11 @@
 - name: Storage exports (nas01)
   ansible.builtin.import_playbook: playbooks/hosts/nas01.yml
 
-#- name: Compute services (cmp01)
-#  ansible.builtin.import_playbook: playbooks/hosts/cmp01.yml
+# Phase 5 — compute/media/documents/music (cmp01). Uncommented 2026-08-30: the
+# roles have been live since 2026-08-22, but the import was still commented out,
+# so `site.yml` (and therefore the GitOps executor) never touched cmp01.
+- name: Compute services (cmp01)
+  ansible.builtin.import_playbook: playbooks/hosts/cmp01.yml
 
 # Phase 4 — observability + SSO (util01).
 - name: Utility services (util01)

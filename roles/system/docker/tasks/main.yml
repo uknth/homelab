@@ -61,3 +61,28 @@
     append: true
   loop: "{{ docker_users }}"
   when: docker_users | length > 0
+
+# Container DNS. Only templated when docker_daemon_dns is non-empty — on every
+# host but gw01 Docker's own resolution is correct and this is a no-op.
+#
+# Deliberately does NOT notify the restart handler: on gw01 restarting Docker
+# takes Blocky down with it, which is a house-wide DNS outage. Apply with an
+# explicit `systemctl restart docker` at a convenient moment.
+- name: Configure container DNS (daemon.json)
+  become: true
+  when: docker_daemon_dns | default([]) | length > 0
+  ansible.builtin.copy:
+    content: "{{ {'dns': docker_daemon_dns} | to_nice_json }}\n"
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  register: _docker_dns_cfg
+
+- name: Note that a docker restart is pending
+  when: _docker_dns_cfg is defined and _docker_dns_cfg is changed
+  ansible.builtin.debug:
+    msg: >-
+      /etc/docker/daemon.json updated on {{ inventory_hostname }}. Container DNS
+      changes need `sudo systemctl restart docker` — not done automatically
+      because on gw01 that restarts Blocky and briefly drops LAN DNS.

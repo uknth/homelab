@@ -41,3 +41,10 @@ nginx_sites:
   - { name: radarr,     upstream: "http://10.0.2.5:7878", sso: true }
   - { name: lidarr,     upstream: "http://10.0.2.5:8686", sso: true }
   - { name: bazarr,     upstream: "http://10.0.2.5:6767", sso: true }
+
+# gw01 runs Blocky, so its own /etc/resolv.conf points at loopback. Docker
+# refuses to hand a loopback resolver to containers and falls back to public
+# DNS, which bypasses Blocky's AAAA filtering and returns IPv6-only answers on
+# this IPv4-only network. Point container DNS at Blocky on the LAN address.
+docker_daemon_dns:
+  - "{{ hostvars['gw01'].ansible_host }}"

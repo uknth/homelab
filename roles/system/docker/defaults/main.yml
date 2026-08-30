@@ -16,3 +16,11 @@ docker_users: []
 
 # Python bindings so community.docker modules work from the target host.
 docker_install_python_bindings: true
+
+# DNS servers handed to containers. Empty means "let Docker decide", which is
+# correct everywhere except the DNS host itself: on gw01 /etc/resolv.conf points
+# at loopback, and Docker refuses to pass a loopback resolver to containers, so
+# it silently falls back to public DNS (8.8.8.8). That bypasses Blocky's AAAA
+# filtering and hands containers IPv6-only answers on an IPv4-only network --
+# which is why Diun on gw01 could not reach any registry.
+docker_daemon_dns: []
