@@ -18,3 +18,19 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+{% if ntfy_relay_enabled %}
+
+  # Forwards every message on the relay topics to n8n, which sends it on to
+  # Telegram. Separate container so a relay crash-loop can never take the
+  # notification sink itself down.
+  ntfy-relay:
+    image: {{ ntfy_image }}
+    container_name: ntfy-relay
+    command: subscribe --from-config
+    restart: unless-stopped
+    depends_on: [ntfy]
+    volumes:
+      - {{ ntfy_root_dir }}/config/client.yml:/etc/ntfy/client.yml:ro
+    environment:
+      - TZ={{ timezone }}
+{% endif %}

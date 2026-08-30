@@ -1,0 +1,11 @@
+# Managed by Ansible — services/monitoring/ntfy
+# Consumed by the ntfy-relay sidecar (`ntfy subscribe --from-config`).
+# ntfy exposes each message to the command as env vars; $raw is the full JSON,
+# so it is forwarded verbatim and n8n does the interpreting.
+default-host: http://ntfy:80
+subscribe:
+{% for t in ntfy_relay_topics %}
+  - topic: {{ t }}
+    # busybox wget -- the ntfy image ships no curl.
+    command: 'wget -q -O- --header="Content-Type: application/json" --post-data="$raw" "{{ ntfy_relay_url }}" >/dev/null 2>&1 || true'
+{% endfor %}

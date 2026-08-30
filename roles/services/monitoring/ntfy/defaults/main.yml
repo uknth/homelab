@@ -3,3 +3,35 @@ ntfy_image: "binwiederhier/ntfy:latest"
 ntfy_root_dir: "{{ service_root }}/ntfy"
 ntfy_port: 8091
 ntfy_base_url: "https://ntfy.{{ base_domain }}"
+
+# iOS push. Apple does not allow an app to hold a persistent background
+# connection, so a self-hosted server cannot reach an iPhone on its own -- it
+# has to ask ntfy.sh to fire the APNs push. Without this, iOS delivery falls
+# back to "eventually" (ntfy's docs: hours, depending on the state of the
+# phone), which in practice means you only see alerts when you open the app.
+#
+# Only the message ID and a SHA256 of the topic URL are forwarded upstream --
+# never the message content. The push merely wakes the app, which then fetches
+# the real message directly from this server. That still requires the phone to
+# reach ntfy.{{ base_domain }} (LAN or Tailscale).
+#
+# Android does not need this; it does instant delivery against this server
+# directly. Set to "" to keep ntfy fully self-contained and accept the delay.
+ntfy_upstream_base_url: "https://ntfy.sh"
+
+# --- Delivery relay ---------------------------------------------------------
+# The iOS app's push has never worked here (see docs/runbooks/notifications.md),
+# so phone delivery goes over Telegram instead. Rather than reconfigure every
+# publisher, a sidecar subscribes to ntfy and forwards each message to n8n,
+# which owns the Telegram send. ntfy stays the single bus every service posts
+# to, and the dashboard keeps reading it.
+#
+# Push, not polling: `ntfy subscribe` holds a connection and fires per message,
+# so there is no interval to tune and no dedupe window to get wrong.
+ntfy_relay_enabled: true
+ntfy_relay_url: "http://{{ hostvars['util01'].ansible_host }}:{{ n8n_port | default(5678) }}/webhook/ntfy-relay"
+# Topics worth waking a phone for. homelab-jobs is deliberately absent -- every
+# n8n run reports there, pass or fail, and that is a log, not an alert.
+ntfy_relay_topics:
+  - "homelab-alerts"
+  - "homelab-updates"

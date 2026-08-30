@@ -23,6 +23,7 @@
     mode: "0644"
   loop:
     - { src: server.yml.j2, dest: "{{ ntfy_root_dir }}/config/server.yml" }
+    - { src: client.yml.j2, dest: "{{ ntfy_root_dir }}/config/client.yml" }
     - { src: docker-compose.yml.j2, dest: "{{ ntfy_root_dir }}/compose/docker-compose.yml" }
   notify: Restart ntfy
 - name: Deploy ntfy

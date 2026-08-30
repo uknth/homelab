@@ -6,3 +6,8 @@ listen-http: ":80"
 cache-file: "/var/cache/ntfy/cache.db"
 cache-duration: "12h"
 behind-proxy: true
+{% if ntfy_upstream_base_url %}
+# Wakes the iOS app via ntfy.sh/APNs; forwards only the message ID and a SHA256
+# of the topic URL, never the content. See this role's defaults for the why.
+upstream-base-url: "{{ ntfy_upstream_base_url }}"
+{% endif %}
