@@ -2,3 +2,9 @@
 ansible_user_name: ansible
 ansible_user_shell: /bin/bash
 ansible_user_realname: Ansible
+
+# macOS only: put the service account in the local `admin` group. Required for
+# Homebrew — /opt/homebrew is owned by uknth:admin and group-writable, so a
+# staff-only account cannot install formulae. No real privilege escalation:
+# the account already has NOPASSWD sudo.
+ansible_user_macos_admin: true

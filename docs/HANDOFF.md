@@ -145,7 +145,45 @@ the above, and not urgent.
 - **ctl01 IP — reserved.** Now `10.0.2.4` in Omada; `hosts/hosts.yml`, `AGENTS.md`,
   `spec/hosts.md`, `spec/architecture.md` and the roadmap prereq all updated.
 
+### Monitoring audit 2026-08-30 — three of seven systems were dark
+
+Prompted by "we got no alert when ctl01 changed IP". Alerting turned out to be
+**working**; the audit found three unrelated faults instead.
+
+- **Alerting is fine.** ctl01's Status alert fired at 12:50:55 UTC, exactly the
+  configured 10 minutes after it went down at 12:40:55, and ntfy delivered
+  "Connection to ctl01 is down". The earlier check simply fell inside that
+  10-minute window. Note ntfy's cache is **12 h**, so older alerts (ai01's, which
+  did fire on 2026-08-25) have already aged out of `/homelab-alerts/json`.
+- **`beszel_hub` never corrected a changed address** — the register task only
+  POSTs names the hub has never seen, so ctl01 stayed pinned to the dead DHCP
+  `10.0.2.115` and would have sat "down" forever. The role now PATCHes `host`/`port`
+  when they drift from the inventory, and notifies a hub restart (the hub caches
+  addresses in memory — the PATCH alone does not take effect).
+- **The alert loop used a stale snapshot.** It looped over the systems list read
+  *before* new systems were POSTed, so a freshly registered host got no alerts
+  until the role ran a second time. Fixed by re-reading systems after registration.
+- **ai01's agent was dead for five days.** `beszel-agent` crashed with `SIGBUS` in
+  `gopsutil/v4/sensors.TemperaturesWithContext` on 2026-08-25 (Apple Silicon SMC
+  sensor read, macOS 26.4.1). launchd restarted it and the port reopened, so a port
+  probe looked healthy while the hub saw nothing. Restarting the agent recovered it.
+  Both failure modes are now in [`runbooks/beszel-nas-agents.md`](runbooks/beszel-nas-agents.md).
+
+Result: **6/7 systems up** (gw01, cmp01, util01, ai01, ctl01, nas01).
+
 ### Still open
+- **nas02 Beszel agent was never deployed** — port 45876 is closed and the system
+  has read "down" since 2026-08-22. Its Status alert has never fired because Beszel
+  only alerts on an up→down transition and nas02 was never up. nas02 is unmanaged
+  (Synology) and the backup account is SFTP-chrooted, so this needs a manual
+  Container Manager / admin-SSH step — the exact `docker run` is in
+  [`runbooks/beszel-nas-agents.md`](runbooks/beszel-nas-agents.md).
+- **`ansible` is now in the macOS `admin` group** (`system/ansible_user`,
+  `ansible_user_macos_admin`) so Homebrew-driven roles can write to `/opt/homebrew`
+  (owned `uknth:admin`). It already held NOPASSWD sudo, so this grants no new
+  privilege. Still outstanding: git refuses the repo as "dubious ownership" for
+  `ansible`, so `brew` reports "shallow or no git repository" — `system/brew` must
+  set `safe.directory` for `/opt/homebrew` (and its taps).
 - **cmp01 reboot** pending for `linux-image-6.1.0-52` — not urgent.
 - **`buildx_buildkit_mybuilder0`** runs on cmp01 but is declared nowhere — a leftover
   buildx builder. Harmless; remove with `docker buildx rm mybuilder` when convenient.

@@ -25,3 +25,23 @@
       ansible.builtin.command: >
         dseditgroup -o edit -a {{ ansible_user_name }} -t user com.apple.access_ssh
       changed_when: false
+
+    # Homebrew refuses to run as root and /opt/homebrew is owned by uknth:admin
+    # (drwxrwxr-x), so a non-admin 'ansible' cannot install formulae — every
+    # brew-driven role on the Macs fails without this. The account already holds
+    # NOPASSWD sudo (above), so admin membership grants no privilege it lacked;
+    # it just puts the right group on the filesystem writes.
+    - name: Check whether ansible user is in the admin group
+      ansible.builtin.command: >
+        dseditgroup -o checkmember -m {{ ansible_user_name }} admin
+      register: _ansible_admin_member
+      changed_when: false
+      failed_when: false
+
+    - name: Add ansible user to the admin group
+      ansible.builtin.command: >
+        dseditgroup -o edit -a {{ ansible_user_name }} -t user admin
+      when:
+        - ansible_user_macos_admin | bool
+        - _ansible_admin_member.rc != 0
+      changed_when: true

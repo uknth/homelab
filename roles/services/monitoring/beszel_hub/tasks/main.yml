@@ -136,6 +136,50 @@
     - _bz_users.json.totalItems | int > 0
     - item not in (_bz_systems.json['items'] | map(attribute='name') | list)
 
+# Correct drift on already-registered systems. The POST above only fires for
+# names the hub has never seen, so a host that changes IP (e.g. ctl01 moving
+# from a DHCP lease to its 10.0.2.4 reservation) would stay pinned to the old
+# address forever and sit permanently "down". Compare against the inventory and
+# PATCH anything that no longer matches.
+- name: Update host/port on registered systems whose inventory address changed
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/systems/records/{{ item.id }}"
+    method: PATCH
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+    body_format: json
+    body:
+      host: "{{ hostvars[item.name].ansible_host }}"
+      port: "{{ beszel_hub_agent_port | string }}"
+    status_code: [200]
+  loop: "{{ _bz_systems.json['items'] | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - _bz_users.json.totalItems | int > 0
+    - item.name in beszel_register_hosts
+    - hostvars[item.name] is defined
+    - hostvars[item.name].ansible_host is defined
+    - >-
+      item.host != hostvars[item.name].ansible_host
+      or (item.port | string) != (beszel_hub_agent_port | string)
+  # The hub caches system addresses in memory, so a PATCHed record alone leaves
+  # it dialling the old IP and the tile stays down indefinitely. Verified on
+  # ctl01: the record read 10.0.2.4 while the hub kept failing until restarted.
+  notify: Restart beszel_hub
+
+# Re-read systems so newly-created records are visible to the alert loop below.
+# Without this the alert loop uses the pre-POST snapshot, so a host registered
+# on this run gets no alerts until the role is run a second time.
+- name: Re-read systems after registration
+  ansible.builtin.uri:
+    url: "http://localhost:{{ beszel_hub_port }}/api/collections/systems/records?perPage=200"
+    headers:
+      Authorization: "{{ _bz_auth.json.token }}"
+  register: _bz_systems
+  check_mode: false
+  when: _bz_users.json.totalItems | int > 0
+
 # --- Host-health alerting: ntfy webhook + per-system alerts (idempotent) ---
 - name: Get user settings
   ansible.builtin.uri:
