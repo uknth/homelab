@@ -10,11 +10,72 @@
     state: present
   register: _nct_pkg
 
+# nvidia-ctk always logs "Wrote updated config" whether or not anything actually
+# changed -- there is no "is already" string in this version -- so the previous
+# changed_when matched every run and bounced every container on cmp01 on every
+# deploy. Decide from the file's checksum instead.
+- name: Checksum docker daemon.json before configuring
+  become: true
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  register: _daemon_before
+  check_mode: false
+
 - name: Configure Docker to use the NVIDIA runtime
   become: true
   ansible.builtin.command: nvidia-ctk runtime configure --runtime=docker
-  register: _nvctk
-  changed_when: "'is already' not in (_nvctk.stderr + _nvctk.stdout)"
+  changed_when: false # real verdict comes from the checksum comparison below
+
+- name: Checksum docker daemon.json after configuring
+  become: true
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  register: _daemon_after
+  check_mode: false
+
+- name: Restart docker only if the runtime config actually changed
+  ansible.builtin.debug:
+    msg: "docker daemon.json changed — restart queued"
+  changed_when: >-
+    (_daemon_before.stat.checksum | default('')) != (_daemon_after.stat.checksum | default(''))
+  notify: Restart docker for nvidia runtime
+
+# The CDI spec pins absolute firmware paths that include the driver version
+# (/lib/firmware/nvidia/<version>/...). unattended-upgrades can bump the NVIDIA
+# packages without a reboot, leaving a stale spec: existing containers keep
+# running, but any *new* GPU container fails with
+#   open /lib/firmware/nvidia/<old>/gsp_ga10x.bin: no such file or directory
+# That took Jellyfin down on 2026-08-30 when a routine upgrade recreated it.
+# Regenerate whenever the spec disagrees with the loaded driver.
+- name: Read loaded NVIDIA driver version
+  become: true
+  ansible.builtin.shell:
+    cmd: "set -o pipefail; cat /proc/driver/nvidia/version | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1"
+    executable: /bin/bash
+  register: _nv_loaded
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check which driver version the CDI spec pins
+  become: true
+  ansible.builtin.shell:
+    # Match the driver version in the firmware path specifically. A bare
+    # version regex also matches the CDI spec's own version (0.5.0), which
+    # sorts first and would make this compare unequal on every run.
+    cmd: "set -o pipefail; grep -oE '/lib/firmware/nvidia/[0-9.]+' {{ nvidia_cdi_spec }} 2>/dev/null | head -1 | sed 's|.*/||'"
+    executable: /bin/bash
+  register: _nv_cdi
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Regenerate the CDI spec when it disagrees with the loaded driver
+  become: true
+  ansible.builtin.command: "nvidia-ctk cdi generate --output={{ nvidia_cdi_spec }}"
+  when:
+    - _nv_loaded.stdout | default('') | length > 0
+    - _nv_cdi.stdout | default('') != _nv_loaded.stdout
   notify: Restart docker for nvidia runtime
 
 - name: Flush handlers so the runtime is live before GPU services deploy

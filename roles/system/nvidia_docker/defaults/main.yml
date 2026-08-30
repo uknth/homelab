@@ -1,0 +1,4 @@
+---
+# CDI spec written by nvidia-ctk. Lives on tmpfs, and pins driver-versioned
+# firmware paths, so it must be regenerated after any driver upgrade.
+nvidia_cdi_spec: /var/run/cdi/nvidia.yaml
