@@ -4,6 +4,11 @@ diun_root_dir: "{{ service_root }}/diun"
 diun_schedule: "0 0 */6 * * *"          # every 6h
 diun_ntfy_endpoint: "http://{{ hostvars['util01'].ansible_host }}:{{ ntfy_port | default(8091) }}"
 diun_ntfy_topic: "homelab-updates"
-# Only watch containers that opt in with the label diun.enable=true? No — watch all
-# running containers across this host by default.
+# Watch every container on the host, not just those labelled diun.enable=true.
+# Diun's own default is false; leaving it unset makes the provider a no-op.
+diun_watch_by_default: true
 diun_watch_stopped: false
+
+# n8n webhook that drives automatic upgrades. Empty disables the fan-out and
+# leaves Diun notify-only (the pre-2026-08-30 behaviour).
+diun_webhook_endpoint: "http://{{ hostvars['util01'].ansible_host }}:{{ n8n_port | default(5678) }}/webhook/diun-update"

@@ -25,3 +25,10 @@
 
     - role: services/network/nginx
       tags: [nginx, network]
+
+    # Image-update notifier. Diun's docker provider watches a single endpoint,
+    # so one instance runs per docker_hosts member (same shape as the beszel /
+    # dozzle / portainer agents). Each reports to the shared ntfy topic and to
+    # the n8n upgrade webhook on util01.
+    - role: services/monitoring/diun
+      tags: [diun, updates, monitoring]

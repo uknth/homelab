@@ -6,6 +6,11 @@ watch:
 
 providers:
   docker:
+    # Diun defaults watchByDefault to false, which means it only watches
+    # containers carrying the label diun.enable=true. Without this the provider
+    # finds nothing and logs "No image found" every cycle -- which is exactly
+    # what it did from deployment until 2026-08-30.
+    watchByDefault: {{ diun_watch_by_default | lower }}
     watchStopped: {{ diun_watch_stopped | lower }}
 
 notif:
@@ -14,3 +19,11 @@ notif:
     topic: "{{ diun_ntfy_topic }}"
     priority: 3
     timeout: 10s
+{% if diun_webhook_endpoint %}
+  # Fan-out to n8n, which decides whether the image may be auto-upgraded
+  # (stateless) or only reported (stateful — see ops/maintenance).
+  webhook:
+    endpoint: "{{ diun_webhook_endpoint }}"
+    method: POST
+    timeout: 10s
+{% endif %}
