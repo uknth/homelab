@@ -25,14 +25,13 @@ repo; `docs/` covers *what* to build and *why*.
 | `gw01` | 10.0.2.2 | Debian | Network gateway — Blocky DNS, nginx, certbot, Tailscale subnet router |
 | `cmp01` | 10.0.2.5 | Debian | Compute (A4000 GPU) — arr stack, Jellyfin, Kavita, Paperless-ngx |
 | `util01` | 10.0.2.8 | Debian | Observability/ops — Beszel, Uptime Kuma, ntfy, Diun, Glance, Portainer, Dozzle, n8n |
-| `ctl01` | 10.0.2.4* | macOS | Ansible control node / jumphost / dev toolchain |
+| `ctl01` | 10.0.2.4 | macOS | Ansible control node / jumphost / dev toolchain |
 | `ai01` | 10.0.2.9 | macOS | AI workloads — Ollama (native), Qwen, paperless-ai |
 | `nas01` | 10.0.2.6 | TrueNAS | Semi-managed (NFS exports via API) — primary storage |
 | `nas02` | 10.0.2.3 | Synology | Unmanaged — Restic backup target (SFTP) |
 | `dns01` | 10.0.2.7 | Pi-hole | Unmanaged — ad/tracker blocking (Blocky's upstream) |
 
-\* `ctl01` still on DHCP `10.0.2.115`; reserve `10.0.2.4` in Omada. Immich/Vaultwarden are
-**out of scope** for v3. See [`docs/spec/hosts.md`](docs/spec/hosts.md) for the full spec.
+Immich/Vaultwarden are **out of scope** for v3. See [`docs/spec/hosts.md`](docs/spec/hosts.md) for the full spec.
 
 ---
 

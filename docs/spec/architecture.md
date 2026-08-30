@@ -21,7 +21,7 @@ doc and [`../../hosts/hosts.yml`](../../hosts/hosts.yml) disagree, the inventory
 | Remote access | Tailscale; `gw01` is the subnet router advertising `10.0.2.0/24` |
 
 Static IP assignment is done in the Omada controller (DHCP reservation), not on the hosts.
-`ctl01` still holds a dynamic lease (`10.0.2.115`) and needs a reservation at `10.0.2.4`.
+`ctl01` holds an Omada DHCP reservation at `10.0.2.4` (assigned 2026-08-30).
 
 ## DNS design
 

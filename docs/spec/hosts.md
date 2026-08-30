@@ -66,7 +66,7 @@ Docker is not yet installed. Accessible via the github key (sudo not yet passwor
 Unified memory holds larger models than the A4000's 16 GB VRAM, so inference lives here, not
 on `cmp01`.
 
-### `ctl01` — Admin / control node · `10.0.2.4` (currently DHCP `10.0.2.115`)
+### `ctl01` — Admin / control node · `10.0.2.4`
 
 | | |
 |---|---|
@@ -80,7 +80,7 @@ socket the `docker` CLI and `dev/kind` need. Started as a `brew services` unit s
 up on login. `ai01` deliberately does **not** run Colima — its only workload (Ollama) is
 native for Metal acceleration.
 
-Needs an Omada DHCP reservation at `10.0.2.4`; update the inventory once done.
+Holds an Omada DHCP reservation at `10.0.2.4` (assigned 2026-08-30).
 
 ## Unmanaged / semi-managed hosts
 

@@ -16,7 +16,8 @@ Build-out phases for v3, in dependency order. Status reflects what's actually wi
 - [x] **TrueNAS API** — `vault_truenas_api_key` verified against `https://10.0.2.6/api/v2.0/` (SCALE 25.10); NFS export managed via `services/storage/truenas_nfs` (phase 3).
 - [ ] **Mixed Debian releases** — `util01` is Debian 13 (trixie); `gw01`/`cmp01` are Debian 12
       (bookworm). `system/apt` and `system/docker` must resolve the codename dynamically.
-- [ ] **ctl01 IP** — reserve `10.0.2.4` in Omada, update inventory.
+- [x] **ctl01 IP** — DONE 2026-08-30. Reserved `10.0.2.4` in Omada; inventory updated and
+      reachable as `ansible@10.0.2.4`.
 - [ ] **SourceHut remote** — mirror repo to `git.sr.ht` before Phase 7.
 
 ## Phases

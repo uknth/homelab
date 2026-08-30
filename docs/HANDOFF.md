@@ -1,4 +1,4 @@
-# Session Handoff — Context Dump (2026-08-29)
+# Session Handoff — Context Dump (updated 2026-08-30)
 
 Single pick-up point for a fresh session. Everything below reflects `master` at
 tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
@@ -24,7 +24,7 @@ tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
 | nas02 | 10.0.2.3 | Synology: restic backup target (SFTP, `/restic/<host>`) |
 | dns01 | 10.0.2.7 | Pi Zero, Pi-hole — Blocky's upstream |
 | ai01 | 10.0.2.9 | Mac Mini M4 Pro — **Phase 8, not built** |
-| ctl01 | 10.0.2.115 (DHCP; reserve 10.0.2.4) | Mac Mini M1 — bootstrapped (ansible user + Beszel agent live); dev toolchain is **Phase 8** |
+| ctl01 | 10.0.2.4 | Mac Mini M1 — bootstrapped (ansible user + Beszel agent live); dev toolchain is **Phase 8** |
 | Macs | — | Beszel agents (launchd) |
 
 Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puhome.net`
@@ -58,12 +58,27 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
   [`spec/auth.md`](spec/auth.md).
 - **GitOps auto-apply** still off (dry-run). Enable when confident.
 
-## Phase 8 (next)
-- **ai01**: Ollama (native) + a Qwen model + **paperless-ai** (auto-tag/OCR-assist Paperless
-  docs). Same LLM can back the **Homepage LLM search** (replace the placeholder search box).
-- **ctl01**: dev toolchain. Prereqs: reserve **10.0.2.4** in Omada, add ctl01 to `hosts/hosts.yml`,
-  run `init.yml -l ctl01` then `site.yml -l ctl01`.
+## Phase 8 (in progress — scope being expanded 2026-08-30)
+- **8a · ai01**: Ollama (native, Homebrew + launchd — Docker on macOS gets no Metal accel)
+  + a Qwen model + **paperless-ai** (auto-tag/OCR-assist Paperless docs). Same LLM backs the
+  **Homepage LLM search** (replace the placeholder search box).
+- **8b · ctl01**: dev toolchain (`system/colima` + `dev/{go,node,kubectl,helm,kind,awscli}`).
+  Prereqs now **done** — 10.0.2.4 reserved, inventory updated. Remaining: run
+  `init.yml -l ctl01` then `site.yml -l ctl01`.
 - Build per [`spec/conventions.md`](spec/conventions.md); wire into `site.yml`; update the roadmap.
+
+### Phase 8 design questions (unresolved in the docs — decide before building)
+1. **`hermes` vs `paperless-ai`.** `playbooks/hosts/ai01.yml` (scaffolding, commented out of
+   `site.yml`) lists `services/ai/ollama` + `services/ai/hermes` — but `hermes` appears in no
+   spec, only `plan/migration.md:51` ("no v2 implementation"). Meanwhile `spec/services.md:84`
+   lists **paperless-ai**, which is absent from the playbook. The two disagree.
+2. **paperless-ai has no runtime on ai01.** It is Docker-only, and `spec/hosts.md:80` explicitly
+   keeps Colima *off* ai01. Either Colima goes on ai01 (contradicting the spec) or the container
+   runs on cmp01 next to Paperless and talks to `ai01:11434` over the LAN. Latter is preferred.
+3. **`system/brew` is commented out** of `playbooks/bootstrap/macos.yml`. Every Phase 8 role on
+   both Macs is Homebrew-driven, so that role is an unstated prerequisite for the whole phase.
+4. **Nothing is built**: no `roles/dev/`, no `roles/services/ai/`. Both host playbooks are
+   scaffolding referencing 9 roles that do not exist.
 
 ## Memory (persisted preferences — /Users/uknth/.claude/.../memory/)
 - **dashboard-must-be-declarative**: dashboards/infra must be YAML/config-driven, not UI/DB-driven
@@ -118,12 +133,19 @@ future driver bump can't silently break GPU containers.
 **A reboot of cmp01 is still pending** for `linux-image-6.1.0-52` — unrelated to
 the above, and not urgent.
 
-### Open from this session
-- **gw01 container DNS.** gw01's resolv.conf is loopback (it *is* the DNS host),
-  so Docker fell back to public DNS and containers got IPv6-only answers on an
-  IPv4-only net — Diun on gw01 can't reach any registry. `/etc/docker/daemon.json`
-  now pins container DNS to Blocky, but **a `systemctl restart docker` on gw01 is
-  still pending** — deliberately not automated, since it restarts Blocky and
-  briefly drops LAN DNS.
-- **Orphaned containers**: `mixarr` (cmp01, unhealthy) and `homarr` (util01) are
-  still running though both were retired; ~37 GB reclaimable on cmp01.
+### Closed 2026-08-30 (verified live)
+- **gw01 container DNS — fixed.** gw01's resolv.conf is loopback (it *is* the DNS
+  host), so Docker fell back to public DNS and containers got IPv6-only answers on
+  an IPv4-only net; Diun on gw01 could not reach any registry. `/etc/docker/daemon.json`
+  now pins container DNS to Blocky and docker was restarted (06:48 UTC). Verified:
+  Diun on gw01 now analyses 4 images with `failed=0` (it previously failed every run).
+- **Orphaned containers — removed.** `mixarr` (cmp01) and `homarr` (util01) are gone,
+  images and all. cmp01 is at 187 GB / 915 GB (22%); only 4.8 GB of unused volumes
+  remain, so the ~37 GB was reclaimed.
+- **ctl01 IP — reserved.** Now `10.0.2.4` in Omada; `hosts/hosts.yml`, `AGENTS.md`,
+  `spec/hosts.md`, `spec/architecture.md` and the roadmap prereq all updated.
+
+### Still open
+- **cmp01 reboot** pending for `linux-image-6.1.0-52` — not urgent.
+- **`buildx_buildkit_mybuilder0`** runs on cmp01 but is declared nowhere — a leftover
+  buildx builder. Harmless; remove with `docker buildx rm mybuilder` when convenient.
