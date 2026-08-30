@@ -24,20 +24,99 @@ ansible-playbook site.yml --tags patch
   compute never go down together.
 - `gw01` reboots last and alone.
 
-## 3. Container updates — notify, then Ansible applies
+## 3. Container updates — Diun detects, n8n applies, ntfy reports
 
-**Never auto-update stateful containers.** A bad upstream release or an unattended Postgres
-major-version bump is how you lose data.
+**Changed 2026-08-30 (user directive).** This section previously read "never
+auto-update; Diun only notifies." Stateless services are now upgraded
+automatically. The data-loss concern that motivated the original rule is
+preserved as a **hold list** rather than a blanket prohibition.
 
-- **Diun** on `util01` watches every image on every `docker_hosts` member and pushes to ntfy
-  when a new tag/digest is available. Diun only notifies; it changes nothing.
-- Updates are applied by **re-running the role**, which is idempotent:
-  ```bash
-  ansible-playbook site.yml --tags paperless   # pulls + recreates just that service
-  ```
-  Roles use `community.docker.docker_compose_v2` with `pull: always`.
-- This keeps every change reviewable, diffable in git, and reversible. Watchtower-style
-  auto-update is **not** used.
+```
+Diun (one per docker host, watches local socket)
+   │ new digest
+   ├──▶ ntfy  homelab-updates          (unchanged — you still see every detection)
+   └──▶ n8n webhook /webhook/diun-update
+            │
+            ├─ status != "update" ──▶ ntfy, no action
+            └─ status == "update"
+                   │
+                   ▼
+            ssh (forced command) ──▶ ops/maintenance : maintenance.sh --image <ref>
+                   │
+                   ├─ project in hold list ──▶ ntfy: held, apply manually
+                   └─ otherwise ──▶ docker compose pull + up -d ──▶ ntfy: updated
+                   │
+                   ▼
+            n8n branches on exit code ──▶ ntfy homelab-jobs (pass or fail)
+```
+
+### Hold list — never upgraded automatically
+
+`maintenance_hold_projects` in `roles/ops/maintenance/defaults/main.yml`:
+
+| Project | Why |
+|---|---|
+| `paperless` | Postgres 17 + Redis. An unattended major bump can leave an unreadable data directory |
+| `authentik` | Postgres 16 + Redis, and it gates every other service |
+| `n8n` | Recreating it would kill the workflow performing the upgrade |
+
+A held project still produces a priority-4 ntfy naming the exact command to run:
+`ansible-playbook site.yml --tags <project>`.
+
+### Discovery, not configuration
+
+Neither the host list nor the project list is hand-maintained. Hosts come from
+the `docker_hosts` inventory group; projects are discovered from
+`/opt/homelab/*/compose/docker-compose.yml` on each host; the image→project
+mapping is resolved at run time from `docker ps`. A new service is covered the
+moment it is deployed.
+
+### How change is detected (and a trap)
+
+`upgrade_project` compares `docker compose ps -q` (container ids) before and
+after `pull` + `up -d`. It deliberately does **not** compare
+`docker compose images -q`: that reports the images of *running containers*, so
+it reads identically before and after a pull and every project looks "already
+current". The pulled image then sits unreferenced until `--prune` deletes it,
+leaving containers permanently stale while the job reports success. This bit
+`bazarr` and `radarr` on 2026-08-30 before it was fixed.
+
+`up -d` runs unconditionally because it is idempotent — it recreates only the
+services whose image actually changed.
+
+Likewise the image→project lookup asks each project `docker compose config
+--images` rather than reading `docker ps --format '{{.Image}}'`. Once a tag has
+moved (which happens after any pull+prune cycle) `docker ps` reports a bare
+image id, and matching on it silently stops finding anything.
+
+### Access model
+
+n8n reaches the script over SSH with a key restricted by a **forced command** in
+the `ansible` user's `authorized_keys` — that key can invoke nothing but
+`maintenance.sh`, and the script whitelists its own flags. Verified: presenting
+the key with `cat /etc/shadow` returns the script's usage text.
+
+### Modes
+
+| Command | Effect |
+|---|---|
+| `--image <ref>` | Upgrade whichever project runs that image (the Diun path) |
+| `--upgrade-all` | Every project not held |
+| `--prune` | Reclaim images + build cache, remove containers exited >30 days |
+| `--all` | `--upgrade-all` then `--prune` — the weekly job |
+
+### Schedule
+
+`homelab-weekly-maintenance` in n8n runs `--all` on **Sundays 04:00**, after the
+nightly restic window. Both workflows are defined as JSON under
+`roles/services/productivity/n8n/templates/` and imported with the n8n CLI, so
+they live in git rather than only in n8n's database.
+
+### Still true
+
+Manual application remains available and is the only path for held projects.
+Watchtower is still not used — the upgrade decision is made by Ansible-managed
+config, and every action is reported.
 
 ## 4. Backups — Restic → nas02 over SFTP
 
@@ -74,7 +153,8 @@ Everything above publishes to **ntfy** on `util01` (one topic per concern):
 
 | Source | ntfy topic | Trigger |
 |---|---|---|
-| Diun | `homelab-updates` | new image available |
+| Diun | `homelab-updates` | new image available (one Diun per docker host) |
+| n8n jobs | `homelab-jobs` | every n8n run, pass or fail |
 | `ops/restic` | `homelab-backup` | backup failed / weekly summary |
 | Uptime Kuma | `homelab-alerts` | monitor down (incl. missed backup ping) |
 | n8n / GitOps | `homelab-deploy` | deploy started / succeeded / failed |

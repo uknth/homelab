@@ -21,8 +21,10 @@ tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
 | util01 | 10.0.2.8 | Observability/platform: Authentik (SSO), Beszel hub, ntfy, Diun, Uptime Kuma, **Homepage** dash, Portainer, Dozzle, n8n, Syncthing, GitOps executor |
 | cmp01 | 10.0.2.5 | Compute/GPU: arr stack (prowlarr/sonarr/radarr/lidarr/bazarr/nzbget + qbittorrent behind gluetun), Jellyfin+Jellyseerr (NVENC), Kavita, Paperless, Filebrowser, **Navidrome, LMS, slskd, Soularr** |
 | nas01 | 10.0.2.6 | TrueNAS: data-pool (RAIDZ2, **HBA degraded** — swap pending) + scratch-pool; NFS to cmp01 |
-| nas02 | 10.0.2.7 | Synology: restic backup target (SFTP, `/restic/<host>`) |
-| ai01 / ctl01 | (ai01 tbd; ctl01 → reserve 10.0.2.4) | **Phase 8 targets — not built** |
+| nas02 | 10.0.2.3 | Synology: restic backup target (SFTP, `/restic/<host>`) |
+| dns01 | 10.0.2.7 | Pi Zero, Pi-hole — Blocky's upstream |
+| ai01 | 10.0.2.9 | Mac Mini M4 Pro — **Phase 8, not built** |
+| ctl01 | 10.0.2.115 (DHCP; reserve 10.0.2.4) | Mac Mini M1 — bootstrapped (ansible user + Beszel agent live); dev toolchain is **Phase 8** |
 | Macs | — | Beszel agents (launchd) |
 
 Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puhome.net`
@@ -76,3 +78,52 @@ ansible-playbook playbooks/hosts/<host>.yml     # one host
 ansible-playbook playbooks/hosts/<host>.yml --tags <role>
 ansible-playbook site.yml --check               # dry-run (check-mode-safe)
 ```
+
+## Session 2026-08-30 — maintenance automation
+
+- **Homepage "Nodes" tab** — per-node container inventory. Node list from the
+  Portainer API (`/api/endpoints`), containers from the Docker API through it.
+  Nothing enumerated by hand, so undeclared containers show up — which is how the
+  orphans below were found.
+- **Automatic container upgrades** (reverses the old "never auto-update" rule —
+  see [`spec/maintenance.md`](spec/maintenance.md) §3). Diun → n8n webhook →
+  `ops/maintenance/maintenance.sh` → ntfy. Stateless only; `paperless`,
+  `authentik`, `n8n` are held and reported for manual application.
+- **`ops/maintenance`** (new role, util01): one script for `--image` /
+  `--upgrade-all` / `--prune` / `--all`, reached by n8n over an SSH key locked to
+  a forced command. Weekly `--all` runs Sundays 04:00.
+- **Diun fixed and fleet-wide.** It now runs on all three docker hosts (its
+  provider is single-endpoint). More importantly `watchByDefault` was never set,
+  so Diun had watched **nothing** since deployment — it logged "No image found"
+  every 6h. Now tracking 17 images on cmp01, 12 on util01.
+- **`site.yml` now imports cmp01.** The import had been commented out since
+  Phase 5, so the GitOps executor never reconciled cmp01's services.
+
+### Incident 2026-08-30 — Jellyfin down (resolved)
+
+An automated upgrade recreated Jellyfin, which then failed to start:
+`open /lib/firmware/nvidia/535.261.03/gsp_ga10x.bin: no such file or directory`.
+
+**Not caused by the upgrade — exposed by it.** `unattended-upgrades` had moved the
+NVIDIA packages to 535.309.01 while the *old* 535.261.03 kernel module stayed
+loaded, and `/var/run/cdi/nvidia.yaml` (generated 2026-08-17) still pinned the old
+driver's firmware paths. Running containers were unaffected; any new GPU container
+would fail. Jellyfin would have died on the next reboot regardless.
+
+Fixed by reloading the nvidia kernel modules (after stopping `nvidia-persistenced`
+and the Beszel agent, which held `/dev/nvidia*`) and regenerating the CDI spec.
+`system/nvidia_docker` now detects the drift and regenerates automatically, so a
+future driver bump can't silently break GPU containers.
+
+**A reboot of cmp01 is still pending** for `linux-image-6.1.0-52` — unrelated to
+the above, and not urgent.
+
+### Open from this session
+- **gw01 container DNS.** gw01's resolv.conf is loopback (it *is* the DNS host),
+  so Docker fell back to public DNS and containers got IPv6-only answers on an
+  IPv4-only net — Diun on gw01 can't reach any registry. `/etc/docker/daemon.json`
+  now pins container DNS to Blocky, but **a `systemctl restart docker` on gw01 is
+  still pending** — deliberately not automated, since it restarts Blocky and
+  briefly drops LAN DNS.
+- **Orphaned containers**: `mixarr` (cmp01, unhealthy) and `homarr` (util01) are
+  still running though both were retired; ~37 GB reclaimable on cmp01.

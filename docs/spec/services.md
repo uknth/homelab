@@ -73,12 +73,12 @@ helper is already PIA-shaped).
 | Beszel (hub) | `services/monitoring/beszel_hub` | `metrics.puhome.net` | 🟢 built + live | agents active fleet-wide |
 | Uptime Kuma | `services/monitoring/uptime_kuma` | `synthetics.puhome.net` | 🟢 built + live | — |
 | ntfy | `services/monitoring/ntfy` | `ntfy.puhome.net` | 🟢 built + live | notification sink (open pub/sub; token ACLs = later) |
-| Diun | `services/monitoring/diun` | — | 🟢 built + live | image-update notifier -> ntfy (6h) |
+| Diun | `services/monitoring/diun` | — | 🟢 built + live | image-update notifier, **one per docker host** (single-endpoint provider). -> ntfy `homelab-updates` + n8n upgrade webhook. `watchByDefault: true` (fixed 2026-08-30 — it was unset, so Diun watched nothing since deployment) |
 | Dozzle | `services/monitoring/dozzle` | `logs.puhome.net` | 🟢 built + live | live container logs |
-| Homepage | `services/dashboard/homepage` | `dash.puhome.net` | 🟢 built + live | service links + widgets + Docker(util01); replaced Glance |
+| Homepage | `services/dashboard/homepage` | `dash.puhome.net` | 🟢 built + live | service links + widgets + Docker(util01); replaced Glance. **Nodes tab** (2026-08-30): per-node container inventory, discovered live from the Portainer API |
 | Glance | `services/dashboard/glance` | — | ⚪ retired | replaced by Homepage (role kept in repo) |
 | Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
-| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7) |
+| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7). Owns two maintenance workflows (2026-08-30), defined as JSON in the role and imported via the n8n CLI |
 | Syncthing | `services/productivity/syncthing` | `sync.puhome.net` | 🟢 built + live | standalone file sync; GUI behind forward-auth; data under `/opt/homelab/syncthing/data` (Restic-backed) |
 
 ## `ai01` — AI workloads
@@ -111,6 +111,7 @@ Also the **Ansible control node** — runs the playbooks against the fleet.
 | Container updates | Diun notify + Ansible apply | 🔵 net-new | [maintenance](maintenance.md#3-container-updates--notify-then-ansible-applies) |
 | Backups | `ops/restic` → nas02 (SFTP) | 🔵 net-new | [maintenance](maintenance.md#4-backups--restic--nas02-over-sftp) |
 | GitOps deploy | builds.sr.ht + n8n | 🔵 net-new | [gitops](../plan/gitops.md) |
+| Container upgrades + space reclaim | `ops/maintenance` (util01) driven by n8n | 🟢 built + live | [maintenance](maintenance.md#3-container-updates--diun-detects-n8n-applies-ntfy-reports) |
 
 ## Retired in v2, not planned for v3
 
