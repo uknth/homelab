@@ -39,3 +39,92 @@
     project_name: "n8n"
     state: present
     pull: missing
+
+# --- Maintenance workflows -------------------------------------------------
+# Defined as JSON in this role and imported with the n8n CLI, so they live in
+# git rather than only inside n8n's database. Re-importing the same ids is
+# idempotent — it overwrites in place.
+
+- name: Read the restricted maintenance SSH key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ n8n_maint_key_path }}"
+  register: _n8n_maint_key
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Import maintenance workflows into n8n
+  when: _n8n_maint_key.content is defined
+  block:
+    - name: Create n8n import dir
+      become: true
+      ansible.builtin.file:
+        path: "{{ n8n_root_dir }}/data/import"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        mode: "0700"
+
+    - name: Template credential + workflows
+      become: true
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "{{ n8n_root_dir }}/data/import/{{ item }}"
+        owner: "1000"
+        group: "1000"
+        mode: "0600"
+      loop:
+        - credential-maint-ssh.json
+        - workflow-diun-update.json
+        - workflow-weekly-maintenance.json
+      vars:
+        n8n_maint_private_key: "{{ _n8n_maint_key.content | b64decode }}"
+      no_log: true
+
+    - name: Import the SSH credential
+      become: true
+      ansible.builtin.command:
+        cmd: docker exec n8n n8n import:credentials --input=/home/node/.n8n/import/credential-maint-ssh.json
+      register: _n8n_cred_import
+      changed_when: "'Successfully imported' in _n8n_cred_import.stdout"
+
+    # --activeState=fromJson only works in queue/multi-main mode; this n8n runs
+    # in regular mode, so import first and publish separately.
+    - name: Import the workflows
+      become: true
+      ansible.builtin.command:
+        cmd: >-
+          docker exec n8n n8n import:workflow
+          --input=/home/node/.n8n/import/{{ item }}
+      loop:
+        - workflow-diun-update.json
+        - workflow-weekly-maintenance.json
+      register: _n8n_wf_import
+      changed_when: "'Successfully imported' in _n8n_wf_import.stdout"
+
+    - name: Publish (activate) the workflows
+      become: true
+      ansible.builtin.command:
+        cmd: docker exec n8n n8n publish:workflow --id={{ item }}
+      loop:
+        - homelab-diun-update
+        - homelab-weekly-maintenance
+      register: _n8n_wf_publish
+      changed_when: _n8n_wf_publish.rc == 0
+
+    # The credential file holds the private key in plaintext — n8n has now
+    # encrypted it into its own store, so the file must not linger.
+    - name: Remove the plaintext credential file
+      become: true
+      ansible.builtin.file:
+        path: "{{ n8n_root_dir }}/data/import/credential-maint-ssh.json"
+        state: absent
+
+    - name: Restart n8n so the webhook and schedule register
+      become: true
+      community.docker.docker_compose_v2:
+        project_src: "{{ n8n_root_dir }}/compose"
+        project_name: "n8n"
+        state: restarted
+      when: _n8n_wf_import is changed

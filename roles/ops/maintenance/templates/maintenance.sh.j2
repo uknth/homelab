@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# Managed by Ansible — ops/maintenance. Runs on util01, operates on every
+# docker_hosts member over SSH with the ansible key.
+#
+#   maintenance.sh --image <ref>   upgrade the project running that image
+#   maintenance.sh --upgrade-all   upgrade every project not held
+#   maintenance.sh --prune         reclaim space, remove long-exited containers
+#   maintenance.sh --all           upgrade-all then prune
+#
+# Invoked by n8n through a forced-command SSH key, so the requested arguments
+# arrive in SSH_ORIGINAL_COMMAND rather than as real argv. They are whitelisted
+# below — that key cannot run anything except this script, with these flags.
+set -uo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+NTFY="{{ maintenance_ntfy_url }}/{{ maintenance_ntfy_topic }}"
+KEY="{{ service_root }}/gitops/repo/keys/ansible_rsa.private"
+HOLD="{{ maintenance_hold_projects | join(' ') }}"
+EXITED_DAYS="{{ maintenance_remove_exited_days }}"
+# Docker's `until` filter takes a duration, not days -- convert, or "30 days"
+# silently becomes "30 hours" and sweeps far more than intended.
+EXITED_HOURS=$(( EXITED_DAYS * 24 ))
+{% for h in maintenance_hosts %}
+HOST_{{ loop.index }}="{{ h }}:{{ hostvars[h].ansible_host }}"
+{% endfor %}
+HOSTS="{% for h in maintenance_hosts %}{{ h }}:{{ hostvars[h].ansible_host }} {% endfor %}"
+
+SUMMARY=""
+CHANGED=0
+FAILED=0
+CURRENT=0   # already-up-to-date projects; tallied, not listed, to stay under
+            # ntfy's 4096-byte message limit
+
+note()   { SUMMARY="${SUMMARY}$1"$'\n'; echo "$1"; }
+notify() {
+  # $1 title, $2 body, $3 priority (default 3)
+  curl -fsS -m 15 \
+    -H "Title: $1" \
+    -H "Priority: ${3:-3}" \
+    -H "Tags: whale" \
+    -d "$2" "$NTFY" >/dev/null 2>&1 || echo "warn: ntfy post failed"
+}
+# Run a command on a fleet host. util01 is local — no SSH hop to ourselves.
+remote() {
+  local ip="$1"; shift
+  if [ "$ip" = "{{ hostvars['util01'].ansible_host }}" ]; then
+    bash -c "$*"
+  else
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+        -i "$KEY" "ansible@${ip}" "$*"
+  fi
+}
+held() { case " $HOLD " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
+# Compose projects are discovered from the filesystem, never hardcoded, so a new
+# service picks itself up. Project name == the service directory name, matching
+# how the roles deploy them.
+list_projects() {
+  remote "$1" 'ls -d {{ service_root }}/*/compose/docker-compose.yml 2>/dev/null' \
+    | while read -r f; do basename "$(dirname "$(dirname "$f")")"; done
+}
+
+upgrade_project() {
+  local hname="$1" ip="$2" proj="$3"
+  if held "$proj"; then
+    note "  hold  ${hname}/${proj} — stateful, needs a human"
+    notify "Update held: ${proj} on ${hname}" \
+      "A new image is available for ${proj}, but it is stateful and excluded from automatic upgrades. Apply with: ansible-playbook site.yml --tags ${proj}" 4
+    return 0
+  fi
+  local dir="{{ service_root }}/${proj}/compose"
+  local before after
+  # Compare *container* ids, not image ids. `docker compose images` reports the
+  # images of running containers, so it is identical before and after a pull and
+  # would always read as "already current" -- the pulled image would then sit
+  # unused until prune deleted it. Container ids change only on recreation,
+  # which is exactly what an upgrade does.
+  before=$(remote "$ip" "sudo docker compose --project-directory ${dir} -p ${proj} ps -q 2>/dev/null | sort | md5sum")
+  if ! remote "$ip" "sudo docker compose --project-directory ${dir} -p ${proj} pull -q" >/dev/null 2>&1; then
+    note "  FAIL  ${hname}/${proj} — pull failed"; FAILED=$((FAILED+1)); return 1
+  fi
+  # `up -d` is idempotent: it recreates only services whose image actually
+  # changed, so it is safe to run unconditionally.
+  if ! remote "$ip" "sudo docker compose --project-directory ${dir} -p ${proj} up -d" >/dev/null 2>&1; then
+    note "  FAIL  ${hname}/${proj} — up -d failed after pull"; FAILED=$((FAILED+1)); return 1
+  fi
+  after=$(remote "$ip" "sudo docker compose --project-directory ${dir} -p ${proj} ps -q 2>/dev/null | sort | md5sum")
+  if [ "$before" = "$after" ]; then
+    CURRENT=$((CURRENT+1))
+  else
+    note "  UP    ${hname}/${proj} — upgraded and recreated"
+    CHANGED=$((CHANGED+1))
+  fi
+}
+
+# --- mode: upgrade the project running a given image (Diun webhook path) -----
+do_image() {
+  local image="$1" found=0
+  note "Locating image ${image} across the fleet"
+  for hp in $HOSTS; do
+    local hname="${hp%%:*}" ip="${hp##*:}"
+    # Ask each compose project which images it declares. `docker ps` reports a
+    # bare image id once a tag has moved (which happens after every pull+prune
+    # cycle), so matching on its .Image field silently stops finding anything.
+    local proj
+    for proj in $(list_projects "$ip"); do
+      if remote "$ip" "sudo docker compose --project-directory {{ service_root }}/${proj}/compose -p ${proj} config --images 2>/dev/null" \
+           | grep -qxF "$image"; then
+        found=1
+        upgrade_project "$hname" "$ip" "$proj"
+      fi
+    done
+  done
+  if [ "$found" -eq 0 ]; then
+    note "No running container uses ${image} — nothing to do"
+  fi
+}
+
+# --- mode: upgrade everything not held --------------------------------------
+do_upgrade_all() {
+  for hp in $HOSTS; do
+    local hname="${hp%%:*}" ip="${hp##*:}"
+    note "== ${hname}"
+    for proj in $(list_projects "$ip"); do
+      upgrade_project "$hname" "$ip" "$proj"
+    done
+  done
+}
+
+# --- mode: reclaim space -----------------------------------------------------
+do_prune() {
+  for hp in $HOSTS; do
+    local hname="${hp%%:*}" ip="${hp##*:}"
+    local before after
+    before=$(remote "$ip" "sudo docker system df --format '{{ '{{' }}.Reclaimable{{ '}}' }}' | head -1")
+
+{% if maintenance_remove_exited_days | int > 0 %}
+    # Containers exited longer ago than the threshold, excluding held projects.
+    local stale
+    stale=$(remote "$ip" "sudo docker ps -a --filter status=exited --filter status=created --format '{{ '{{' }}.ID{{ '}}' }} {{ '{{' }}.Label \"com.docker.compose.project\"{{ '}}' }}' --filter 'until=${EXITED_HOURS}h'" 2>/dev/null | awk '{print $1}')
+    if [ -n "$stale" ]; then
+      local n; n=$(echo "$stale" | wc -l | tr -d ' ')
+      remote "$ip" "sudo docker rm $(echo $stale | tr '\n' ' ')" >/dev/null 2>&1 \
+        && note "  ${hname}: removed ${n} container(s) exited >${EXITED_DAYS}d ago"
+    fi
+{% endif %}
+{% if maintenance_prune_images %}
+    remote "$ip" "sudo docker image prune -af" >/dev/null 2>&1 && echo "  ${hname}: images pruned"
+{% endif %}
+{% if maintenance_prune_build_cache %}
+    remote "$ip" "sudo docker builder prune -af" >/dev/null 2>&1 && echo "  ${hname}: build cache pruned"
+{% endif %}
+{% if maintenance_prune_volumes %}
+    remote "$ip" "sudo docker volume prune -f" >/dev/null 2>&1 && echo "  ${hname}: volumes pruned"
+{% endif %}
+    after=$(remote "$ip" "sudo docker system df --format '{{ '{{' }}.Size{{ '}}' }}' | head -1")
+    note "  ${hname}: images now ${after} (was reclaimable ${before})"
+  done
+}
+
+# --- argument handling -------------------------------------------------------
+# Under the forced-command key the caller's request lands here, not in argv.
+if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
+  ARGS="$SSH_ORIGINAL_COMMAND"
+  # n8n's SSH node prepends a working-directory hop before the real command --
+  # `cd <dir> ; <command>` (semicolon; older/other clients use `&&`). Strip
+  # either form before parsing, so only the intended flags are seen.
+  ARGS="$(printf '%s' "$ARGS" | sed -E 's/^[[:space:]]*cd[[:space:]]+[^;&]*(&&|;)[[:space:]]*//')"
+  # shellcheck disable=SC2086
+  set -- $ARGS
+fi
+
+MODE="${1:-}"
+case "$MODE" in
+  --image)
+    IMAGE="${2:-}"
+    # Whitelist: a plain image reference only. Blocks shell metacharacters
+    # arriving through SSH_ORIGINAL_COMMAND.
+    if ! printf '%s' "$IMAGE" | grep -qE '^[A-Za-z0-9._/:@-]+$'; then
+      echo "refusing suspicious image ref: $IMAGE"; exit 2
+    fi
+    TITLE="Container update"
+    do_image "$IMAGE"
+    ;;
+  --upgrade-all) TITLE="Scheduled upgrade"; do_upgrade_all ;;
+  --prune)       TITLE="Space reclamation"; do_prune ;;
+  --all)         TITLE="Weekly maintenance"; do_upgrade_all; do_prune ;;
+  *)
+    echo "usage: maintenance.sh --image <ref> | --upgrade-all | --prune | --all"
+    exit 2
+    ;;
+esac
+
+# --- always report, success or failure ---------------------------------------
+[ "$CURRENT" -gt 0 ] && note "${CURRENT} project(s) already current"
+
+# Hard cap: ntfy rejects >4096 bytes as an attachment, so never send more.
+SUMMARY="$(printf '%s' "$SUMMARY" | tail -c 3000)"
+
+if [ "$FAILED" -gt 0 ]; then
+  notify "${TITLE}: ${FAILED} failed, ${CHANGED} updated" "${SUMMARY:-no detail}" 5
+  exit 1
+elif [ "$CHANGED" -gt 0 ]; then
+  notify "${TITLE}: ${CHANGED} updated" "${SUMMARY:-no detail}" 4
+else
+  notify "${TITLE}: nothing to do" "${SUMMARY:-Everything already current.}" 2
+fi
+exit 0

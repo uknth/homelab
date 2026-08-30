@@ -1,0 +1,180 @@
+{
+  "id": "homelab-diun-update",
+  "name": "Homelab — container update (Diun)",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "diun-update",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Diun webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-40, 0],
+      "webhookId": "diun-update"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-status",
+              "operator": { "type": "string", "operation": "equals" },
+              "leftValue": "={% raw %}{{ $json.body.status }}{% endraw %}",
+              "rightValue": "update"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-if",
+      "name": "Is an update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=--image {% raw %}{{ $json.body.image }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-ssh",
+      "name": "Run maintenance --image",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [400, -80],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "homelab-maint-ssh",
+          "name": "homelab maintenance (util01)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-rc",
+              "operator": { "type": "number", "operation": "equals" },
+              "leftValue": "={% raw %}{{ $json.code }}{% endraw %}",
+              "rightValue": 0
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-rc",
+      "name": "Exit code 0?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [540, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "=n8n: maintenance ran for {% raw %}{{ $('Diun webhook').item.json.body.image }}{% endraw %}" },
+            { "name": "Priority", "value": "4" },
+            { "name": "Tags", "value": "n8n,whale" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ ($json.stdout || 'no output').slice(-1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-ok",
+      "name": "Notify success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "=n8n FAILED: upgrade of {% raw %}{{ $('Diun webhook').item.json.body.image }}{% endraw %}" },
+            { "name": "Priority", "value": "5" },
+            { "name": "Tags", "value": "n8n,rotating_light" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ JSON.stringify($json).slice(0, 1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-fail",
+      "name": "Notify failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 20]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "=n8n: new image seen, no action" },
+            { "name": "Priority", "value": "2" },
+            { "name": "Tags", "value": "n8n" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ $json.body.image }}{% endraw %} reported as '{% raw %}{{ $json.body.status }}{% endraw %}' (only 'update' triggers an upgrade)",
+        "options": {}
+      },
+      "id": "n-skip",
+      "name": "Notify skipped",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 160]
+    }
+  ],
+  "connections": {
+    "Diun webhook": { "main": [[{ "node": "Is an update?", "type": "main", "index": 0 }]] },
+    "Is an update?": {
+      "main": [
+        [{ "node": "Run maintenance --image", "type": "main", "index": 0 }],
+        [{ "node": "Notify skipped", "type": "main", "index": 0 }]
+      ]
+    },
+    "Run maintenance --image": {
+      "main": [
+        [{ "node": "Exit code 0?", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Exit code 0?": {
+      "main": [
+        [{ "node": "Notify success", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

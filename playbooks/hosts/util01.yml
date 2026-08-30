@@ -48,6 +48,9 @@
     - role: services/dashboard/portainer
       tags: [portainer, dashboard]
 
+    - role: ops/maintenance
+      tags: [maintenance, ops]
+
     - role: services/productivity/n8n
       tags: [n8n, automation]
 

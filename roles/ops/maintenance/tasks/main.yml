@@ -1,0 +1,65 @@
+---
+# Installs the maintenance entry point on util01 plus the restricted SSH key
+# n8n uses to call it. Deliberately no systemd timer here — n8n owns the
+# scheduling so that every run is visible and notified in one place.
+
+- name: Create maintenance dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ maintenance_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+- name: Template maintenance script
+  become: true
+  ansible.builtin.template:
+    src: maintenance.sh.j2
+    dest: "{{ maintenance_script }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+- name: Generate the n8n maintenance SSH key
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -N '' -C 'n8n-maintenance' -f {{ maintenance_key_path }}
+    creates: "{{ maintenance_key_path }}"
+
+- name: Read the maintenance public key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ maintenance_key_path }}.pub"
+  register: _maint_pub
+  check_mode: false
+
+# Forced command: this key can invoke nothing but the maintenance script, and
+# the script whitelists the flags it accepts. Even with the private key, an
+# attacker gets no shell.
+- name: Authorise the key for the maintenance script only
+  become: true
+  ansible.builtin.blockinfile:
+    path: "/home/{{ user }}/.ssh/authorized_keys"
+    marker: "# {mark} ANSIBLE MANAGED — n8n maintenance (forced command)"
+    create: true
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+    block: >-
+      command="{{ maintenance_script }}",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
+      {{ _maint_pub.content | b64decode | trim }}
+
+- name: Read the maintenance private key for the n8n credential
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ maintenance_key_path }}"
+  register: _maint_priv
+  no_log: true
+  check_mode: false
+
+- name: Publish the private key as a fact for the n8n role
+  ansible.builtin.set_fact:
+    maintenance_private_key: "{{ _maint_priv.content | b64decode }}"
+  no_log: true

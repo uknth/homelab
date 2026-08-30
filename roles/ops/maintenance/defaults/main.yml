@@ -1,0 +1,47 @@
+---
+# ops/maintenance — container upgrades + space reclamation, driven by n8n.
+#
+# The script this role installs on util01 is the single entry point for every
+# automated maintenance action. n8n reaches it over SSH with a key that is
+# restricted by a forced command, so that key can run nothing else.
+#
+# Modes:
+#   --image <ref>   upgrade whichever compose project runs that image (Diun path)
+#   --upgrade-all   upgrade every project not in maintenance_hold_projects
+#   --prune         reclaim images/build cache + remove long-exited containers
+#   --all           --upgrade-all then --prune
+
+maintenance_dir: "{{ service_root }}/maintenance"
+maintenance_script: "{{ service_root }}/maintenance/maintenance.sh"
+
+# Hosts the script operates on. Derived from the inventory, not hand-listed.
+maintenance_hosts: "{{ groups['docker_hosts'] | default([]) }}"
+
+# Projects never upgraded automatically. Per docs/spec/maintenance.md the
+# concern is stateful services: an unattended Postgres major bump can leave an
+# unreadable data directory. These get an ntfy notice instead, for a human to
+# apply with `ansible-playbook site.yml --tags <role>`.
+#   paperless  — postgres 17 + redis
+#   authentik  — postgres 16 + redis
+#   n8n        — would kill the very workflow driving the upgrade
+maintenance_hold_projects:
+  - paperless
+  - authentik
+  - n8n
+
+# Space reclamation. Images and build cache only reference unused layers, so
+# both are safe. Volume pruning is opt-in: an anonymous volume can still hold
+# state belonging to a container that is merely stopped.
+maintenance_prune_images: true
+maintenance_prune_build_cache: true
+maintenance_prune_volumes: false
+
+# Remove containers that have been exited longer than this. 0 disables.
+maintenance_remove_exited_days: 30
+
+# Every run reports here, success or failure — no silent jobs.
+maintenance_ntfy_url: "http://{{ hostvars['util01'].ansible_host }}:{{ ntfy_port | default(8091) }}"
+maintenance_ntfy_topic: "homelab-updates"
+
+# SSH key n8n uses to invoke the script. Generated on util01, never in git.
+maintenance_key_path: "{{ service_root }}/maintenance/n8n_maint_ed25519"

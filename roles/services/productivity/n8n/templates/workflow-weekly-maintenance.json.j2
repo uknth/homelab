@@ -1,0 +1,133 @@
+{
+  "id": "homelab-weekly-maintenance",
+  "name": "Homelab — weekly maintenance",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [{{ n8n_maintenance_weekday }}],
+              "triggerAtHour": {{ n8n_maintenance_hour }},
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "n-cron",
+      "name": "Weekly schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "--all",
+        "options": {}
+      },
+      "id": "n-ssh",
+      "name": "Run maintenance --all",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [200, 0],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "homelab-maint-ssh",
+          "name": "homelab maintenance (util01)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-rc",
+              "operator": { "type": "number", "operation": "equals" },
+              "leftValue": "={% raw %}{{ $json.code }}{% endraw %}",
+              "rightValue": 0
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-rc",
+      "name": "Exit code 0?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [330, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "n8n: weekly maintenance finished" },
+            { "name": "Priority", "value": "3" },
+            { "name": "Tags", "value": "n8n,broom" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ ($json.stdout || 'no output').slice(-1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-ok",
+      "name": "Notify success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "n8n FAILED: weekly maintenance" },
+            { "name": "Priority", "value": "5" },
+            { "name": "Tags", "value": "n8n,rotating_light" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ JSON.stringify($json).slice(0, 1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-fail",
+      "name": "Notify failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 100]
+    }
+  ],
+  "connections": {
+    "Weekly schedule": { "main": [[{ "node": "Run maintenance --all", "type": "main", "index": 0 }]] },
+    "Run maintenance --all": {
+      "main": [
+        [{ "node": "Exit code 0?", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Exit code 0?": {
+      "main": [
+        [{ "node": "Notify success", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

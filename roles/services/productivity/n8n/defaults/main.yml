@@ -4,3 +4,14 @@ n8n_root_dir: "{{ service_root }}/n8n"
 n8n_port: 5678
 n8n_host: "n8n.{{ base_domain }}"
 n8n_encryption_key: "{{ vault_n8n_encryption_key }}"
+
+# --- Maintenance automation -------------------------------------------------
+# n8n owns the schedule and the Diun-triggered upgrades. Both workflows are
+# defined as JSON in this role and imported with the n8n CLI, so they live in
+# git rather than only in n8n's database.
+n8n_ntfy_url: "http://{{ hostvars['util01'].ansible_host }}:{{ ntfy_port | default(8091) }}"
+n8n_jobs_ntfy_topic: "homelab-jobs"   # every n8n job reports here, pass or fail
+n8n_maintenance_weekday: 0            # 0 = Sunday
+n8n_maintenance_hour: 4               # 04:00, after the nightly restic run
+# Restricted key installed by ops/maintenance (forced command, that script only).
+n8n_maint_key_path: "{{ service_root }}/maintenance/n8n_maint_ed25519"
