@@ -15,3 +15,41 @@ n8n_maintenance_weekday: 0            # 0 = Sunday
 n8n_maintenance_hour: 4               # 04:00, after the nightly restic run
 # Restricted key installed by ops/maintenance (forced command, that script only).
 n8n_maint_key_path: "{{ service_root }}/maintenance/n8n_maint_ed25519"
+
+# --- Dual-WAN watch ---------------------------------------------------------
+# The probe itself lives on gw01 (ops/wanwatch) behind its own forced-command
+# key; n8n owns the schedule and republishes the last result at
+# /webhook/wan-status for the Homepage widget.
+#
+# Per-WAN alerting is Uptime Kuma's job — the probe pushes each link's verdict
+# straight to a push monitor, and Kuma's default ntfy channel fires from there.
+# This workflow therefore only pages when the probe itself cannot run, so a
+# dead ISP produces one notification rather than two.
+n8n_wan_key_path: "{{ service_root }}/wanwatch/n8n_wan_ed25519"
+n8n_wan_interval_minutes: 2
+
+# --- ntfy alert summary -----------------------------------------------------
+# ntfy answers history as NDJSON, which Homepage's customapi widget cannot
+# parse, so n8n aggregates it into one JSON object at /webhook/alerts-summary.
+# The window is capped by ntfy's own cache-duration (12h in services/monitoring/
+# ntfy) -- asking for longer silently under-reports rather than erroring.
+n8n_alert_topics:
+  - "homelab-alerts"    # Uptime Kuma monitor failures
+  - "homelab-updates"   # Diun image updates + maintenance runs
+  - "homelab-jobs"      # every n8n job, pass or fail
+n8n_alerts_window: "12h"
+
+# --- Telegram bridge --------------------------------------------------------
+# Phone delivery. The ntfy iOS app never received a push here despite the
+# server side being verified end to end (see docs/runbooks/notifications.md),
+# and even a plain ntfy.sh topic failed on a freshly installed app -- so the
+# last hop moved to Telegram, which has its own working push.
+#
+# ntfy stays the single bus: every service still posts there, the dashboard
+# still reads it, and the ntfy-relay sidecar forwards to /webhook/ntfy-relay.
+# Only this last hop changed, so swapping transport again later means editing
+# one workflow rather than five roles.
+#
+# Both must be set for the bridge to import; empty leaves it out entirely.
+n8n_telegram_bot_token: "{{ vault_telegram_bot_token | default('') }}"
+n8n_telegram_chat_id: "{{ vault_telegram_chat_id | default('') }}"

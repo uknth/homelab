@@ -1,0 +1,176 @@
+{
+  "id": "homelab-wan-watch",
+  "name": "Homelab — dual-WAN watch",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": {{ n8n_wan_interval_minutes }} }
+          ]
+        }
+      },
+      "id": "n-cron",
+      "name": "Every few minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-260, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "--probe",
+        "options": {}
+      },
+      "id": "n-ssh",
+      "name": "Run WAN probe",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-40, 0],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "homelab-wan-ssh",
+          "name": "homelab wanwatch (gw01)"
+        }
+      }
+    },
+    {
+      "parameters": { "jsCode": "const r = $input.first().json;\nconst raw = (r.stdout || '').trim();\nlet probe;\ntry {\n  probe = JSON.parse(raw);\n} catch (e) {\n  return [{ json: { ok: false, error: 'probe returned unparseable output', code: r.code, raw: raw.slice(0, 400) } }];\n}\n// Nothing to store: Uptime Kuma already holds the per-WAN verdict (the probe\n// pushed to it directly) and the probe wrote its own state file on gw01 for the\n// dashboard to replay. This node only decides whether the job itself succeeded.\nreturn [{ json: Object.assign({ ok: true }, probe) }];" },
+      "id": "n-record",
+      "name": "Record status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-ok",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true },
+              "leftValue": "={% raw %}{{ $json.ok }}{% endraw %}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-ok",
+      "name": "Probe ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "n8n FAILED: WAN probe" },
+            { "name": "Priority", "value": "4" },
+            { "name": "Tags", "value": "n8n,satellite" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ JSON.stringify($json).slice(0, 1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-fail",
+      "name": "Notify probe failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 120]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "wan-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "WAN status webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-260, 300],
+      "webhookId": "wan-status"
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "--last",
+        "options": {}
+      },
+      "id": "n-replay",
+      "name": "Read last probe",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-150, 300],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "homelab-wan-ssh",
+          "name": "homelab wanwatch (gw01)"
+        }
+      }
+    },
+    {
+      "parameters": { "jsCode": "const raw = ($input.first().json.stdout || '').trim();\nlet wan;\ntry {\n  wan = JSON.parse(raw);\n} catch (e) {\n  wan = { checked_at: null, up: 0, down: 0, degraded: false, links: [] };\n}\n// Age the answer: a probe that stopped running must not read as healthy on the\n// dashboard just because the last stored result was good.\nconst age = wan.checked_at ? (Date.now() - Date.parse(wan.checked_at)) / 1000 : null;\nreturn [{ json: Object.assign({}, wan, {\n  age_seconds: age === null ? null : Math.round(age),\n  stale: age === null || age > 600,\n}) }];" },
+      "id": "n-read",
+      "name": "Read status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={% raw %}{{ JSON.stringify($json) }}{% endraw %}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "https://dash.{{ base_domain }}" }
+            ]
+          }
+        }
+      },
+      "id": "n-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [180, 300]
+    }
+  ],
+  "connections": {
+    "Every few minutes": { "main": [[{ "node": "Run WAN probe", "type": "main", "index": 0 }]] },
+    "Run WAN probe": {
+      "main": [
+        [{ "node": "Record status", "type": "main", "index": 0 }],
+        [{ "node": "Notify probe failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Record status": { "main": [[{ "node": "Probe ok?", "type": "main", "index": 0 }]] },
+    "Probe ok?": {
+      "main": [
+        [],
+        [{ "node": "Notify probe failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "WAN status webhook": { "main": [[{ "node": "Read last probe", "type": "main", "index": 0 }]] },
+    "Read last probe": { "main": [[{ "node": "Read status", "type": "main", "index": 0 }]] },
+    "Read status": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "id": "homelab-alerts-summary",
+  "name": "Homelab — ntfy alert summary",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "alerts-summary",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Alerts webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-260, 0],
+      "webhookId": "alerts-summary"
+    },
+    {
+      "parameters": {
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_alert_topics | join(',') }}/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "poll", "value": "1" },
+            { "name": "since", "value": "{{ n8n_alerts_window }}" }
+          ]
+        },
+        "options": { "response": { "response": { "responseFormat": "text" } } }
+      },
+      "id": "n-fetch",
+      "name": "Fetch ntfy history",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": { "jsCode": "// ntfy answers in NDJSON (one message per line), which no JSON parser and no\n// Homepage widget can consume directly -- hence this aggregation step.\nconst raw = String($input.first().json.data || '');\nconst msgs = [];\nfor (const line of raw.split('\\n')) {\n  if (!line.trim()) continue;\n  try { msgs.push(JSON.parse(line)); } catch (e) { /* keepalive / open events */ }\n}\nconst events = msgs.filter((m) => m.event === 'message');\nconst byTopic = {};\nfor (const m of events) byTopic[m.topic] = (byTopic[m.topic] || 0) + 1;\nevents.sort((a, b) => (b.time || 0) - (a.time || 0));\nconst latest = events[0];\nconst agoMin = latest ? Math.round(Date.now() / 1000 - latest.time) / 60 : null;\nreturn [{ json: {\n  window: '{{ n8n_alerts_window }}',\n  total: events.length,\n  // ntfy priority 4/5 = high/max; Kuma sends 5 for a DOWN monitor.\n  critical: events.filter((m) => (m.priority || 3) >= 4).length,\n  by_topic: byTopic,\n  latest_title: latest ? (latest.title || latest.topic) : 'none',\n  latest_message: latest ? (latest.message || '') : '',\n  latest_topic: latest ? latest.topic : '',\n  latest_ago_min: agoMin === null ? null : Math.round(agoMin),\n} }];" },
+      "id": "n-agg",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={% raw %}{{ JSON.stringify($json) }}{% endraw %}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "https://dash.{{ base_domain }}" }
+            ]
+          }
+        }
+      },
+      "id": "n-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [400, 0]
+    }
+  ],
+  "connections": {
+    "Alerts webhook": { "main": [[{ "node": "Fetch ntfy history", "type": "main", "index": 0 }]] },
+    "Fetch ntfy history": { "main": [[{ "node": "Aggregate", "type": "main", "index": 0 }]] },
+    "Aggregate": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  }
+}

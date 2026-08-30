@@ -40,10 +40,15 @@
     state: present
     pull: missing
 
-# --- Maintenance workflows -------------------------------------------------
+# --- Workflows -------------------------------------------------------------
 # Defined as JSON in this role and imported with the n8n CLI, so they live in
 # git rather than only inside n8n's database. Re-importing the same ids is
 # idempotent — it overwrites in place.
+#
+# Two independent credential/workflow sets, each gated on its key existing so a
+# partial fleet run still imports what it can:
+#   maintenance (util01) — ops/maintenance installs the key
+#   wanwatch    (gw01)   — ops/wanwatch installs the key
 
 - name: Read the restricted maintenance SSH key
   become: true
@@ -54,8 +59,42 @@
   check_mode: false
   no_log: true
 
-- name: Import maintenance workflows into n8n
-  when: _n8n_maint_key.content is defined
+- name: Read the restricted wanwatch SSH key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ n8n_wan_key_path }}"
+  register: _n8n_wan_key
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Note whether the Telegram bridge is configured
+  ansible.builtin.set_fact:
+    _n8n_telegram_ok: "{{ (n8n_telegram_bot_token | length > 0) and (n8n_telegram_chat_id | length > 0) }}"
+
+- name: Work out which workflow sets can be imported
+  ansible.builtin.set_fact:
+    _n8n_credentials: >-
+      {{ (['credential-maint-ssh.json'] if _n8n_maint_key.content is defined else [])
+       + (['credential-wan-ssh.json'] if _n8n_wan_key.content is defined else [])
+       + (['credential-telegram.json'] if _n8n_telegram_ok else []) }}
+    # alerts-summary talks only to ntfy over HTTP, so it needs no credential and
+    # imports unconditionally.
+    _n8n_workflows: >-
+      {{ ['workflow-alerts-summary.json']
+       + (['workflow-diun-update.json', 'workflow-weekly-maintenance.json']
+          if _n8n_maint_key.content is defined else [])
+       + (['workflow-wan-watch.json'] if _n8n_wan_key.content is defined else [])
+       + (['workflow-telegram-bridge.json'] if _n8n_telegram_ok else []) }}
+    _n8n_workflow_ids: >-
+      {{ ['homelab-alerts-summary']
+       + (['homelab-diun-update', 'homelab-weekly-maintenance']
+          if _n8n_maint_key.content is defined else [])
+       + (['homelab-wan-watch'] if _n8n_wan_key.content is defined else [])
+       + (['homelab-telegram-bridge'] if _n8n_telegram_ok else []) }}
+
+- name: Import workflows into n8n
+  when: _n8n_workflows | length > 0
   block:
     - name: Create n8n import dir
       become: true
@@ -66,7 +105,7 @@
         group: "1000"
         mode: "0700"
 
-    - name: Template credential + workflows
+    - name: Template credentials + workflows
       become: true
       ansible.builtin.template:
         src: "{{ item }}.j2"
@@ -74,18 +113,19 @@
         owner: "1000"
         group: "1000"
         mode: "0600"
-      loop:
-        - credential-maint-ssh.json
-        - workflow-diun-update.json
-        - workflow-weekly-maintenance.json
+      loop: "{{ _n8n_credentials + _n8n_workflows }}"
       vars:
-        n8n_maint_private_key: "{{ _n8n_maint_key.content | b64decode }}"
+        n8n_maint_private_key: "{{ _n8n_maint_key.content | default('') | b64decode }}"
+        n8n_wan_private_key: "{{ _n8n_wan_key.content | default('') | b64decode }}"
       no_log: true
 
-    - name: Import the SSH credential
+    - name: Import the SSH credentials
       become: true
       ansible.builtin.command:
-        cmd: docker exec n8n n8n import:credentials --input=/home/node/.n8n/import/credential-maint-ssh.json
+        cmd: >-
+          docker exec n8n n8n import:credentials
+          --input=/home/node/.n8n/import/{{ item }}
+      loop: "{{ _n8n_credentials }}"
       register: _n8n_cred_import
       changed_when: "'Successfully imported' in _n8n_cred_import.stdout"
 
@@ -97,9 +137,7 @@
         cmd: >-
           docker exec n8n n8n import:workflow
           --input=/home/node/.n8n/import/{{ item }}
-      loop:
-        - workflow-diun-update.json
-        - workflow-weekly-maintenance.json
+      loop: "{{ _n8n_workflows }}"
       register: _n8n_wf_import
       changed_when: "'Successfully imported' in _n8n_wf_import.stdout"
 
@@ -107,21 +145,20 @@
       become: true
       ansible.builtin.command:
         cmd: docker exec n8n n8n publish:workflow --id={{ item }}
-      loop:
-        - homelab-diun-update
-        - homelab-weekly-maintenance
+      loop: "{{ _n8n_workflow_ids }}"
       register: _n8n_wf_publish
       changed_when: _n8n_wf_publish.rc == 0
 
-    # The credential file holds the private key in plaintext — n8n has now
-    # encrypted it into its own store, so the file must not linger.
-    - name: Remove the plaintext credential file
+    # The credential files hold private keys in plaintext — n8n has now
+    # encrypted them into its own store, so they must not linger.
+    - name: Remove the plaintext credential files
       become: true
       ansible.builtin.file:
-        path: "{{ n8n_root_dir }}/data/import/credential-maint-ssh.json"
+        path: "{{ n8n_root_dir }}/data/import/{{ item }}"
         state: absent
+      loop: "{{ _n8n_credentials }}"
 
-    - name: Restart n8n so the webhook and schedule register
+    - name: Restart n8n so the webhooks and schedules register
       become: true
       community.docker.docker_compose_v2:
         project_src: "{{ n8n_root_dir }}/compose"

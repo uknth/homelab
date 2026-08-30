@@ -1,0 +1,83 @@
+{
+  "id": "homelab-telegram-bridge",
+  "name": "Homelab — ntfy to Telegram",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ntfy-relay",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "ntfy relay",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-260, 0],
+      "webhookId": "ntfy-relay"
+    },
+    {
+      "parameters": { "jsCode": "// The relay forwards ntfy's raw JSON verbatim, so everything ntfy knows is here.\nconst m = $input.first().json.body || $input.first().json;\nconst pri = m.priority || 3;\n// Priority 5 = Kuma's DOWN alerts, 4 = high. Anything below is informational.\nconst icon = pri >= 5 ? '\\u{1F534}' : pri >= 4 ? '\\u{1F7E0}' : '\\u{1F535}';\nconst lines = [icon + ' *' + (m.title || m.topic || 'Homelab') + '*'];\nif (m.message) lines.push(m.message);\nlines.push('_' + (m.topic || '') + '_');\n// Telegram silences the notification for low-priority traffic rather than\n// dropping it -- Diun update notices should not buzz a phone at 3am.\nreturn [{ json: { text: lines.join('\\n'), silent: pri < 4 } }];" },
+      "id": "n-fmt",
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "{{ n8n_telegram_chat_id }}",
+        "text": "={% raw %}{{ $json.text }}{% endraw %}",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "disable_notification": "={% raw %}{{ $json.silent }}{% endraw %}"
+        }
+      },
+      "id": "n-tg",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [180, 0],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "telegramApi": { "id": "homelab-telegram", "name": "homelab telegram bot" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "n8n FAILED: Telegram relay" },
+            { "name": "Priority", "value": "3" },
+            { "name": "Tags", "value": "n8n,warning" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ JSON.stringify($json).slice(0, 800) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-fail",
+      "name": "Report relay failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 140]
+    }
+  ],
+  "connections": {
+    "ntfy relay": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Format": { "main": [[{ "node": "Send to Telegram", "type": "main", "index": 0 }]] },
+    "Send to Telegram": {
+      "main": [
+        [],
+        [{ "node": "Report relay failure", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}
