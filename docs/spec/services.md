@@ -41,6 +41,7 @@ implementation exists in `archive/` to reference. Per user direction, v3 roles a
 | nginx (reverse proxy) | `services/network/nginx` | — | 🟢 built | native; per-site vhosts from `nginx_sites`; Authentik forward-auth opt-in; **deploy needs the wildcard cert** |
 | certbot (wildcard TLS) | `services/network/certbot` | — | 🟢 built | Cloudflare DNS-01, single `*.puhome.net` cert; **needs `vault_cloudflare_dns_token` + `vault_certbot_email`** |
 | Tailscale subnet router | `system/tailscale` | — | 🟢 built | native; advertises `10.0.2.0/24`; **needs `vault_tailscale_authkey`** |
+| Dual-WAN watch | `ops/wanwatch` | — | 🟢 built + **live** | per-ISP probe from source IPs pinned to each WAN by Omada policy routing (Only mode); pushes to Uptime Kuma, scheduled by n8n. Omada policy-routing rules created + verified 2026-08-30 (both links report distinct public IPs) — see [dual-wan-monitoring](../runbooks/dual-wan-monitoring.md) |
 
 Pi-hole on `dns01` stays **unmanaged**, but v3 must add a **conditional-forward
 `puhome.net → 10.0.2.2`** to it (one-time, documented) so the secondary resolver answers local
@@ -72,13 +73,13 @@ helper is already PIA-shaped).
 | Authentik config (forward-auth) | `services/auth/authentik_config` | — | 🟢 built + **live** | domain-level forward-auth provider via API (idempotent); embedded outpost gates all *.puhome.net |
 | Beszel (hub) | `services/monitoring/beszel_hub` | `metrics.puhome.net` | 🟢 built + live | agents active fleet-wide |
 | Uptime Kuma | `services/monitoring/uptime_kuma` | `synthetics.puhome.net` | 🟢 built + live | — |
-| ntfy | `services/monitoring/ntfy` | `ntfy.puhome.net` | 🟢 built + live | notification sink (open pub/sub; token ACLs = later) |
+| ntfy | `services/monitoring/ntfy` | `ntfy.puhome.net` | 🟢 built + live | notification sink (open pub/sub; token ACLs = later). `upstream-base-url` set for iOS push; **iOS app never delivers** (upstream verified, app-side fault) so a `ntfy-relay` sidecar forwards to n8n → Telegram — see [notifications](../runbooks/notifications.md) |
 | Diun | `services/monitoring/diun` | — | 🟢 built + live | image-update notifier, **one per docker host** (single-endpoint provider). -> ntfy `homelab-updates` + n8n upgrade webhook. `watchByDefault: true` (fixed 2026-08-30 — it was unset, so Diun watched nothing since deployment) |
 | Dozzle | `services/monitoring/dozzle` | `logs.puhome.net` | 🟢 built + live | live container logs |
 | Homepage | `services/dashboard/homepage` | `dash.puhome.net` | 🟢 built + live | service links + widgets + Docker(util01); replaced Glance. **Nodes tab** (2026-08-30): per-node container inventory, discovered live from the Portainer API |
 | Glance | `services/dashboard/glance` | — | ⚪ retired | replaced by Homepage (role kept in repo) |
 | Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
-| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7). Owns two maintenance workflows (2026-08-30), defined as JSON in the role and imported via the n8n CLI |
+| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7). Owns three workflows (2 maintenance + dual-WAN watch), defined as JSON in the role and imported via the n8n CLI |
 | Syncthing | `services/productivity/syncthing` | `sync.puhome.net` | 🟢 built + live | standalone file sync; GUI behind forward-auth; data under `/opt/homelab/syncthing/data` (Restic-backed) |
 
 ## `ai01` — AI workloads

@@ -44,7 +44,78 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
   compact search (LLM-search placeholder for Phase 8). Widgets added: Navidrome, Paperless,
   Beszel. CSS in `roles/services/dashboard/homepage/templates/custom.css.j2`.
 
+## Dual-WAN monitoring (added 2026-08-30)
+- **Problem**: the Omada load-shares ACT + Airtel, so one dead ISP is invisible
+  from the LAN — every monitor stays green until *both* links drop.
+- **Fix**: `ops/wanwatch` on gw01 probes each ISP from an alias IP
+  (`10.0.2.19` → WAN1 ACT, `10.0.2.20` → WAN2 Airtel) that an Omada
+  policy-routing rule in **Only** mode forces out that WAN. n8n
+  (`homelab-wan-watch`, every 2 min) runs it over a forced-command SSH key;
+  Uptime Kuma push monitors own the verdict and fire the existing ntfy channel;
+  Homepage shows a per-ISP tile off `/webhook/wan-status`.
+- **Live and verified 2026-08-30.** Omada rules created; both probes report
+  distinct public IPs (RDAP confirms 49.207.x = ACT on WAN1, 122.171.x = Airtel
+  on WAN2, so the labels are the right way round). Kuma push tokens captured
+  into `kuma_wan{1,2}_push_token`; n8n schedule, Kuma pushes and the
+  `/webhook/wan-status` replay all confirmed end to end.
+- Three bugs found and fixed while bringing it up, all worth remembering:
+  **(1)** n8n's SSH node prepends `cd <dir> ;` to every command, so a strict
+  argument parser exits 64 and the job fails *quietly* — `ops/maintenance` had
+  already hit this and its sed strip is now reused verbatim.
+  **(2)** `api.ipify.org` is on Pi-hole's blocklist and resolved to `0.0.0.0`,
+  so the public-IP lookup silently returned nothing; it is now an IP literal
+  (`https://1.1.1.1/cdn-cgi/trace`) that local DNS cannot touch.
+  **(3)** n8n 2.x publishes workflows as versions and `$getWorkflowStaticData`
+  no longer survives between executions — the dashboard now replays gw01's
+  `status.json` over the same forced-command key (`--last`) instead.
+- **Alert path proven** via a synthetic `status=down` push (2026-08-30): Kuma
+  went red, ntfy delivered "WAN2 · Airtel Black Down", and the next scheduled
+  probe delivered the recovery. Still untested: a **real** single-ISP outage
+  (that the surviving link stays green while one is physically down).
+  Full procedure: [`runbooks/dual-wan-monitoring.md`](runbooks/dual-wan-monitoring.md).
+- **Fixed a pre-existing hole in `uptime_kuma_config` while testing**: monitors
+  created through the API never got the ntfy channel attached (`isDefault` only
+  applies in the UI), and push monitors could not notify at all because Kuma
+  sends ntfy a "view" action with an empty URL and ntfy 400s the message. That
+  means **`Backups` has never been able to alert** since it was created — a
+  failed nightly restic run would have gone unnoticed. The role now attaches the
+  channel at creation, gives push monitors a dashboard URL, and repairs existing
+  monitors; all monitors verified attached.
+
+## Dashboard: status band + live alerts (2026-08-31)
+- **System tab** gained a full-width **Status** band (under Admin, above Download
+  Activity) with `Internet` (per-ISP WAN) and `Alerts` (ntfy volume, 12h).
+- **Bottom status bar** on every tab (`custom.js` + `custom.css`, new to the
+  homepage role): WAN pills + alert count + newest alert, and **live toasts**
+  from ntfy's SSE stream.
+- New n8n workflow **`homelab-alerts-summary`** (`/webhook/alerts-summary`):
+  ntfy answers NDJSON, which Homepage's customapi cannot parse. Window capped at
+  ntfy's 12h `cache-duration`.
+- Browser-side fetches must be HTTPS same-scheme and CORS-allowed — they use the
+  `n8n.puhome.net` / `ntfy.puhome.net` vhosts, not direct ports. The wan-status
+  Respond node now sets `Access-Control-Allow-Origin`.
+- Homepage serves custom assets at **`/api/config/custom.js`**, not `/custom.js`.
+
+## Manual changes on unmanaged hosts (not in Ansible)
+- **dns01 (Pi-hole) — whitelisted `push.apple.com`** (2026-08-31). It was being
+  blocked by `blocklistproject/Lists/ads.txt`, so Pi-hole forged `0.0.0.0` for
+  it network-wide. Applied with `pihole -w push.apple.com`. **This lives only on
+  the Pi** — dns01 is unmanaged, so a rebuild loses it. Note: the domain has no
+  A record upstream anyway (Apple returns NODATA), so this was a correctness fix
+  rather than the cause of the iOS push problem it was found while chasing.
+  Pi-hole is v5.18.2 (v6.4.3 available).
+
 ## Open items / TODO (carry forward)
+- **Homepage re-templates on every run**: `gather_keys.yml` mints a *fresh*
+  Portainer API token each time, so `services.yaml` always differs and Homepage
+  restarts on every `site.yml` — and Portainer accumulates tokens. Pre-existing,
+  predates the dashboard work. Worth making the token lookup reuse an existing
+  one (or store it in the vault).
+- **Status band + bottom bar need visual sign-off** — verified end to end
+  server-side (endpoints, CORS, SSE, asset serving) but not seen in a browser.
+- **Dual-WAN watch: outage path unverified.** Everything is live and reporting,
+  but no ISP has actually gone down since it was built. Pull one WAN cable to
+  confirm the red/ntfy path before trusting it.
 - **Dashboard visual sign-off pending**: two-pane card widths + masonry split need the user's
   eyes (no browser preview here). If cards look narrow, force full-width on the card element.
   Navidrome now-playing only shows while something plays.

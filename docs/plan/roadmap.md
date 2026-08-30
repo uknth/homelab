@@ -43,6 +43,10 @@ Within phases 5–6, layered on after GitOps:
   Mixarr dropped. NZB prioritised over torrents (arr delay profiles).
 - **Dashboard**: Homarr trialled then reverted (not config-driven); Homepage reworked
   into 2 tabs (Home/System) with a links block + two-pane widgets block, restyled.
+- **Dual-WAN watch** (`ops/wanwatch`, gw01): per-ISP probing for the load-shared
+  Omada edge — alias IPs pinned to each WAN by Omada policy routing, run by n8n,
+  verdict held by Uptime Kuma push monitors, tile on Homepage. Needs two manual
+  Omada rules before it is live — see [`../runbooks/dual-wan-monitoring.md`](../runbooks/dual-wan-monitoring.md).
 
 Full detail + open items in [`../HANDOFF.md`](../HANDOFF.md).
 

@@ -12,6 +12,7 @@ doc and [`../../hosts/hosts.yml`](../../hosts/hosts.yml) disagree, the inventory
 |---|---|
 | Subnet | `10.0.2.0/24` |
 | Router | `10.0.2.1` — Omada, dual-WAN load share (ACT Fibernet + Airtel Black), unmanaged |
+| WAN probes | `10.0.2.19` → WAN1 (ACT), `10.0.2.20` → WAN2 (Airtel) — alias IPs on `gw01`, pinned per-WAN by Omada policy routing so each ISP can be tested independently (`ops/wanwatch`, see [dual-wan-monitoring](../runbooks/dual-wan-monitoring.md)) |
 | Controller | `10.0.2.21` — Omada controller, unmanaged |
 | Primary DNS (DHCP) | `10.0.2.2` (Blocky on `gw01`) |
 | Secondary DNS (DHCP) | `10.0.2.7` (Pi-hole on `dns01`) |
@@ -51,6 +52,10 @@ Three correctness requirements baked into the roles:
 1. **Blocky needs a fallback upstream.** Without it, a dead Pi Zero takes down all DNS.
    With Quad9 as a second `strict`-ordered upstream, a Pi-hole outage degrades to "ads
    return", not "no internet".
+2a. **Pi-hole blocklists can break platform services.** `push.apple.com` was on
+   `blocklistproject/ads.txt` and answered `0.0.0.0` network-wide until
+   whitelisted (2026-08-31). Worth checking here first whenever push, activation
+   or sync misbehaves on the LAN but works on cellular.
 2. **Pi-hole needs a conditional forward for `puhome.net → 10.0.2.2`.** Clients pick either
    advertised resolver arbitrarily; without this, local names silently fail for whoever
    lands on the secondary. (Not configured on `dns01` today — a build task.)
