@@ -65,6 +65,34 @@ beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"
 kuma_backup_push_token: "FJbMvkKkBA"
 restic_kuma_push_url: "http://{{ hostvars['util01'].ansible_host }}:3001/api/push/{{ kuma_backup_push_token }}"
 
+# --- Dual-WAN monitoring (ops/wanwatch) ------------------------------------
+# The Omada load-shares both uplinks, so a single dead ISP is invisible from the
+# LAN. Each link gets an alias IP on gw01 that an Omada policy-routing rule (in
+# "Only" mode) forces out that WAN, and the probe tests each one independently.
+#
+# probe_ip must stay OUTSIDE the DHCP pool (10.0.2.25-254) and be used for
+# nothing else — it deliberately loses internet whenever its ISP is down.
+# kuma_token comes from the uptime_kuma_config sync output the first time the
+# monitors are created; empty means the probe still runs and reports, it just
+# does not feed Kuma. See docs/runbooks/dual-wan-monitoring.md.
+#
+# Read by three roles: ops/wanwatch (gw01, the probe), uptime_kuma_config (the
+# push monitors) and services/dashboard/homepage (the widget) — which is why it
+# lives here rather than in a role's defaults.
+kuma_wan1_push_token: "dlOs3b3J4a"
+kuma_wan2_push_token: "kTGKfoavUo"
+wanwatch_links:
+  - id: wan1
+    name: "ACT Fibernet"
+    probe_ip: "10.0.2.19"
+    kuma_monitor: "WAN1 · ACT Fibernet"
+    kuma_token: "{{ kuma_wan1_push_token }}"
+  - id: wan2
+    name: "Airtel Black"
+    probe_ip: "10.0.2.20"
+    kuma_monitor: "WAN2 · Airtel Black"
+    kuma_token: "{{ kuma_wan2_push_token }}"
+
 # Shared slskd API key (used by slskd + soularr). Set vault_slskd_api_key in the
 # vault to override the placeholder; slskd is internal (arr net) + Authentik-gated.
 slskd_api_key: "{{ vault_slskd_api_key | default('homelab-soularr-slskd-key') }}"

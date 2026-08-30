@@ -6,6 +6,7 @@
 #   - nginx     : reverse proxy for all *.puhome.net services (+ Authentik forward-auth)
 #   - certbot   : *.puhome.net wildcard TLS via Cloudflare DNS-01
 #   - tailscale : subnet router advertising 10.0.2.0/24 (the ONLY Tailscale node)
+#   - wanwatch  : per-ISP probe for the Omada dual-WAN edge (driven by n8n)
 
 - name: Deploy gateway services on gw01
   hosts: gw01
@@ -25,6 +26,13 @@
 
     - role: services/network/nginx
       tags: [nginx, network]
+
+    # Per-ISP internet monitoring. The Omada load-shares both uplinks, so a
+    # single dead ISP is invisible from the LAN; this probes each one from a
+    # source address that Omada policy routing pins to that WAN. n8n runs it,
+    # Uptime Kuma holds the verdict. See docs/runbooks/dual-wan-monitoring.md.
+    - role: ops/wanwatch
+      tags: [wanwatch, network, monitoring]
 
     # Image-update notifier. Diun's docker provider watches a single endpoint,
     # so one instance runs per docker_hosts member (same shape as the beszel /

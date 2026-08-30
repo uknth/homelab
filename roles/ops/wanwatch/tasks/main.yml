@@ -1,0 +1,140 @@
+---
+# Installs the per-ISP probe on gw01, the alias IPs it binds to, and the
+# restricted SSH key n8n uses to call it.
+
+# The play's implicit fact gathering inherits the play's tags, so running this
+# role on its own (`--tags wanwatch`) arrives with no facts at all. Gather just
+# the network subset rather than depending on how the role was invoked.
+- name: Gather network facts if the play did not
+  ansible.builtin.setup:
+    gather_subset: ["!all", "network"]
+  when: ansible_default_ipv4 is not defined
+
+- name: Detect the LAN interface for the probe aliases
+  ansible.builtin.set_fact:
+    _wanwatch_iface: "{{ wanwatch_iface | default(ansible_default_ipv4.interface, true) }}"
+
+- name: Fail if the probe links are not configured
+  ansible.builtin.fail:
+    msg: >
+      wanwatch_links is empty. Define the uplinks (id, name, probe_ip,
+      kuma_token) in hosts/group_vars/all/vars.yml — see
+      docs/runbooks/dual-wan-monitoring.md.
+  when: wanwatch_links | length == 0
+
+- name: Create wanwatch dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ wanwatch_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+- name: Template the probe script
+  become: true
+  ansible.builtin.template:
+    src: wan-probe.sh.j2
+    dest: "{{ wanwatch_script }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+# --- Probe aliases ---------------------------------------------------------
+# Two addresses that exist for no reason other than to be routed out one
+# specific WAN. They must stay OUTSIDE the DHCP pool (10.0.2.25-254) and be
+# used for nothing else — each loses internet whenever its ISP is down, which
+# is the entire point.
+
+- name: Ensure /etc/network/interfaces.d exists
+  become: true
+  ansible.builtin.file:
+    path: /etc/network/interfaces.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Persist the probe aliases across reboots
+  become: true
+  ansible.builtin.template:
+    src: wanwatch-aliases.j2
+    dest: /etc/network/interfaces.d/wanwatch
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Read the addresses currently bound to the LAN interface
+  ansible.builtin.command:
+    cmd: ip -4 -oneline addr show dev {{ _wanwatch_iface }}
+  register: _wanwatch_addrs
+  changed_when: false
+  check_mode: false
+
+# Templating interfaces.d only covers the next boot; bring them up now too.
+- name: Bind the probe aliases now
+  become: true
+  ansible.builtin.command:
+    argv:
+      - ip
+      - addr
+      - add
+      - "{{ item.probe_ip }}/{{ wanwatch_prefix }}"
+      - dev
+      - "{{ _wanwatch_iface }}"
+      - label
+      - "{{ _wanwatch_iface }}:{{ idx + 1 }}"
+  loop: "{{ wanwatch_links }}"
+  loop_control:
+    label: "{{ item.probe_ip }}"
+    index_var: idx
+  when: item.probe_ip not in _wanwatch_addrs.stdout
+
+# --- SSH access for n8n ----------------------------------------------------
+# The private key lives on util01, next to the maintenance key, because that is
+# where n8n runs and where its credential is imported from. gw01 only receives
+# the public half.
+
+- name: Create the wanwatch dir on util01 (holds n8n's key)
+  delegate_to: util01
+  become: true
+  ansible.builtin.file:
+    path: "{{ wanwatch_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+- name: Generate the n8n wanwatch SSH key on util01
+  delegate_to: util01
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -N '' -C 'n8n-wanwatch' -f {{ wanwatch_key_path }}
+    creates: "{{ wanwatch_key_path }}"
+
+- name: Read the wanwatch public key
+  delegate_to: util01
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ wanwatch_key_path }}.pub"
+  register: _wanwatch_pub
+  failed_when: false
+  check_mode: false
+
+# Forced command: this key can invoke nothing but the probe script, and the
+# script whitelists the flags it accepts. Even with the private key, an
+# attacker gets no shell on the gateway.
+- name: Authorise the key for the probe script only
+  become: true
+  when: _wanwatch_pub.content is defined
+  ansible.builtin.blockinfile:
+    path: "/home/{{ user }}/.ssh/authorized_keys"
+    marker: "# {mark} ANSIBLE MANAGED — n8n wanwatch (forced command)"
+    create: true
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+    block: >-
+      command="{{ wanwatch_script }}",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
+      {{ _wanwatch_pub.content | b64decode | trim }}

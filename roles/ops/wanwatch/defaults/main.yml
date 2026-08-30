@@ -1,0 +1,63 @@
+---
+# ops/wanwatch — per-ISP internet monitoring for the Omada dual-WAN edge.
+#
+# The Omada at 10.0.2.1 runs both uplinks in load share, so a dead ISP is
+# invisible from the LAN: the router silently shifts every session onto the
+# survivor. Nothing on 10.0.2.0/24 can tell the difference, which is why every
+# other monitor in this fleet stays green until BOTH links are down.
+#
+# The fix is source-IP-pinned probing. Each WAN gets an alias IP on gw01's LAN
+# interface, and a matching Omada policy-routing rule in **Only** mode forces
+# that source address out one specific WAN — regardless of link state or the
+# gateway's own online detection. (Priority mode would fall back to the healthy
+# WAN and mask exactly the failure we are hunting.) A probe bound to that
+# address therefore tests one ISP end to end, including the "link up, no
+# transit" case that link-state monitoring misses entirely.
+#
+# Those two policy-routing rules are the one manual prerequisite — the Omada is
+# unmanaged. See docs/runbooks/dual-wan-monitoring.md.
+#
+# No systemd timer here: n8n owns the schedule, so every probe is visible and
+# notified in one place. Same split as ops/maintenance.
+
+wanwatch_dir: "{{ service_root }}/wanwatch"
+wanwatch_script: "{{ service_root }}/wanwatch/wan-probe.sh"
+wanwatch_state_file: "{{ service_root }}/wanwatch/status.json"
+
+# LAN interface carrying the probe aliases. Empty = autodetect.
+wanwatch_iface: ""
+wanwatch_prefix: 24
+
+# The uplinks, in Omada WAN-port order. Real values live in
+# hosts/group_vars/all/vars.yml (the Homepage widget on util01 reads the same
+# list, so it cannot live only in this role's defaults). Placeholder here.
+wanwatch_links: []
+
+# Reachability targets, tried in order; a link is up if ANY of them answers.
+# IP literals only — a hostname would fold a DNS failure into an ISP verdict.
+wanwatch_targets:
+  - "1.1.1.1"
+  - "8.8.8.8"
+  - "9.9.9.9"
+wanwatch_ping_count: 2
+wanwatch_timeout: 4 # seconds, per target per method
+
+# Best-effort public-IP lookup per link. Two different answers are the proof
+# that policy routing is actually splitting the traffic. Hits an external
+# service on every probe — set to "" to disable.
+#
+# MUST be an IP literal, for the same reason the reachability targets are:
+# anything resolved by name goes through Blocky -> Pi-hole, and a blocklist hit
+# returns 0.0.0.0 or this host rather than an error. (api.ipify.org is on
+# Pi-hole's gravity list and did exactly that.) Cloudflare's trace endpoint
+# answers on 1.1.1.1 itself, so no name is involved.
+wanwatch_ip_lookup: "https://1.1.1.1/cdn-cgi/trace"
+
+# Uptime Kuma push endpoint. Kuma owns up/down state, flap retries, history and
+# the ntfy alert (one default notification channel, already applied to every
+# monitor) — the probe only reports facts.
+wanwatch_kuma_base: "http://{{ hostvars['util01'].ansible_host }}:3001/api/push"
+
+# SSH key n8n uses to invoke the probe. Generated on util01 (where n8n runs);
+# gw01 only ever holds its public half, behind a forced command. Never in git.
+wanwatch_key_path: "{{ service_root }}/wanwatch/n8n_wan_ed25519"

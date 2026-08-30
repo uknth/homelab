@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Managed by Ansible — ops/wanwatch. Runs on gw01.
+#
+#   wan-probe.sh --probe     probe every WAN, ping Uptime Kuma, print JSON
+#   wan-probe.sh --no-push   probe and print JSON, skip the Kuma push
+#   wan-probe.sh --last      print the last stored result, probing nothing
+#
+# Each link is probed from an alias IP that an Omada policy-routing rule pins
+# to one WAN in "Only" mode, so the verdict reflects that ISP alone rather than
+# whatever the load balancer happened to pick.
+#
+# Invoked by n8n through a forced-command SSH key, so the requested arguments
+# arrive in SSH_ORIGINAL_COMMAND rather than as real argv. They are whitelisted
+# below — that key cannot run anything except this script, with these flags.
+#
+# Always exits 0 for a completed probe, including one where every link is down:
+# the verdict is the JSON on stdout, and a non-zero exit would make n8n treat a
+# real outage as a broken job. Non-zero means the probe itself could not run.
+set -uo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+TARGETS="{{ wanwatch_targets | join(' ') }}"
+COUNT={{ wanwatch_ping_count }}
+TMO={{ wanwatch_timeout }}
+IP_LOOKUP="{{ wanwatch_ip_lookup }}"
+KUMA="{{ wanwatch_kuma_base }}"
+STATE="{{ wanwatch_state_file }}"
+
+PUSH=1
+LAST=0
+ARGS="${SSH_ORIGINAL_COMMAND:-${*:-}}"
+# n8n's SSH node prepends a working-directory hop before the real command --
+# `cd <dir> ; <command>` (semicolon; older/other clients use `&&`). Strip
+# either form before parsing, so only the intended flags are seen. Same
+# handling as ops/maintenance, which hit this first.
+ARGS="$(printf '%s' "$ARGS" | sed -E 's/^[[:space:]]*cd[[:space:]]+[^;&]*(&&|;)[[:space:]]*//')"
+# shellcheck disable=SC2086
+for a in $ARGS; do
+  case "$a" in
+    --probe)   ;;
+    --no-push) PUSH=0 ;;
+    --last)    LAST=1 ;;
+    *) echo "unknown argument: $a" >&2; exit 64 ;;
+  esac
+done
+
+# Replay mode. The dashboard polls far more often than the probe runs, and a
+# widget refresh must never cost a round of live probing -- nor should the
+# dashboard be able to trigger Kuma pushes.
+if [ "$LAST" -eq 1 ]; then
+  if [ -r "$STATE" ]; then
+    cat "$STATE"
+  else
+    echo '{"checked_at":null,"up":0,"down":0,"degraded":false,"links":[]}'
+  fi
+  exit 0
+fi
+
+# Probe one link. Echoes "<up|down> <rtt_ms> <method>".
+probe() {
+  local src="$1" t rtt sec
+  for t in $TARGETS; do
+    # -w bounds the whole ping, not just one reply: with both links dead the
+    # probe must still finish well inside n8n's schedule interval.
+    rtt=$(ping -I "$src" -c "$COUNT" -W "$TMO" -w $(( TMO + 1 )) -q "$t" 2>/dev/null \
+          | awk -F'= ' '/rtt|round-trip/ { split($2, a, "/"); printf "%.1f", a[2] }')
+    if [ -n "$rtt" ]; then echo "up $rtt icmp"; return; fi
+  done
+  # ICMP can be filtered on a path that still carries real traffic, so confirm
+  # with a TCP+TLS handshake before calling an ISP dead. -k on purpose: this
+  # measures reachability, not certificate identity (several of the targets
+  # serve a cert for a name we are deliberately not resolving).
+  for t in $TARGETS; do
+    sec=$(curl -sS -k -o /dev/null --interface "$src" \
+          --connect-timeout "$TMO" -m $(( TMO + 2 )) \
+          -w '%{time_connect}' "https://$t/" 2>/dev/null) || continue
+    echo "up $(awk -v s="$sec" 'BEGIN { printf "%.1f", s * 1000 }') tcp"
+    return
+  done
+  echo "down 0 none"
+}
+
+# Public IP as seen from one link. Two different answers prove the policy
+# routing is really splitting traffic; identical answers mean a rule is missing
+# or is in Priority rather than Only mode.
+public_ip() {
+  [ -n "$IP_LOOKUP" ] || return 0
+  local body
+  body="$(curl -sS -k -m "$TMO" --interface "$1" "$IP_LOOKUP" 2>/dev/null)" || return 0
+  # Cloudflare's trace endpoint answers in key=value lines; a bare-body service
+  # just returns the address. Accept either.
+  case "$body" in
+    *ip=*) printf '%s' "$body" | awk -F= '/^ip=/ { print $2; exit }' | tr -dc '0-9.' ;;
+    *)     printf '%s' "$body" | tr -dc '0-9.' ;;
+  esac
+}
+
+# Kuma owns state, retries, history and the ntfy alert — we only report. Sent
+# from gw01's primary address, not a probe alias: a push about a dead ISP must
+# not travel over that ISP.
+kuma_push() { # $1 token  $2 up|down  $3 msg  $4 rtt_ms
+  [ -n "$1" ] || return 0
+  curl -fsS -m 10 -o /dev/null -G "$KUMA/$1" \
+    --data-urlencode "status=$2" \
+    --data-urlencode "msg=$3" \
+    --data-urlencode "ping=$4" \
+    || echo "warn: kuma push failed for $3" >&2
+}
+
+UP=0
+DOWN=0
+LINKS=""
+
+{% for l in wanwatch_links %}
+read -r ST RTT METHOD <<<"$(probe {{ l.probe_ip }})"
+if [ "$ST" = "up" ]; then
+  UP=$(( UP + 1 ))
+  PIP="$(public_ip {{ l.probe_ip }})"
+else
+  DOWN=$(( DOWN + 1 ))
+  PIP=""   # no point spending the lookup timeout on a link we know is dead
+fi
+[ "$PUSH" -eq 1 ] && kuma_push "{{ l.kuma_token | default('') }}" "$ST" \
+  "{{ l.name }} $ST via $METHOD${PIP:+ (}${PIP}${PIP:+)}" "$RTT"
+LINKS="${LINKS}{% if not loop.first %},{% endif %}{\"id\":\"{{ l.id }}\",\"name\":\"{{ l.name }}\",\"probe_ip\":\"{{ l.probe_ip }}\",\"status\":\"${ST}\",\"rtt_ms\":${RTT},\"method\":\"${METHOD}\",\"public_ip\":\"${PIP}\"}"
+{% endfor %}
+
+OUT="{\"checked_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"up\":${UP},\"down\":${DOWN},\"degraded\":$( [ "$DOWN" -gt 0 ] && echo true || echo false ),\"links\":[${LINKS}]}"
+echo "$OUT" | tee "$STATE" 2>/dev/null || echo "$OUT"

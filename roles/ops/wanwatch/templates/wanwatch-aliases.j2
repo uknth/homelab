@@ -1,0 +1,11 @@
+# Managed by Ansible — ops/wanwatch
+# Probe aliases. Each is pinned to one WAN by an Omada policy-routing rule in
+# "Only" mode, so traffic sourced from it tests that ISP alone. Outside the
+# DHCP pool (10.0.2.25-254); do not use these addresses for anything else.
+{% for l in wanwatch_links %}
+
+auto {{ _wanwatch_iface }}:{{ loop.index }}
+iface {{ _wanwatch_iface }}:{{ loop.index }} inet static
+    address {{ l.probe_ip }}
+    netmask {{ network_subnet_mask | default('255.255.255.0') }}
+{% endfor %}
