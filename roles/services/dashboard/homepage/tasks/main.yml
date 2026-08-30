@@ -2,6 +2,9 @@
 - name: Gather per-app widget keys
   ansible.builtin.import_tasks: gather_keys.yml
 
+- name: Discover docker nodes for the Nodes tab
+  ansible.builtin.import_tasks: gather_nodes.yml
+
 - name: Create homepage dirs
   become: true
   ansible.builtin.file:

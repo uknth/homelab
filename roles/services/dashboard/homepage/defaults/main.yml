@@ -27,3 +27,17 @@ homepage_greeting: "Welcome home, Ujjwal"
 # (token = md5(password + salt)).
 homepage_navidrome_user: "uknth"
 homepage_navidrome_salt: "homepagewidget"
+
+# --- Nodes tab -------------------------------------------------------------
+# Container inventory per Docker node. The node list comes from the Portainer
+# API (/api/endpoints) and the container list from the Docker API through it —
+# nothing here enumerates services by hand.
+#
+# Portainer names its own local socket environment "primary"; map it to the host
+# it actually runs on. Extend this if other environments get opaque names.
+homepage_node_name_map:
+  primary: util01
+# Only running containers are listed (the Docker API returns those by default).
+# Append '?all=1' to the widget URL in services.yaml.j2 to include stopped ones.
+homepage_nodes_refresh: 30000 # ms between refreshes
+homepage_nodes_limit: 60 # max rows per node, guards against a runaway list

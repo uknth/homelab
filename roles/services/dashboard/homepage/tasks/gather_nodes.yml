@@ -1,0 +1,32 @@
+---
+# Discover the Docker nodes from the live Portainer environment list, so the "Nodes"
+# tab is built from what Portainer actually manages rather than a hand-maintained
+# list in this role. Register a host as a Portainer environment and it shows up on
+# the dashboard on the next run — no template edit.
+#
+# Runs after gather_keys.yml, which mints hp_portainer_token.
+
+- name: Portainer - list docker environments
+  ansible.builtin.uri:
+    url: "http://localhost:9001/api/endpoints"
+    headers:
+      X-API-Key: "{{ hp_portainer_token }}"
+  register: _pt_envs
+  when: hp_portainer_token | default('') | length > 0
+  check_mode: false # read-only; must run under --check or the tab renders empty
+  failed_when: false
+  no_log: true
+
+# Project to a name -> endpoint-id map. The raw endpoint objects carry full Docker
+# snapshots, which are far too large to keep as a fact.
+- name: Set node inventory fact
+  ansible.builtin.set_fact:
+    hp_nodes: >-
+      {{ dict(
+           (_pt_envs.json | default([]) | map(attribute='Name') | list)
+           | zip(_pt_envs.json | default([]) | map(attribute='Id') | list)
+         ) }}
+
+- name: Report discovered nodes
+  ansible.builtin.debug:
+    msg: "Homepage Nodes tab: {{ hp_nodes.keys() | list | sort | join(', ') or 'none discovered' }}"

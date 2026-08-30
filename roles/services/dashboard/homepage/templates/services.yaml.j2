@@ -176,3 +176,32 @@
           env: {{ hp_portainer_env }}
           key: {{ hp_portainer_token }}
 {% endif %}
+
+# ===== Nodes tab =====
+# Container inventory per Docker node. Both the node list and the container list
+# come from live APIs: nodes from Portainer's /api/endpoints, containers from the
+# Docker API proxied through Portainer. Nothing below is enumerated by hand, so a
+# container that is running but undeclared in Ansible still shows up here — which
+# is the point.
+{% if hp_portainer_token and hp_nodes %}
+{% for name, id in (hp_nodes | dictsort) %}
+{% set label = homepage_node_name_map.get(name, name) %}
+- {{ label }}:
+    - Containers:
+        icon: docker.png
+        href: https://docker.{{ base_domain }}/#!/{{ id }}/docker/containers
+        description: running containers on {{ label }}
+        widget:
+          type: customapi
+          url: http://{{ hostvars['util01'].ansible_host }}:9001/api/endpoints/{{ id }}/docker/containers/json
+          method: GET
+          headers:
+            X-API-Key: {{ hp_portainer_token }}
+          display: dynamic-list
+          refreshInterval: {{ homepage_nodes_refresh }}
+          mappings:
+            name: Names.0
+            label: Status
+            limit: {{ homepage_nodes_limit }}
+{% endfor %}
+{% endif %}

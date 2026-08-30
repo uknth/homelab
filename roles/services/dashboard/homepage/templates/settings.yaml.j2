@@ -26,3 +26,9 @@ layout:
   # ---- System — widgets (two panes) ----
   Download Activity: { tab: System, style: column, columns: 1 }
   System Health: { tab: System, style: column, columns: 1 }
+{% if hp_portainer_token and hp_nodes %}
+  # ---- Nodes — one group per Docker node, discovered from the Portainer API ----
+{% for name, id in (hp_nodes | dictsort) %}
+  {{ homepage_node_name_map.get(name, name) }}: { tab: Nodes, style: column, columns: 1 }
+{% endfor %}
+{% endif %}
