@@ -1,4 +1,4 @@
-# Session Handoff — Context Dump (updated 2026-08-30)
+# Session Handoff — Context Dump (updated 2026-08-31)
 
 Single pick-up point for a fresh session. Everything below reflects `master` at
 tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
@@ -128,6 +128,69 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
 - **Jellyfin SSO admin** mapping not codified (a rebuild resets `uknth` to non-admin) — see
   [`spec/auth.md`](spec/auth.md).
 - **GitOps auto-apply** still off (dry-run). Enable when confident.
+
+## Session 2026-08-31 — Beszel: ai01 outage, fleet agent upgrade, nas02 online
+
+Started from "ai01 is down on beszel". Three outcomes: a new failure mode, a
+fleet-wide agent upgrade, and the last dark system brought up.
+
+### Incident — ai01 "down" but the agent never died
+Every surface check passed: ping, port 45876, TCP connect from the hub, SSH
+handshake, matching agent key, same agent version as ctl01, no macOS firewall, no
+sleep/wake, and the process had been up a full day with no new `fatal error`. So
+this was **not** the documented `SIGBUS` crash-loop.
+
+Root cause: the agent was alive but **emitting malformed JSON**. Fetching stats with
+the hub's own key showed two zeroed bytes — `"m":"\u0000pple M4 Pro"` (harmless, Go
+escaped it) and a raw NUL replacing the opening quote of `"container"`, which makes
+the payload unparseable. The hub discards unparseable responses **silently**, so
+`updated` froze at 12:07 UTC while the tile stayed nominally reachable. ctl01 and
+cmp01, fetched identically, were clean.
+
+Fix: `launchctl kickstart -k system/dev.beszel.agent`. Recovered on its own two poll
+cycles later — **no hub restart needed**. Two zeroed bytes at string boundaries in a
+long-lived process points at memory corruption in agent 0.9.1 on Apple Silicon; the
+same host had previously taken a `SIGBUS` in that binary. Now documented as cause (3)
+in [`runbooks/beszel-nas-agents.md`](runbooks/beszel-nas-agents.md).
+
+### Fleet agent upgrade 0.9.1 → 0.18.8 (matches the hub)
+`roles/system/beszel_agent` could not actually upgrade anything. Both OS paths gated
+the download on `creates: /opt/beszel/beszel-agent`, so bumping `beszel_agent_version`
+silently no-opped — the binary already existed. Fixed:
+
+- Gate on the **installed version** (`beszel-agent -v`) instead of `creates:`.
+- **Stage then `mv`** into place — extracting over a running binary fails `ETXTBSY`;
+  a rename swaps the directory entry and the live process keeps the old inode.
+- The download tasks now **notify their restart handler** (previously only the
+  plist/unit template did, so a version bump would never have cycled the service).
+- Download **retries** (`curl --retry` / `until: succeeded`) — ctl01's first attempt
+  died on a transient `curl: (56)`, unsurprising on the dual-WAN link.
+- `playbooks/bootstrap/linux.yml` gained the `always`-tagged `setup` pre-task that
+  `macos.yml` already had; without it `--tags beszel-agent` failed outright with
+  `'ansible_system' is undefined`. Pre-existing; affected any tag-scoped run.
+
+All five managed hosts on 0.18.8, re-runs report `changed=0`.
+
+### nas02 online — 7/7 systems up
+Deployed via **Package Center (SynoCommunity), not Docker** —
+`/volume1/@appstore/beszel-agent/bin/beszel-agent`, running as `sc-beszel-agent`.
+The runbook's `docker run` recipe was dropped in favour of it.
+
+Verified from the hub API rather than the UI, which surfaced two things a green tile
+hides:
+
+- **nas02 is fine**: root is the 2.28 GB `md0` system partition, with the 4 TB mirror
+  (`md2`, 3662.87 GB) correctly reported as an extra filesystem.
+- **nas01 is NOT monitoring its pool** — 458.56 GB at 0.03 % used (the boot device),
+  `efs` empty. The runbook had recommended `EXTRA_FILESYSTEMS`, but that env var is
+  **binary-only**; a containerised agent needs an `/extra-filesystems/<name>:ro`
+  mount. **Open item.**
+- **nas02 SMART is array-level only** — `smart_devices` lists `md0`/`md1`/`md2` as
+  `mdraid`, `state=PASSED`, but `temp`/`hours`/`cycles` are all `0` and the physical
+  `sda`/`sdb` are absent. Catches a degraded mirror, not a failing drive. The package
+  runs unprivileged. DSM's Storage Manager still does per-disk SMART. **Open item.**
+
+Result: **7/7 systems up** (gw01, cmp01, util01, ai01, ctl01, nas01, nas02).
 
 ## Session 2026-08-31 — Phase 8a: paperless-ai + local inference (cmp01)
 
@@ -322,12 +385,8 @@ Prompted by "we got no alert when ctl01 changed IP". Alerting turned out to be
 Result: **6/7 systems up** (gw01, cmp01, util01, ai01, ctl01, nas01).
 
 ### Still open
-- **nas02 Beszel agent was never deployed** — port 45876 is closed and the system
-  has read "down" since 2026-08-22. Its Status alert has never fired because Beszel
-  only alerts on an up→down transition and nas02 was never up. nas02 is unmanaged
-  (Synology) and the backup account is SFTP-chrooted, so this needs a manual
-  Container Manager / admin-SSH step — the exact `docker run` is in
-  [`runbooks/beszel-nas-agents.md`](runbooks/beszel-nas-agents.md).
+- ~~**nas02 Beszel agent was never deployed**~~ — **RESOLVED 2026-08-31**, see the
+  monitoring session below. 7/7 systems now up.
 - **`ansible` is now in the macOS `admin` group** (`system/ansible_user`,
   `ansible_user_macos_admin`) so Homebrew-driven roles can write to `/opt/homebrew`
   (owned `uknth:admin`). It already held NOPASSWD sudo, so this grants no new
