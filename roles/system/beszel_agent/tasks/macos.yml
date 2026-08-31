@@ -14,21 +14,40 @@
   ansible.builtin.set_fact:
     _beszel_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture in ['aarch64','arm64'] else ansible_architecture) }}"
 
-- name: Download and extract the agent binary (darwin)
+- name: Query the installed agent binary
+  ansible.builtin.command: "{{ beszel_agent_install_dir }}/beszel-agent -v"
+  register: _beszel_version_out
+  changed_when: false
+  failed_when: false
+
+- name: Record the installed agent version
+  ansible.builtin.set_fact:
+    _beszel_installed_version: "{{ _beszel_version_out.stdout | default('') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') | default('', true) }}"
+
+- name: Download and install the agent binary (darwin)
   # macOS ships BSD tar; Ansible's unarchive wants GNU tar, so extract manually.
   # BSD `tar xzf` handles gzip fine. curl-downloaded binaries carry no quarantine.
+  #
+  # Gated on the *installed version* rather than `creates:` — with `creates:` a
+  # bump to beszel_agent_version silently no-opped, because the binary was
+  # already there. Staged into .stage and then moved: extracting straight over
+  # the running binary fails with ETXTBSY, whereas `mv` only swaps the directory
+  # entry, so the live process keeps the old inode until the handler restarts it.
   become: true
   ansible.builtin.shell: |
     set -euo pipefail
     cd "{{ beszel_agent_install_dir }}"
-    curl -fsSL -o beszel-agent.tar.gz \
+    rm -rf .stage && mkdir -p .stage
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --max-time 120 \
+      -o .stage/beszel-agent.tar.gz \
       "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_darwin_{{ _beszel_arch }}.tar.gz"
-    tar xzf beszel-agent.tar.gz beszel-agent
-    rm -f beszel-agent.tar.gz
-    chown "{{ user }}:staff" beszel-agent
-    chmod 0755 beszel-agent
-  args:
-    creates: "{{ beszel_agent_install_dir }}/beszel-agent"
+    tar xzf .stage/beszel-agent.tar.gz -C .stage beszel-agent
+    chown "{{ user }}:staff" .stage/beszel-agent
+    chmod 0755 .stage/beszel-agent
+    mv -f .stage/beszel-agent beszel-agent
+    rm -rf .stage
+  when: _beszel_installed_version != beszel_agent_version
+  notify: Reload beszel-agent (launchd)
 
 - name: Install the launchd daemon plist
   become: true

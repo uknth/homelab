@@ -8,7 +8,7 @@
 # activate agents.
 
 beszel_agent_key: ""            # hub public key; empty = defer (see above)
-beszel_agent_version: "0.9.1"   # pin; bump deliberately
+beszel_agent_version: "0.18.8"  # pin; bump deliberately (match the hub version)
 beszel_agent_port: 45876
 beszel_agent_user: beszel
 beszel_agent_install_dir: /opt/beszel

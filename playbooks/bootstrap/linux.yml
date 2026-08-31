@@ -3,7 +3,14 @@
 - name: Bootstrap Linux hosts
   hosts: linux
   become: true
+  gather_facts: false
   tags: [bootstrap, linux]
+  pre_tasks:
+    # Gather facts under `always` so fact-dependent roles (e.g. beszel_agent's
+    # OS dispatch) work even when the play is invoked with a narrow --tags.
+    - name: Gather facts
+      ansible.builtin.setup:
+      tags: [always]
   roles:
     - role: system/hostname
       tags: [hostname, system]

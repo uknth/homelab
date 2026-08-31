@@ -21,15 +21,58 @@
   ansible.builtin.set_fact:
     _beszel_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture == 'aarch64' else ansible_architecture) }}"
 
-- name: Download and extract the agent binary
+- name: Query the installed agent binary
   become: true
-  ansible.builtin.unarchive:
-    src: "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_linux_{{ _beszel_arch }}.tar.gz"
-    dest: "{{ beszel_agent_install_dir }}"
-    remote_src: true
-    owner: "{{ beszel_agent_user }}"
-    group: "{{ beszel_agent_user }}"
-    creates: "{{ beszel_agent_install_dir }}/beszel-agent"
+  ansible.builtin.command: "{{ beszel_agent_install_dir }}/beszel-agent -v"
+  register: _beszel_version_out
+  changed_when: false
+  failed_when: false
+
+- name: Record the installed agent version
+  ansible.builtin.set_fact:
+    _beszel_installed_version: "{{ _beszel_version_out.stdout | default('') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') | default('', true) }}"
+
+- name: Install the agent binary
+  # Gated on the *installed version* rather than `creates:` — with `creates:` a
+  # bump to beszel_agent_version silently no-opped, because the binary was
+  # already there. Staged and then moved into place: extracting straight over
+  # the running binary fails with ETXTBSY, whereas `mv` only swaps the directory
+  # entry, so the live process keeps the old inode until the handler restarts it.
+  when: _beszel_installed_version != beszel_agent_version
+  become: true
+  block:
+    - name: Ensure the staging directory exists
+      ansible.builtin.file:
+        path: "{{ beszel_agent_install_dir }}/.stage"
+        state: directory
+        owner: "{{ beszel_agent_user }}"
+        group: "{{ beszel_agent_user }}"
+        mode: "0755"
+
+    - name: Download and extract the agent binary into the staging directory
+      ansible.builtin.unarchive:
+        src: "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_linux_{{ _beszel_arch }}.tar.gz"
+        dest: "{{ beszel_agent_install_dir }}/.stage"
+        remote_src: true
+        owner: "{{ beszel_agent_user }}"
+        group: "{{ beszel_agent_user }}"
+        mode: "0755"
+      register: _beszel_download
+      retries: 3
+      delay: 2
+      until: _beszel_download is succeeded
+
+    - name: Move the new binary into place
+      ansible.builtin.command:
+        cmd: mv -f {{ beszel_agent_install_dir }}/.stage/beszel-agent {{ beszel_agent_install_dir }}/beszel-agent
+      changed_when: true
+      notify: Restart beszel-agent
+
+  always:
+    - name: Remove the staging directory
+      ansible.builtin.file:
+        path: "{{ beszel_agent_install_dir }}/.stage"
+        state: absent
 
 - name: Install the systemd unit
   become: true
