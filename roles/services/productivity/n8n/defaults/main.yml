@@ -28,6 +28,14 @@ n8n_maint_key_path: "{{ service_root }}/maintenance/n8n_maint_ed25519"
 n8n_wan_key_path: "{{ service_root }}/wanwatch/n8n_wan_ed25519"
 n8n_wan_interval_minutes: 2
 
+# --- vault ingest (cmp01) ---------------------------------------------------
+# Obsidian Sync -> mirror -> (index) -> Quartz wiki. Hourly rather than
+# continuous: the wiki is a periodic publish, and every stage is incremental, so
+# a quiet hour costs one SSH round-trip and no GPU work. See
+# docs/spec/knowledge.md.
+n8n_vault_key_path: "{{ service_root }}/vaultsync/n8n_vault_ed25519"
+n8n_vault_interval_hours: 1
+
 # --- ntfy alert summary -----------------------------------------------------
 # ntfy answers history as NDJSON, which Homepage's customapi widget cannot
 # parse, so n8n aggregates it into one JSON object at /webhook/alerts-summary.

@@ -8,6 +8,10 @@
 #   - jellyfin     : media server (NVENC) + jellyseerr
 #   - kavita       : books/comics reader
 #   - paperless    : document management (pending existing-data decision)
+#   - vaultsync    : Obsidian vault mirror (headless Obsidian Sync client)
+#   - vaultmerge   : merge the 3 vaults into one topic-organised tree
+#   - vaultindex   : embeddings + LLM summaries -> enrichment sidecar
+#   - quartz       : the wiki, built from the merged tree (wiki.puhome.net)
 #
 # Out of scope for v3 (user directive): Immich (photos), Vaultwarden (passwords).
 
@@ -49,6 +53,22 @@
 
     - role: services/media/lms
       tags: [lms, music, wiim]
+
+    # Knowledge base (phase 9a/9b). Order is the pipeline order and matters:
+    # vaultsync owns the mirror, vaultmerge dissolves the three vaults into one
+    # topic tree, quartz renders that single tree. Each mounts the previous
+    # stage's output read-only.
+    - role: services/knowledge/vaultsync
+      tags: [vaultsync, knowledge, obsidian]
+
+    - role: services/knowledge/vaultmerge
+      tags: [vaultmerge, knowledge, wiki]
+
+    - role: services/knowledge/vaultindex
+      tags: [vaultindex, knowledge, ai]
+
+    - role: services/knowledge/quartz
+      tags: [quartz, knowledge, wiki]
 
     # Image-update notifier. Diun's docker provider watches a single endpoint,
     # so one instance runs per docker_hosts member (same shape as the beszel /

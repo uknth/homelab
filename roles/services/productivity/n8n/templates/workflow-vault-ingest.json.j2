@@ -1,0 +1,176 @@
+{
+  "id": "homelab-vault-ingest",
+  "name": "Homelab — vault ingest (Obsidian → wiki)",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "hours", "hoursInterval": {{ n8n_vault_interval_hours }} }
+          ]
+        }
+      },
+      "id": "n-cron",
+      "name": "Hourly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-260, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "--all",
+        "options": {}
+      },
+      "id": "n-ssh",
+      "name": "Sync + rebuild",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-40, 0],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "homelab-vault-ssh",
+          "name": "homelab vaultsync (cmp01)"
+        }
+      }
+    },
+    {
+      "parameters": { "jsCode": "const r = $input.first().json;\nconst raw = (r.stdout || '').trim();\n// The script emits its result as a single compact JSON line behind a RESULT\n// marker. Scanning for the first '{' instead would break as soon as `ob sync`\n// or the Quartz build printed a brace of its own.\nconst line = raw.split('\\n').reverse().find((l) => l.startsWith('RESULT '));\nlet st;\ntry {\n  st = JSON.parse(line.slice(7));\n} catch (e) {\n  return [{ json: { ok: false, error: 'ingest returned no parseable RESULT line', code: r.code, raw: raw.slice(-400) } }];\n}\nreturn [{ json: st }];" },
+      "id": "n-parse",
+      "name": "Parse result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-ok",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true },
+              "leftValue": "={% raw %}{{ $json.ok }}{% endraw %}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-ok",
+      "name": "Ingest ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "n8n FAILED: vault ingest" },
+            { "name": "Priority", "value": "4" },
+            { "name": "Tags", "value": "n8n,books" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ JSON.stringify($json).slice(0, 1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-fail",
+      "name": "Notify ingest failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 120]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "vault-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Vault status webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-260, 300],
+      "webhookId": "vault-status"
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "--status",
+        "options": {}
+      },
+      "id": "n-replay",
+      "name": "Read last ingest",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-40, 300],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "homelab-vault-ssh",
+          "name": "homelab vaultsync (cmp01)"
+        }
+      }
+    },
+    {
+      "parameters": { "jsCode": "const raw = ($input.first().json.stdout || '').trim();\nlet st;\ntry {\n  // --status cats the state file verbatim: compact JSON, no marker.\n  st = JSON.parse(raw);\n} catch (e) {\n  st = { checked_at: null, ok: false, vaults: [] };\n}\n// Age the answer: an ingest that stopped running must not read as healthy on\n// the dashboard just because the last stored result was good.\nconst age = st.checked_at ? (Date.now() - Date.parse(st.checked_at)) / 1000 : null;\nconst notes = (st.vaults || []).reduce((a, v) => a + (v.notes || 0), 0);\nreturn [{ json: Object.assign({}, st, {\n  notes_total: notes,\n  age_seconds: age === null ? null : Math.round(age),\n  stale: age === null || age > 3 * 3600,\n}) }];" },
+      "id": "n-read",
+      "name": "Read status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={% raw %}{{ JSON.stringify($json) }}{% endraw %}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "https://dash.{{ base_domain }}" }
+            ]
+          }
+        }
+      },
+      "id": "n-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [400, 300]
+    }
+  ],
+  "connections": {
+    "Hourly": { "main": [[{ "node": "Sync + rebuild", "type": "main", "index": 0 }]] },
+    "Sync + rebuild": {
+      "main": [
+        [{ "node": "Parse result", "type": "main", "index": 0 }],
+        [{ "node": "Notify ingest failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse result": { "main": [[{ "node": "Ingest ok?", "type": "main", "index": 0 }]] },
+    "Ingest ok?": {
+      "main": [
+        [],
+        [{ "node": "Notify ingest failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Vault status webhook": { "main": [[{ "node": "Read last ingest", "type": "main", "index": 0 }]] },
+    "Read last ingest": { "main": [[{ "node": "Read status", "type": "main", "index": 0 }]] },
+    "Read status": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  }
+}
