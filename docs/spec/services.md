@@ -100,6 +100,26 @@ helper is already PIA-shaped).
 | Qwen model pull | part of `services/ai/ollama` | 🔵 net-new | latest Qwen |
 | ~~paperless-ai~~ | — | ⚫ **moved to cmp01** | Deployed 2026-08-31 inside the Paperless compose project with its own llama.cpp, not here — see the cmp01 table above |
 
+## Knowledge base — Obsidian vaults (cmp01 + ai01)
+
+> Three Obsidian vaults (`Pikachu` work, `Snorlax` knowledge base, `Psyduck` personal/homelab)
+> pulled read-only onto cmp01 via the official headless Obsidian Sync client and **merged
+> into one topic-organised wiki** (vaults dissolved), indexed for hybrid search, and enriched
+> by a **local-only** LLM. One site, one Authentik gate, closed network.
+> Obsidian Sync stays the single writer;
+> everything here is derived and rebuildable. Full design: [`knowledge.md`](knowledge.md).
+
+| Service | Target role | Domain | Status | Notes |
+|---|---|---|---|---|
+| Vault mirror | `services/knowledge/vaultsync` | — | 🟢 built | **`obsidian-headless`** (official Obsidian Sync CLI) on cmp01, `--mode mirror-remote` (downloads only, reverts local writes). Version-pinned npm install. Scheduled **hourly** by n8n (`homelab-vault-ingest`), not `--continuous`. `Secrets`/`Finances` **included** by user direction — LAN-only + SSO |
+| Index + search + Q&A | `services/knowledge/vaultindex` | `ask.puhome.net` | 🔵 planned | `sqlite-vec` + FTS5 hybrid (RRF); chunks locate, **whole notes** answer. Embeddings from a CUDA llama-server on an `internal: true` network. Runs retrieval-only until ai01 exists |
+| Merge (topic tree) | `services/knowledge/vaultmerge` | — | 🔵 planned (9b) | Dissolves the three vaults into one topic-organised tree; resolves 35 filename collisions, rewrites wikilinks source-vault-first |
+| Wiki (Quartz) | `services/knowledge/quartz` | `wiki.puhome.net` | 🟢 built | Quartz **v5.0.0** (pinned git checkout). Static HTML — Obsidian-native wikilinks/backlinks/graph, per-vault configs generated from upstream defaults. **Read-only**: Docmost/DokuWiki rejected as they become a second writer |
+| Answer/agent endpoint | `services/ai/llama_server` (ai01) | — | 🔵 planned | One shared resident model on ai01 (24 GB unified memory fits exactly one). Serves vault Q&A now, the Phase 8b agent later |
+
+**Not backed up by design** — the mirror's source of truth is the Mac; the index and wiki
+build are derived. See [`knowledge.md`](knowledge.md#backups).
+
 ## `ctl01` — Dev toolchain
 
 | Package | Target role | Status | v2 reference |

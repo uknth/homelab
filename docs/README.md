@@ -36,6 +36,8 @@ drift ahead of the design.
   services sit behind, the three integration tiers, and the nginx forward-auth flow.
 - [`spec/maintenance.md`](spec/maintenance.md) — patching, container updates (Diun + Ansible),
   backups (Restic → nas02 over SFTP), the ntfy notification sink.
+- [`spec/knowledge.md`](spec/knowledge.md) — the Obsidian vaults: read-only mirror, hybrid
+  search index, static wiki, and the local-only answering path.
 - [`spec/conventions.md`](spec/conventions.md) — role directory layout, variable naming,
   tagging scheme, secrets handling for v3.
 

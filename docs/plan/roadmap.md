@@ -35,6 +35,7 @@ Build-out phases for v3, in dependency order. Status reflects what's actually wi
 | 6 | **Maintenance**: `ops/restic` → nas02 (SFTP) — scoped to **Paperless + Syncthing**; `--tags patch` play; Uptime Kuma verification | 🟢 done 2026-08-22 — backups **live**: repos init'd, nightly timers armed, first snapshots verified (Paperless 1.45 GiB, Syncthing). Repo path is `/restic/<host>` (Synology SFTP chroot). `uptime_kuma_config` role added: HTTP monitor per service (all green) + **Backups** push monitor restic pings. Also this pass: **Syncthing** (util01), **Filebrowser** (cmp01, media mgmt), **Portainer/Dozzle agents** (fleet-wide), **Beszel** agents on macOS+nas01. |
 | 7 | **GitOps**: builds.sr.ht CI + on-LAN executor (see [gitops](gitops.md)) | 🟢 done 2026-08-23 — CI live (builds.sr.ht runs on push). Executor on util01: full-fleet `--check` dry-run **verified clean (0 failures across all 7 hosts)**; poll timer **enabled in dry-run mode** (`gitops_auto_apply` off — flip to enable auto-apply). Hardened ~6 roles to be check-mode-safe (read-only API/`networksetup` lookups run under `--check`). Executor secrets on util01: vault-pass + `ansible_rsa.private` + `restic_backup_ed25519`. |
 | 8 | **8a** `cmp01`: paperless-ai + llama.cpp (Gemma 3 4B) · **8b** `ai01`: agent LLM · **8c** `ctl01`: dev toolchain + agent | 🟡 in progress — **8a done 2026-08-31**; 8b/8c pending an agent decision (Hermes vs OpenClaw), see [`../HANDOFF.md`](../HANDOFF.md) |
+| 9 | **Knowledge base** — one merged home wiki over all three Obsidian vaults. **9a** mirror via `obsidian-headless` (mirror-remote) + per-vault Quartz render · **9b** merge into a single topic-organised tree (vaults dissolved, collisions resolved, links rewritten) · **9c** hybrid index (sqlite-vec + FTS5) powering search *and* cross-vault related links · **9d** local-LLM enrichment (summaries, links, tags) | 🟡 in progress — **9a done + live** (`wiki.puhome.net`, hourly `homelab-vault-ingest`). 9a rendered three separate sites; **9b supersedes that with one merged wiki** — see [`../spec/knowledge.md`](../spec/knowledge.md). **9c** (index → search + cross-vault related links) and **9d** (LLM summaries on cmp01's A4000) both have **no ai01 dependency** — corrected 2026-09-01, enrichment was wrongly placed on ai01 |
 
 ## Post-Phase-7 enhancements (2026-08-29, tag v3.0.0)
 
@@ -72,6 +73,10 @@ Full detail + open items in [`../HANDOFF.md`](../HANDOFF.md).
    especially backups only matter once real services and data exist.
 8. **GitOps (7)** — automate deploys once the manual `ansible-playbook` path is proven.
 9. **AI + dev (8)** — personal-use machines; nothing else depends on them.
+10. **Knowledge base (9) last** — it is the first thing that *consumes* the AI host rather
+    than just standing it up, so it wants 8b settled. Only the enrichment stage (9d) needs a
+    model: the mirror, the merge, and the whole retrieval layer are deliberately built to
+    work without one, so 9a–9c need not wait.
 
 ## Bringing a phase online
 
