@@ -35,6 +35,7 @@ nginx_sites:
   # Secrets/ and Finances/ by the user's 2026-09-01 decision, so forward-auth is
   # the only thing standing in front of it — it is never exposed off-LAN.
   - { name: wiki,       upstream: "http://10.0.2.5:8101", sso: true }    # Quartz (Obsidian vaults)
+  - { name: ask,        upstream: "http://10.0.2.5:8100", sso: true }    # wiki search (hybrid BM25 + vector)
   - { name: files,      upstream: "http://10.0.2.5:8085", sso: true }    # Filebrowser (media mgmt)
   - { name: soulseek,   upstream: "http://10.0.2.5:5030", sso: true }    # slskd (Soulseek)
   - { name: music,      upstream: "http://10.0.2.5:4533", sso: false }   # Navidrome (native auth for Subsonic clients)

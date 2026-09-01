@@ -112,7 +112,8 @@ helper is already PIA-shaped).
 | Service | Target role | Domain | Status | Notes |
 |---|---|---|---|---|
 | Vault mirror | `services/knowledge/vaultsync` | — | 🟢 built | **`obsidian-headless`** (official Obsidian Sync CLI) on cmp01, `--mode mirror-remote` (downloads only, reverts local writes). Version-pinned npm install. Scheduled **hourly** by n8n (`homelab-vault-ingest`), not `--continuous`. `Secrets`/`Finances` **included** by user direction — LAN-only + SSO |
-| Index + search + Q&A | `services/knowledge/vaultindex` | `ask.puhome.net` | 🔵 planned | `sqlite-vec` + FTS5 hybrid (RRF); chunks locate, **whole notes** answer. Embeddings from a CUDA llama-server on an `internal: true` network. Runs retrieval-only until ai01 exists |
+| Enrichment (embeddings + summaries) | `services/knowledge/vaultindex` | — | 🟢 built | bge-small + Gemma 3 12B on the A4000; summary model started **on demand** and stopped after each run |
+| Search | `services/knowledge/vaultask` | `ask.puhome.net` | 🟢 built | FTS5/BM25 + cosine over note embeddings, fused with RRF. `node:sqlite` — no native modules, no `sqlite-vec`. Search only, no generation. Feeds the `dash.puhome.net` header search |
 | Merge (topic tree) | `services/knowledge/vaultmerge` | — | 🔵 planned (9b) | Dissolves the three vaults into one topic-organised tree; resolves 35 filename collisions, rewrites wikilinks source-vault-first |
 | Wiki (Quartz) | `services/knowledge/quartz` | `wiki.puhome.net` | 🟢 built | Quartz **v5.0.0** (pinned git checkout). Static HTML — Obsidian-native wikilinks/backlinks/graph, per-vault configs generated from upstream defaults. **Read-only**: Docmost/DokuWiki rejected as they become a second writer |
 | Answer/agent endpoint | `services/ai/llama_server` (ai01) | — | 🔵 planned | One shared resident model on ai01 (24 GB unified memory fits exactly one). Serves vault Q&A now, the Phase 8b agent later |

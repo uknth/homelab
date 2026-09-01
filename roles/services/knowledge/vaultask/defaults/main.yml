@@ -1,0 +1,35 @@
+---
+# services/knowledge/vaultask — search over the merged wiki, at ask.puhome.net.
+#
+# Hybrid retrieval, no LLM (user decision 2026-09-02: search first, decide on
+# generation after using it):
+#   FTS5/BM25   catches proper nouns, code identifiers and rare terms, which is
+#               most of what technical notes are made of and exactly where
+#               pure vector search is weakest.
+#   embeddings  catch meaning, so a query need not use the note's wording.
+#   RRF         fuses the two rankings without needing their scores to be
+#               comparable, which they are not.
+#
+# No sqlite-vec and no native modules: Node 22 ships `node:sqlite` with FTS5
+# built in, and ~440 vectors is a brute-force cosine in microseconds.
+
+vaultask_root_dir: "{{ service_root }}/vaultask"
+vaultask_image: "node:22-slim"
+vaultask_port: 8100
+
+vaultask_uid: "{{ media_uid }}"
+vaultask_gid: "{{ media_gid }}"
+
+# Inputs, both read-only: the merged tree for text, the enrichment output for
+# vectors and summaries.
+vaultask_merged_dir: "{{ vaultmerge_out_dir | default(service_root + '/vaultmerge/merged') }}"
+vaultask_index_dir: "{{ vaultindex_root_dir | default(service_root + '/vaultindex') }}/data"
+
+# Query embedding comes from the always-on embedding server (~36 MiB). The
+# summary model is never touched — nothing here generates text.
+vaultask_embed_host: "vaultindex-embed"
+vaultask_embed_port: "{{ vaultindex_embed_port | default(8082) }}"
+
+vaultask_results: 20            # results returned per query
+vaultask_rrf_k: 60              # standard RRF damping constant
+vaultask_wiki_base: "https://wiki.{{ base_domain }}"

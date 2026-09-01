@@ -11,6 +11,9 @@ Obsidian Sync (authored on the Macs — the only writer)
   → vaultindex: embeddings + LLM summaries  [/opt/homelab/vaultindex/data]
   → Quartz build → nginx                    [wiki.puhome.net]
      driven hourly by n8n `homelab-vault-ingest`
+
+  vaultask (always up, reads the two outputs)  [ask.puhome.net]
+     FTS5/BM25 + cosine, fused with RRF — search, not answers
 ```
 
 The wiki is **one merged site**, not three vault sites. Topics — Homelab, Work,
@@ -245,9 +248,36 @@ devices (the Macs) are fine — that is the whole design.
 | Raw JavaScript on a wiki page | A Dataview fence the stripper missed. It matches ```` ```dataview ```` and ```` ```dataviewjs ````; anything else needs a pattern in `prepare-content.mjs`. |
 | Wiki 404s on a page that exists | Quartz emits `<page>.html`; nginx needs `try_files $uri $uri/ $uri.html`. Check `/opt/homelab/quartz/nginx.conf`. |
 
+## Search — `ask.puhome.net`
+
+Hybrid retrieval over the merged tree. **No LLM**: it returns notes, not
+answers (user decision 2026-09-02 — ship search, judge generation after using
+it). The summary model is never started by a search.
+
+- **FTS5/BM25** catches proper nouns, code identifiers and rare terms — most of
+  what technical notes are made of, and exactly where vector search is weakest.
+- **Embeddings** catch meaning, so a query need not use the note's wording. The
+  query is embedded by the always-on `vaultindex-embed` (~36 MiB).
+- **RRF** fuses the two rankings without needing their scores to be comparable,
+  which they are not (BM25 is negative-lower-better, cosine is 0..1).
+
+No `sqlite-vec` and no native modules: Node 22 ships `node:sqlite` with FTS5
+built in, and ~440 vectors is a brute-force cosine in microseconds. The service
+owns no state — it mounts the merge and enrichment outputs read-only and
+rebuilds its in-memory index when they change, so it needs no restart after an
+ingest.
+
+If the embedding server is unreachable, search degrades to keyword-only and
+says so in the UI rather than returning nothing.
+
+**On the dashboard:** the header search box on `dash.puhome.net` (the Phase-8
+placeholder) now queries the wiki instead of DuckDuckGo — `provider: custom`
+pointing at `https://ask.puhome.net/?q=`.
+
 ## Not yet built
 
-Phase **9b** (`vaultindex`: sqlite-vec + FTS5 hybrid search) and **9c** (local
-Q&A on ai01). `vault-ingest.sh` already calls `/opt/homelab/vaultindex/reindex.sh`
-when it exists, so 9b needs no change here. 9c waits on the ai01 model, which
-must be the same resident model as the phase 8b agent — 24 GB will not hold two.
+**Q&A over the search results.** The retrieval layer is in place and the
+summary model already exists on cmp01, so this is wiring rather than new
+infrastructure. The open question is the model lifecycle: the 12B takes ~40s to
+load on demand, which is poor for interactive use, so it wants either an
+idle-timeout keep-alive or the always-on 4B.

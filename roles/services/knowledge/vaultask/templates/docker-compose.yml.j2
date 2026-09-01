@@ -1,0 +1,28 @@
+# Managed by Ansible — services/knowledge/vaultask
+services:
+  vaultask:
+    image: {{ vaultask_image }}
+    container_name: vaultask
+    hostname: vaultask
+    restart: unless-stopped
+    init: true
+    user: "{{ vaultask_uid }}:{{ vaultask_gid }}"
+    # Joins vaultindex's internal network to reach the embedding server. That
+    # network has no route off the host, so the query embedder stays contained.
+    networks: [default, ai]
+    environment:
+      - TZ={{ timezone }}
+      - NODE_NO_WARNINGS=1
+    volumes:
+      - {{ vaultask_root_dir }}/app:/app:ro
+      # Both read-only: this service is a reader of other stages' output.
+      - {{ vaultask_merged_dir }}:/merged:ro
+      - {{ vaultask_index_dir }}:/data:ro
+    command: ["node", "/app/server.mjs"]
+    ports:
+      - "{{ vaultask_port }}:{{ vaultask_port }}"   # gw01 nginx -> forward-auth
+
+networks:
+  ai:
+    external: true
+    name: vaultindex_ai

@@ -1,0 +1,8 @@
+---
+- name: Restart vaultask
+  become: true
+  when: not ansible_check_mode or _vaultask_deployed.stat.exists | default(false)
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultask_root_dir }}/compose"
+    project_name: "vaultask"
+    state: restarted

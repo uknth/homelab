@@ -1,0 +1,94 @@
+<!doctype html>
+<!-- Managed by Ansible — services/knowledge/vaultask -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask — Homelab Wiki</title>
+<style>
+  :root { --bg:#faf8f8; --fg:#2b2b2b; --muted:#4e4e4e; --faint:#8a8a8a;
+          --line:#e5e5e5; --accent:#284b63; --card:#fff; --mark:#fff236; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161618; --fg:#ebebec; --muted:#d4d4d4; --faint:#8f8f8f;
+            --line:#393639; --accent:#7b97aa; --card:#1e1e21; --mark:#b3aa02; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:2.5rem 1.25rem 4rem; background:var(--bg); color:var(--fg);
+         font-family:"Source Sans Pro",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  main { max-width:52rem; margin:0 auto; }
+  h1 { font-size:1.35rem; margin:0 0 1.25rem; font-weight:600; }
+  h1 a { color:inherit; text-decoration:none; }
+  form { display:flex; gap:.5rem; margin-bottom:.75rem; }
+  input { flex:1; padding:.8rem 1rem; font-size:1rem; border-radius:8px;
+          border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button { padding:.8rem 1.3rem; font-size:1rem; font-weight:600; border:0; border-radius:8px;
+           background:var(--accent); color:#fff; cursor:pointer; }
+  .status { color:var(--faint); font-size:.85rem; min-height:1.4em; margin-bottom:1.25rem; }
+  .warn { color:#b45309; }
+  ul { list-style:none; padding:0; margin:0; }
+  li { background:var(--card); border:1px solid var(--line); border-radius:10px;
+       padding:.9rem 1rem; margin-bottom:.7rem; }
+  .t { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap; }
+  .t a { color:var(--accent); font-weight:600; text-decoration:none; font-size:1.02rem; }
+  .t a:hover { text-decoration:underline; }
+  .topic { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em;
+           color:var(--faint); border:1px solid var(--line); border-radius:99px; padding:.1rem .55rem; }
+  .why { font-size:.68rem; color:var(--faint); }
+  .snip { color:var(--muted); font-size:.9rem; line-height:1.55; margin-top:.4rem; }
+  mark { background:var(--mark); color:inherit; padding:0 .1em; border-radius:2px; }
+  .tags { margin-top:.4rem; font-size:.72rem; color:var(--faint); }
+  footer { margin-top:2rem; font-size:.78rem; color:var(--faint); }
+  footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1><a href="/">Ask</a> <span style="color:var(--faint);font-weight:400">· homelab wiki</span></h1>
+  <form id="f">
+    <input id="q" name="q" placeholder="Search across work, knowledge base and personal notes…"
+           autocomplete="off" autofocus>
+    <button type="submit">Search</button>
+  </form>
+  <div class="status" id="s"></div>
+  <ul id="r"></ul>
+  <footer>
+    Keyword + meaning, fused. Results link into <a href="{{ vaultask_wiki_base }}">the wiki</a>.
+  </footer>
+</main>
+<script>
+const f=document.getElementById('f'), q=document.getElementById('q'),
+      s=document.getElementById('s'), r=document.getElementById('r');
+const esc=t=>(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+async function run(term){
+  if(!term) return;
+  s.textContent='Searching…'; r.innerHTML='';
+  history.replaceState(null,'', '?q='+encodeURIComponent(term));
+  try{
+    const res=await fetch('/api/search?q='+encodeURIComponent(term));
+    const d=await res.json();
+    if(d.error){ s.textContent='Error: '+d.error; return; }
+    s.innerHTML = d.results.length
+      ? esc(d.results.length+' of '+d.total+' notes')
+        + (d.degraded ? ' <span class="warn">· semantic search unavailable, keyword only</span>' : '')
+      : 'No matches.';
+    r.innerHTML = d.results.map(x=>`
+      <li>
+        <div class="t">
+          <a href="${esc(x.url)}">${esc(x.title)}</a>
+          <span class="topic">${esc(x.topic)}</span>
+          <span class="why">${esc(x.matched.join(' + '))}</span>
+        </div>
+        ${x.snippet?`<div class="snip">${x.snippet}</div>`:''}
+        ${x.tags&&x.tags.length?`<div class="tags">${x.tags.map(esc).join(' · ')}</div>`:''}
+      </li>`).join('');
+  }catch(e){ s.textContent='Error: '+e.message; }
+}
+f.addEventListener('submit',e=>{e.preventDefault();run(q.value.trim());});
+// Support ?q= so the dashboard search box can link straight here.
+const initial=new URLSearchParams(location.search).get('q');
+if(initial){ q.value=initial; run(initial); }
+</script>
+</body>
+</html>

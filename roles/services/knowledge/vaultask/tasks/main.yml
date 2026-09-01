@@ -1,0 +1,63 @@
+---
+# Search UI over the merged wiki. A pure reader: it mounts the merge output and
+# the enrichment output read-only and owns no state of its own, so it can be
+# rebuilt or moved without consequence.
+
+- name: Create vaultask dirs owned by the service user
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ vaultask_root_dir }}"
+    - "{{ vaultask_root_dir }}/compose"
+
+- name: Create the app dir owned by the container uid
+  become: true
+  ansible.builtin.file:
+    path: "{{ vaultask_root_dir }}/app"
+    state: directory
+    owner: "{{ vaultask_uid }}"
+    group: "{{ vaultask_gid }}"
+    mode: "0755"
+
+- name: Template the search service
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ vaultask_root_dir }}/app/{{ item.dest }}"
+    owner: "{{ vaultask_uid }}"
+    group: "{{ vaultask_gid }}"
+    mode: "0644"
+  loop:
+    - { src: server.mjs.j2, dest: server.mjs }
+    - { src: index.html.j2, dest: index.html }
+  notify: Restart vaultask
+
+- name: Template vaultask compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ vaultask_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart vaultask
+
+- name: Check whether vaultask has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ vaultask_root_dir }}/compose/docker-compose.yml"
+  register: _vaultask_deployed
+
+- name: Deploy vaultask
+  become: true
+  when: not ansible_check_mode or _vaultask_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultask_root_dir }}/compose"
+    project_name: "vaultask"
+    state: present
+    pull: missing

@@ -1,0 +1,235 @@
+// Managed by Ansible — services/knowledge/vaultask
+//
+// Search over the merged wiki. Hybrid: SQLite FTS5 (BM25) for lexical matches,
+// cosine over note embeddings for semantic ones, fused with Reciprocal Rank
+// Fusion. No LLM — this returns notes, not answers.
+import fs from "fs"
+import path from "path"
+import http from "http"
+import { DatabaseSync } from "node:sqlite"
+
+const MERGED = "/merged"
+const DATA = "/data"
+const PORT = {{ vaultask_port }}
+const N_RESULTS = {{ vaultask_results }}
+const RRF_K = {{ vaultask_rrf_k }}
+const WIKI = {{ vaultask_wiki_base | to_json }}
+const EMBED = "http://{{ vaultask_embed_host }}:{{ vaultask_embed_port }}"
+
+// ---------------------------------------------------------------- index ----
+let db = null
+let vectors = {}
+let meta = new Map()
+let builtAt = 0
+
+const stripFm = (t) => {
+  if (!t.startsWith("---")) return { fm: "", body: t }
+  const e = t.indexOf("\n---", 3)
+  return e < 0 ? { fm: "", body: t } : { fm: t.slice(4, e), body: t.slice(e + 4) }
+}
+
+// Same shape of cleanup the enricher does: link syntax and fences carry no
+// meaning for retrieval and would otherwise pollute both BM25 and snippets.
+const plain = (t) =>
+  t
+    .replace(/^[ \t]*(`{3,}|~{3,})[\s\S]*?^[ \t]*\1[ \t]*$/gm, " ")
+    .replace(/!\[\[[^\]]*\]\]/g, " ")
+    .replace(/\[\[([^\]|]*)\|?([^\]]*)\]\]/g, (m, a, b) => b || a)
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[#*_>|`]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+function walk(dir, base = dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue
+    const fp = path.join(dir, e.name)
+    if (e.isDirectory()) walk(fp, base, out)
+    else if (e.isFile() && e.name.endsWith(".md")) out.push(path.relative(base, fp))
+  }
+  return out
+}
+
+function buildIndex() {
+  const t0 = Date.now()
+  db = new DatabaseSync(":memory:")
+  // `unindexed` on rel/title/topic keeps them retrievable without diluting BM25
+  // scoring, which should reflect the body only.
+  db.exec(`CREATE VIRTUAL TABLE notes USING fts5(
+    rel UNINDEXED, title, topic UNINDEXED, body, tokenize='porter unicode61'
+  )`)
+  const ins = db.prepare("INSERT INTO notes(rel,title,topic,body) VALUES(?,?,?,?)")
+  meta = new Map()
+
+  for (const rel of walk(MERGED)) {
+    const raw = fs.readFileSync(path.join(MERGED, rel), "utf8")
+    const { fm, body } = stripFm(raw)
+    const title = path.basename(rel, ".md")
+    const topic = rel.split("/")[0]
+    const text = plain(body)
+    ins.run(rel, title, topic, text)
+    meta.set(rel, {
+      title,
+      topic,
+      tags: (/tags:([\s\S]{0,200})/.exec(fm)?.[1] || "")
+        .split("\n")
+        .map((l) => (/^\s*-\s*(.+?)\s*$/.exec(l) || [])[1])
+        .filter(Boolean)
+        .slice(0, 6),
+      chars: text.length,
+    })
+  }
+
+  try {
+    vectors = JSON.parse(fs.readFileSync(path.join(DATA, "vectors.json"), "utf8"))
+  } catch {
+    vectors = {} // enrichment has not run yet; lexical search still works
+  }
+  builtAt = Date.now()
+  console.log(`indexed ${meta.size} notes, ${Object.keys(vectors).length} vectors in ${builtAt - t0}ms`)
+}
+
+// The merged tree is rebuilt by the hourly ingest; pick that up without a
+// restart by watching the enricher's output, which is written last.
+function maybeRebuild() {
+  let stamp = 0
+  for (const f of [path.join(DATA, "vectors.json"), MERGED]) {
+    try { stamp = Math.max(stamp, fs.statSync(f).mtimeMs) } catch {}
+  }
+  if (stamp > builtAt) buildIndex()
+}
+
+// --------------------------------------------------------------- search ----
+async function embedQuery(q) {
+  const r = await fetch(`${EMBED}/embedding`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content: q }),
+  })
+  if (!r.ok) throw new Error(`embed ${r.status}`)
+  const j = await r.json()
+  const v = Array.isArray(j) ? j[0]?.embedding : j.embedding
+  const vec = Array.isArray(v?.[0]) ? v[0] : v
+  const m = Math.sqrt(vec.reduce((s, x) => s + x * x, 0)) || 1
+  return vec.map((x) => x / m)
+}
+
+// FTS5 treats bare punctuation as syntax; quote each term so a query like
+// "kubernetes: what?" cannot produce a parse error instead of results.
+const ftsQuery = (q) =>
+  q
+    .split(/\s+/)
+    .map((t) => t.replace(/["*]/g, "").trim())
+    .filter(Boolean)
+    .map((t) => `"${t}"*`)
+    .join(" OR ")
+
+function lexical(q) {
+  const expr = ftsQuery(q)
+  if (!expr) return []
+  try {
+    return db
+      .prepare(
+        `SELECT rel, snippet(notes, 3, '<mark>', '</mark>', '…', 24) AS snip, bm25(notes) AS score
+         FROM notes WHERE notes MATCH ? ORDER BY score LIMIT 60`,
+      )
+      .all(expr)
+  } catch (e) {
+    console.error("fts error:", e.message)
+    return []
+  }
+}
+
+function semantic(qv) {
+  const out = []
+  for (const [rel, v] of Object.entries(vectors)) {
+    let d = 0
+    for (let i = 0; i < v.length; i++) d += qv[i] * v[i]
+    out.push({ rel, score: d })
+  }
+  out.sort((a, b) => b.score - a.score)
+  return out.slice(0, 60)
+}
+
+// RRF: rank-based, so the two scales (BM25 is negative-lower-better, cosine is
+// 0..1) never have to be made comparable.
+function fuse(lex, sem) {
+  const acc = new Map()
+  const add = (rel, rank, which) => {
+    const e = acc.get(rel) || { rel, score: 0, in: [] }
+    e.score += 1 / (RRF_K + rank)
+    e.in.push(which)
+    acc.set(rel, e)
+  }
+  lex.forEach((r, i) => add(r.rel, i + 1, "keyword"))
+  sem.forEach((r, i) => add(r.rel, i + 1, "meaning"))
+  return [...acc.values()].sort((a, b) => b.score - a.score)
+}
+
+const slug = (rel) =>
+  rel.replace(/\.md$/i, "").split("/").map((s) => encodeURIComponent(s.replace(/ /g, "-"))).join("/")
+
+async function search(q) {
+  maybeRebuild()
+  const lex = lexical(q)
+  let sem = []
+  let semError = null
+  try {
+    if (Object.keys(vectors).length) sem = semantic(await embedQuery(q))
+  } catch (e) {
+    // Lexical results are still worth returning if the embedding server is down.
+    semError = e.message
+  }
+  const snips = new Map(lex.map((r) => [r.rel, r.snip]))
+  return {
+    query: q,
+    degraded: semError,
+    total: meta.size,
+    results: fuse(lex, sem)
+      .slice(0, N_RESULTS)
+      .map((r) => {
+        const m = meta.get(r.rel) || {}
+        return {
+          title: m.title,
+          topic: m.topic,
+          tags: m.tags,
+          url: `${WIKI}/${slug(r.rel)}`,
+          matched: [...new Set(r.in)],
+          snippet: snips.get(r.rel) || "",
+        }
+      }),
+  }
+}
+
+// ------------------------------------------------------------------- ui ----
+const UI = fs.readFileSync("/app/index.html", "utf8")
+
+http
+  .createServer(async (req, res) => {
+    const u = new URL(req.url, "http://x")
+    if (u.pathname === "/api/search") {
+      const q = (u.searchParams.get("q") || "").trim()
+      if (!q) {
+        res.writeHead(400, { "content-type": "application/json" })
+        return res.end(JSON.stringify({ error: "missing q" }))
+      }
+      try {
+        const out = await search(q)
+        res.writeHead(200, { "content-type": "application/json" })
+        return res.end(JSON.stringify(out))
+      } catch (e) {
+        res.writeHead(500, { "content-type": "application/json" })
+        return res.end(JSON.stringify({ error: e.message }))
+      }
+    }
+    if (u.pathname === "/healthz") {
+      res.writeHead(200, { "content-type": "application/json" })
+      return res.end(JSON.stringify({ ok: true, notes: meta.size, vectors: Object.keys(vectors).length }))
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
+    res.end(UI)
+  })
+  .listen(PORT, "0.0.0.0", () => {
+    buildIndex()
+    console.log(`vaultask listening on ${PORT}`)
+  })

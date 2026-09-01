@@ -6,6 +6,9 @@
 - datetime:
     text_size: l
     format: { dateStyle: long, timeStyle: short, hour12: false }
+# The Phase-8 placeholder, now wired to the real thing: the header search on
+# every tab queries the wiki (work + knowledge base + personal), not the web.
 - search:
-    provider: duckduckgo
+    provider: custom
+    url: https://ask.{{ base_domain }}/?q=
     target: _blank

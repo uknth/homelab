@@ -249,6 +249,14 @@ fs.mkdirSync(OUT, { recursive: true })
 fs.writeFileSync(CACHE_PATH, JSON.stringify(cache))
 fs.writeFileSync(SIDECAR_PATH, JSON.stringify(sidecar, null, 2))
 
+// Vectors, keyed by note path, for the search service. Kept separate from the
+// sidecar: the wiki build reads that file on every build and has no use for
+// ~440 x 384 floats. Written as a plain map so the search service needs no
+// knowledge of the content-hash cache layout.
+const vectors = {}
+for (const n of notes) if (n.vec) vectors[n.rel] = n.vec.map((x) => Math.round(x * 1e5) / 1e5)
+fs.writeFileSync(path.join(OUT, "vectors.json"), JSON.stringify(vectors))
+
 const withSummary = Object.values(sidecar).filter((v) => v.summary).length
 const withRelated = Object.values(sidecar).filter((v) => v.related.length).length
 console.log(

@@ -12,6 +12,7 @@
 #   - vaultmerge   : merge the 3 vaults into one topic-organised tree
 #   - vaultindex   : embeddings + LLM summaries -> enrichment sidecar
 #   - quartz       : the wiki, built from the merged tree (wiki.puhome.net)
+#   - vaultask     : hybrid search over the merged tree (ask.puhome.net)
 #
 # Out of scope for v3 (user directive): Immich (photos), Vaultwarden (passwords).
 
@@ -69,6 +70,9 @@
 
     - role: services/knowledge/quartz
       tags: [quartz, knowledge, wiki]
+
+    - role: services/knowledge/vaultask
+      tags: [vaultask, knowledge, search]
 
     # Image-update notifier. Diun's docker provider watches a single endpoint,
     # so one instance runs per docker_hosts member (same shape as the beszel /
