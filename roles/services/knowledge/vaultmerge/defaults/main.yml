@@ -1,0 +1,82 @@
+---
+# services/knowledge/vaultmerge — dissolve the three Obsidian vaults into ONE
+# topic-organised tree for the wiki and the index.
+#
+# The vaults are an artefact of how notes are *written* (work / knowledge base /
+# personal); they are not how anyone goes looking for something. Career material
+# lives in two vaults today and accounts for most of the 35 cross-vault filename
+# collisions. Merging by topic is the point of the wiki — see
+# docs/spec/knowledge.md.
+
+vaultmerge_root_dir: "{{ service_root }}/vaultmerge"
+vaultmerge_source_dir: "{{ vaultsync_root_dir | default(service_root + '/vaultsync') }}/vaults"
+vaultmerge_out_dir: "{{ service_root }}/vaultmerge/merged"
+vaultmerge_script: "{{ service_root }}/vaultmerge/merge-vaults.sh"
+
+vaultmerge_image: "node:22-slim"
+vaultmerge_uid: "{{ media_uid }}"
+vaultmerge_gid: "{{ media_gid }}"
+
+# Short label per source vault. Used only to disambiguate colliding note names
+# and as the `source:` frontmatter value — never as a folder in its own right,
+# because the whole point is that the vaults are dissolved.
+vaultmerge_sources:
+  pikachu: work
+  snorlax: kb
+  psyduck: personal
+
+# --- Topic taxonomy -------------------------------------------------------
+# Derived from the vaults' own folders and frontmatter tags (2026-09-01), not
+# invented. Declarative on purpose: reshaping the wiki's information
+# architecture is a variable change plus a rebuild, never a code change.
+#
+# Matched LONGEST PREFIX FIRST, so a more specific rule always wins regardless
+# of the order written here.
+vaultmerge_path_topics:
+  - { match: "psyduck/Resources/Homelab", topic: "Homelab" }
+  - { match: "psyduck/Resources/Finances", topic: "Finances" }
+  - { match: "psyduck/Resources/Interview", topic: "Career" }
+  - { match: "psyduck/Secrets", topic: "Credentials" }
+  - { match: "pikachu/Notes/Secrets", topic: "Credentials" }
+  - { match: "pikachu/Notes/Interview", topic: "Career" }
+  - { match: "pikachu/Projects", topic: "Work" }
+  - { match: "pikachu/Planner", topic: "Work" }
+  - { match: "pikachu/Notes", topic: "Work" }
+  - { match: "snorlax/Topics", topic: "Engineering" }
+  - { match: "snorlax/Sources", topic: "Sources" }
+  - { match: "snorlax/Inbox", topic: "Inbox" }
+
+# Fallback when no path rule matches: first frontmatter tag that appears here.
+vaultmerge_tag_topics:
+  homelab: "Homelab"
+  career: "Career"
+  interview-prep: "Career"
+  secret: "Credentials"
+  project-notes: "Work"
+  meetings: "Work"
+
+# Anything still unmatched lands here. Never dropped — a note that falls through
+# the taxonomy must still be findable.
+vaultmerge_default_topic: "Inbox"
+
+# Vault machinery, not knowledge: templates, Dataview queries, AI config.
+# Excluded from the merge entirely, so it never reaches the wiki or the index.
+vaultmerge_exclude_dirs:
+  - "Utils"
+  - ".obsidian"
+  - ".trash"
+  - ".git"
+  - ".claude"
+  - ".claudian"
+  - ".smart-env"
+
+# Excalidraw notes are a JSON blob in a .md wrapper; Quartz cannot parse them
+# and its build aborts on the first one.
+vaultmerge_exclude_globs:
+  - "*.excalidraw.md"
+  - "*.excalidraw"
+  # Instructions written FOR agents working in the vault, not knowledge to
+  # publish. All three vaults have one, so they also collided across vaults and
+  # crowded out real content in the related-links ranking.
+  - "AGENTS.md"
+  - "CLAUDE.md"

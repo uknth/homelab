@@ -1,0 +1,237 @@
+---
+# Builds and serves the read-only wiki. No scheduling here — vault-ingest.sh
+# calls quartz-build.sh as the last stage of the n8n ingest, and skips it when
+# the sync reported no changes.
+
+# Split ownership, as in vaultsync: the build script runs as {{ user }} and only
+# drives docker; the checkout and the generated site are written by the
+# container as its own uid.
+- name: Create quartz dirs owned by the service user
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ quartz_root_dir }}"
+    - "{{ quartz_root_dir }}/compose"
+
+- name: Create quartz dirs owned by the container uid
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ quartz_uid }}"
+    group: "{{ quartz_gid }}"
+    mode: "0755"
+  loop:
+    - "{{ quartz_root_dir }}/src"
+    - "{{ quartz_root_dir }}/public"
+    - "{{ quartz_root_dir }}/home"
+    - "{{ quartz_root_dir }}/content"
+    - "{{ quartz_root_dir }}/public/site"
+
+# The 9a layout published one directory per vault plus a hand-written landing
+# page. 9b replaces all of it with a single merged site under public/site;
+# leaving the old trees would serve stale, pre-merge content forever.
+- name: Remove the superseded per-vault wiki output
+  become: true
+  ansible.builtin.file:
+    path: "{{ quartz_root_dir }}/public/{{ item }}"
+    state: absent
+  loop: [pikachu, snorlax, psyduck, index.html]
+
+# --- Quartz checkout -------------------------------------------------------
+# Quartz is a template repo, not an npm package. The checkout is pinned and
+# treated as immutable: `npm ci` and `quartz plugin install` write into it, so
+# it is never `git pull`ed in place. Bumping quartz_version discards and
+# re-clones, which is the only way plugin state stays consistent with the tag.
+
+- name: Check the checked-out Quartz version
+  become: true
+  ansible.builtin.command:
+    cmd: git -C {{ quartz_root_dir }}/src describe --tags --exact-match
+  register: _quartz_have
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Discard the checkout when the pin moved
+  become: true
+  when:
+    - _quartz_have.rc == 0
+    - _quartz_have.stdout | trim != quartz_version
+  ansible.builtin.file:
+    path: "{{ quartz_root_dir }}/src"
+    state: absent
+
+- name: Clone Quartz at the pinned tag
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.git:
+    repo: "{{ quartz_repo }}"
+    dest: "{{ quartz_root_dir }}/src"
+    version: "{{ quartz_version }}"
+    depth: 1
+    # Never update in place: node_modules and installed plugins live here and a
+    # forced checkout would silently discard them mid-build.
+    update: false
+  register: _quartz_clone
+
+# `chown -R` rather than the file module's recurse: the module walks symlinks
+# and node_modules is full of them (npm/npx link-installs can even point back at
+# the checkout root). Only needed when the clone actually changed.
+- name: Own the checkout to the service user
+  become: true
+  when: _quartz_clone is changed
+  ansible.builtin.command:
+    cmd: chown -RP {{ quartz_uid }}:{{ quartz_gid }} {{ quartz_root_dir }}/src
+  changed_when: true
+
+- name: Template quartz compose + nginx config
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  loop:
+    - { src: docker-compose.yml.j2, dest: "{{ quartz_root_dir }}/compose/docker-compose.yml" }
+    - { src: nginx.conf.j2, dest: "{{ quartz_root_dir }}/nginx.conf" }
+  notify: Restart quartz
+
+# See the same guard in vaultsync: on a host where this role has not run yet,
+# --check never created the dirs, and the GitOps executor's full-fleet dry run
+# must stay clean.
+- name: Check whether quartz has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ quartz_root_dir }}/compose/docker-compose.yml"
+  register: _quartz_deployed
+
+- name: Deploy quartz
+  become: true
+  when: not ansible_check_mode or _quartz_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ quartz_root_dir }}/compose"
+    project_name: "quartz"
+    state: present
+    pull: missing
+
+# --- Dependencies ----------------------------------------------------------
+# Guarded on a marker naming the pinned tag, so a converged host does no
+# network work and a version bump forces a clean reinstall.
+
+- name: Check whether Quartz deps are installed for this tag
+  become: true
+  ansible.builtin.stat:
+    path: "{{ quartz_root_dir }}/src/.deps-{{ quartz_version }}"
+  register: _quartz_deps
+
+- name: Install Quartz dependencies and plugins
+  become: true
+  when: not _quartz_deps.stat.exists
+  block:
+    - name: Run npm ci
+      ansible.builtin.command:
+        cmd: docker exec -u {{ quartz_uid }}:{{ quartz_gid }} -w /src quartz-build npm ci --no-fund --no-audit
+      changed_when: true
+
+    # Fetches each community plugin with `git clone`, which is why the builder
+    # is node:22 rather than node:22-slim.
+    - name: Install Quartz plugins
+      ansible.builtin.command:
+        cmd: docker exec -u {{ quartz_uid }}:{{ quartz_gid }} -w /src quartz-build node /src/quartz/bootstrap-cli.mjs plugin install
+      changed_when: true
+
+    - name: Mark deps installed for this tag
+      ansible.builtin.file:
+        path: "{{ quartz_root_dir }}/src/.deps-{{ quartz_version }}"
+        state: touch
+        owner: "{{ quartz_uid }}"
+        group: "{{ quartz_gid }}"
+        mode: "0644"
+
+# --- Upstream patch --------------------------------------------------------
+# folder-page titles generated pages "Folder: <path>", which reads as noise in
+# the explorer and the browser tab — the page is plainly a folder already.
+#
+# Patched rather than solved with folder notes: giving every folder an index.md
+# makes Quartz treat it as a folder NOTE and drop the generated file listing
+# entirely, which is a worse outcome than the prefix.
+#
+# Runs on every play (not just on install) so a plugin reinstall cannot silently
+# revert it. `replace` is a no-op once applied. Re-check this on a Quartz bump.
+- name: Drop the "Folder:" prefix from generated folder pages
+  become: true
+  ansible.builtin.replace:
+    path: "{{ quartz_root_dir }}/src/.quartz/plugins/folder-page/dist/index.js"
+    # The title is built from an i18n key, not a bare literal:
+    #   const title = `${i18n(locale).pages.folderContent.folder}: ${folder}`
+    # Dropping just the prefix leaves `${folder}` intact.
+    regexp: '\$\{i18n\(locale\)\.pages\.folderContent\.folder\}: '
+    replace: ''
+  register: _quartz_folder_patch
+  failed_when: false
+
+# --- Per-vault configs -----------------------------------------------------
+# Generated from Quartz's own shipped defaults with only the site-specific keys
+# overridden, so the plugin list (emitters, explorer, graph, search, backlinks)
+# tracks the pinned tag instead of being hand-maintained here.
+
+- name: Read Quartz's shipped default config
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ quartz_root_dir }}/src/quartz.config.default.yaml"
+  register: _quartz_default_raw
+  check_mode: false
+  failed_when: false
+
+- name: Parse the default config
+  when: _quartz_default_raw.content is defined
+  ansible.builtin.set_fact:
+    _quartz_default: "{{ _quartz_default_raw.content | b64decode | from_yaml }}"
+
+- name: Render the Quartz config
+  become: true
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible — services/knowledge/quartz
+      # Upstream defaults from {{ quartz_version }}, with only the site keys overridden.
+      {{ {
+           'configuration': _quartz_default.configuration | combine({
+             'pageTitle': quartz_site_title,
+             'pageTitleSuffix': '',
+             'baseUrl': quartz_domain,
+             'ignorePatterns': quartz_ignore_patterns,
+             'analytics': none,
+             'defaultDateType': 'modified',
+           }),
+           'plugins': _quartz_default.plugins,
+         } | to_nice_yaml(indent=2) }}
+    dest: "{{ quartz_root_dir }}/src/quartz.config.yaml"
+    owner: "{{ quartz_uid }}"
+    group: "{{ quartz_gid }}"
+    mode: "0644"
+  when: _quartz_default is defined
+
+- name: Template the content preparer
+  become: true
+  ansible.builtin.template:
+    src: prepare-content.mjs.j2
+    dest: "{{ quartz_root_dir }}/src/prepare-content.mjs"
+    owner: "{{ quartz_uid }}"
+    group: "{{ quartz_gid }}"
+    mode: "0644"
+
+- name: Template the build script
+  become: true
+  ansible.builtin.template:
+    src: quartz-build.sh.j2
+    dest: "{{ quartz_build_script }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"

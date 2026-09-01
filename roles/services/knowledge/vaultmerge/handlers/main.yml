@@ -1,0 +1,8 @@
+---
+- name: Restart vaultmerge
+  become: true
+  when: not ansible_check_mode or _vaultmerge_deployed.stat.exists | default(false)
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultmerge_root_dir }}/compose"
+    project_name: "vaultmerge"
+    state: restarted

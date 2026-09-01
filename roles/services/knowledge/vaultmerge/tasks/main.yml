@@ -1,0 +1,70 @@
+---
+# Merges the three vault mirrors into one topic-organised tree. Runs between
+# the sync and the wiki build; scheduling belongs to n8n, not here.
+
+- name: Create vaultmerge dirs owned by the service user
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ vaultmerge_root_dir }}"
+    - "{{ vaultmerge_root_dir }}/compose"
+
+- name: Create vaultmerge dirs owned by the container uid
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vaultmerge_uid }}"
+    group: "{{ vaultmerge_gid }}"
+    mode: "0755"
+  loop:
+    - "{{ vaultmerge_root_dir }}/app"
+    - "{{ vaultmerge_out_dir }}"
+
+- name: Template the merge script
+  become: true
+  ansible.builtin.template:
+    src: merge-vaults.mjs.j2
+    dest: "{{ vaultmerge_root_dir }}/app/merge-vaults.mjs"
+    owner: "{{ vaultmerge_uid }}"
+    group: "{{ vaultmerge_gid }}"
+    mode: "0644"
+
+- name: Template vaultmerge compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ vaultmerge_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart vaultmerge
+
+- name: Check whether vaultmerge has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ vaultmerge_root_dir }}/compose/docker-compose.yml"
+  register: _vaultmerge_deployed
+
+- name: Deploy vaultmerge
+  become: true
+  when: not ansible_check_mode or _vaultmerge_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultmerge_root_dir }}/compose"
+    project_name: "vaultmerge"
+    state: present
+    pull: missing
+
+- name: Template the merge wrapper
+  become: true
+  ansible.builtin.template:
+    src: merge-vaults.sh.j2
+    dest: "{{ vaultmerge_script }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"

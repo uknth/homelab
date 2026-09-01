@@ -1,0 +1,99 @@
+# Managed by Ansible — services/knowledge/vaultindex
+#
+# Two inference servers plus a one-shot worker. Both models sit on an
+# `internal: true` network with no published ports — same containment as the
+# Paperless tagging model: no LAN route, no internet, reachable only by the
+# enricher beside them.
+#
+# VRAM policy differs by model, deliberately:
+#   embed (~36 MiB)  — always up. Too small to be worth cycling, and every run
+#                      needs it.
+#   llm   (~6.8 GiB) — ON DEMAND, under a compose profile so a plain `up` never
+#                      starts it. reindex.sh starts it only when notes actually
+#                      need summarising and stops it afterwards, so the A4000
+#                      keeps its headroom for Jellyfin transcodes and Paperless.
+services:
+  vaultindex-embed:
+    image: {{ vaultindex_llama_image }}
+    container_name: vaultindex-embed
+    restart: unless-stopped
+    networks: [ai]
+    volumes:
+      - {{ vaultindex_root_dir }}/models:/models:ro
+    command:
+      - "-m"
+      - "/models/{{ vaultindex_embed_model_file }}"
+      - "--embedding"
+      - "--pooling"
+      - "mean"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "{{ vaultindex_embed_port }}"
+      - "--n-gpu-layers"
+      - "99"
+      - "--ctx-size"
+      - "{{ vaultindex_embed_ctx }}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  vaultindex-llm:
+    image: {{ vaultindex_llama_image }}
+    container_name: vaultindex-llm
+    # Not `unless-stopped`: this must stay down between runs, and must not come
+    # back up on its own after a reboot.
+    restart: "no"
+    profiles: [ondemand]
+    networks: [ai]
+    volumes:
+      - {{ vaultindex_root_dir }}/models:/models:ro
+    command:
+      - "-m"
+      - "/models/{{ vaultindex_llm_model_file }}"
+      - "--alias"
+      - "{{ vaultindex_llm_alias }}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "{{ vaultindex_llm_port }}"
+      - "--n-gpu-layers"
+      - "99"
+      - "--ctx-size"
+      - "{{ vaultindex_llm_ctx }}"
+      # Gemma 3 needs its own chat template, which --jinja reads from the GGUF
+      # metadata. Without it the model is prompted in the wrong format and
+      # returns plausible-looking but consistently malformed output.
+      - "--jinja"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  vaultindex:
+    image: {{ vaultindex_node_image }}
+    container_name: vaultindex
+    restart: unless-stopped
+    init: true
+    user: "{{ vaultindex_uid }}:{{ vaultindex_gid }}"
+    networks: [ai]
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - {{ vaultindex_root_dir }}/app:/app:ro
+      # The merged tree is this stage's input and Quartz's alike — read-only so
+      # neither can mutate the other's source.
+      - {{ vaultindex_merged_dir }}:/merged:ro
+      - {{ vaultindex_root_dir }}/data:/data
+    entrypoint: ["sleep", "infinity"]
+
+networks:
+  ai:
+    internal: true

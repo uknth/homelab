@@ -1,0 +1,98 @@
+---
+# Embeddings + LLM enrichment for the wiki. Scheduling belongs to n8n; this role
+# only installs the models, the servers, and the entry point.
+
+- name: Create vaultindex dirs owned by the service user
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ vaultindex_root_dir }}"
+    - "{{ vaultindex_root_dir }}/compose"
+
+- name: Create vaultindex dirs owned by the container uid
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vaultindex_uid }}"
+    group: "{{ vaultindex_gid }}"
+    mode: "0755"
+  loop:
+    - "{{ vaultindex_root_dir }}/models"
+    - "{{ vaultindex_root_dir }}/app"
+    - "{{ vaultindex_root_dir }}/data"
+
+# Checksummed so a truncated download cannot leave llama.cpp crash-looping on a
+# corrupt model — the same guard the Paperless model download uses. Retried
+# because 6.8 GiB over a home link does not always land first time.
+- name: Download the GGUF models
+  become: true
+  ansible.builtin.get_url:
+    url: "https://huggingface.co/{{ item.repo }}/resolve/main/{{ item.file }}"
+    dest: "{{ vaultindex_root_dir }}/models/{{ item.file }}"
+    checksum: "{{ ('sha256:' + item.sha) if item.sha else omit }}"
+    owner: "{{ vaultindex_uid }}"
+    group: "{{ vaultindex_gid }}"
+    mode: "0644"
+    timeout: 60
+  loop:
+    - repo: "{{ vaultindex_embed_model_repo }}"
+      file: "{{ vaultindex_embed_model_file }}"
+      sha: "{{ vaultindex_embed_model_sha256 }}"
+    - repo: "{{ vaultindex_llm_model_repo }}"
+      file: "{{ vaultindex_llm_model_file }}"
+      sha: "{{ vaultindex_llm_model_sha256 }}"
+  loop_control:
+    label: "{{ item.file }}"
+  register: _vaultindex_models
+  retries: 3
+  delay: 10
+  until: _vaultindex_models is succeeded
+
+- name: Template the enrichment script
+  become: true
+  ansible.builtin.template:
+    src: enrich.mjs.j2
+    dest: "{{ vaultindex_root_dir }}/app/enrich.mjs"
+    owner: "{{ vaultindex_uid }}"
+    group: "{{ vaultindex_gid }}"
+    mode: "0644"
+
+- name: Template vaultindex compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ vaultindex_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart vaultindex
+
+- name: Check whether vaultindex has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ vaultindex_root_dir }}/compose/docker-compose.yml"
+  register: _vaultindex_deployed
+
+- name: Deploy vaultindex
+  become: true
+  when: not ansible_check_mode or _vaultindex_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultindex_root_dir }}/compose"
+    project_name: "vaultindex"
+    state: present
+    pull: missing
+
+- name: Template the reindex entry point
+  become: true
+  ansible.builtin.template:
+    src: reindex.sh.j2
+    dest: "{{ vaultindex_script }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"

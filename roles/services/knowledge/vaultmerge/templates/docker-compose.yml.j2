@@ -1,0 +1,18 @@
+# Managed by Ansible — services/knowledge/vaultmerge
+# A holder container: the merge is invoked one-shot by merge-vaults.sh.
+services:
+  vaultmerge:
+    image: {{ vaultmerge_image }}
+    container_name: vaultmerge
+    hostname: vaultmerge
+    restart: unless-stopped
+    init: true
+    user: "{{ vaultmerge_uid }}:{{ vaultmerge_gid }}"
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - {{ vaultmerge_root_dir }}/app:/app:ro
+      # Read-only: the merge reads the vaults and must never write to them.
+      - {{ vaultmerge_source_dir }}:/vaults:ro
+      - {{ vaultmerge_out_dir }}:/merged
+    entrypoint: ["sleep", "infinity"]

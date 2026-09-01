@@ -1,0 +1,73 @@
+---
+# services/knowledge/vaultindex — embeddings + LLM enrichment for the wiki.
+#
+# Produces, per merged note:
+#   - a summary  (Gemma 3 12B on the A4000)
+#   - "related" links across what used to be three vaults (embeddings)
+#
+# Both land in a sidecar JSON, never in the merged tree: the merge output is
+# also the input to this stage, and a stage must not mutate its own source.
+# Quartz's prepare-content injects the sidecar at build time.
+#
+# Placement is cmp01, NOT ai01 (corrected 2026-09-01): summarising a note is
+# short-context, high-volume work — exactly what the A4000 already does for
+# Paperless. ai01 stays reserved for the long-context agent model.
+
+vaultindex_root_dir: "{{ service_root }}/vaultindex"
+vaultindex_merged_dir: "{{ vaultmerge_out_dir | default(service_root + '/vaultmerge/merged') }}"
+vaultindex_script: "{{ service_root }}/vaultindex/reindex.sh"
+
+vaultindex_uid: "{{ media_uid }}"
+vaultindex_gid: "{{ media_gid }}"
+vaultindex_node_image: "node:22-slim"
+vaultindex_llama_image: "ghcr.io/ggml-org/llama.cpp:server-cuda"
+
+# --- Embeddings -----------------------------------------------------------
+# bge-small: 33M params, 384 dims, ~30 MiB. At ~450 notes the corpus is tiny;
+# a larger embedding model would cost VRAM for no measurable gain in what is
+# ultimately a "show me 5 related notes" ranking.
+vaultindex_embed_model_repo: "CompendiumLabs/bge-small-en-v1.5-gguf"
+vaultindex_embed_model_file: "bge-small-en-v1.5-q8_0.gguf"
+vaultindex_embed_model_sha256: "ec38e8da142596baa913124ae50550de284b6916bf59577ef2f0cb9660c2f514"
+vaultindex_embed_port: 8082
+vaultindex_embed_ctx: 512
+
+# --- Summaries ------------------------------------------------------------
+# Gemma 3 12B Q4_K_M, ~6.8 GiB, into the ~12.7 GiB the A4000 has free beside
+# paperless-llama. The 4B already running is fine for tagging documents but
+# writes flat prose, and this text is what family reads.
+vaultindex_llm_model_repo: "ggml-org/gemma-3-12b-it-GGUF"
+vaultindex_llm_model_file: "gemma-3-12b-it-Q4_K_M.gguf"
+vaultindex_llm_model_sha256: "7bb69bff3f48a7b642355d64a90e481182a7794707b3133890646b1efa778ff5"
+vaultindex_llm_alias: "gemma-3-12b-it"
+vaultindex_llm_port: 8083
+vaultindex_llm_ctx: 8192
+
+# How much of a note the SUMMARY model reads. ~24k chars is ~6k tokens, which
+# fits the 8192 context with room for the response and covers essentially every
+# note in this corpus in full. Unrelated to the embedding model's 512-token
+# limit — that one is architectural and applies only to related-links ranking.
+vaultindex_summary_input_chars: 24000
+vaultindex_summary_max_tokens: 200
+
+# How many related notes to surface per page.
+vaultindex_related_count: 5
+# Cosine floor, set from measured scores rather than intuition (2026-09-02):
+#   Homelab.md  0.647-0.689  all genuinely related
+#   Recon.md    0.614-0.631  mixed
+#   Finances.md 0.568-0.601  all noise
+# 0.62 keeps the good sets and drops the noise. A wrong suggestion is worse than
+# none, so this errs high — better three real links than five padded ones.
+vaultindex_related_min_score: 0.62
+
+# Minimum real content before a note gets related links at all. A note whose
+# whole body was a Dataview query embeds to near-noise, and cosine similarity
+# then returns arbitrary neighbours above any threshold — that is why
+# Finances.md was "related" to Ansible Vault Values and a Bluesky article.
+# Those notes get a materialised folder listing from the wiki build instead,
+# which is better navigation than five wrong links.
+vaultindex_related_min_chars: 300
+
+# Skip summarising trivially short notes: there is nothing to summarise, and a
+# generated abstract longer than the note itself reads as broken.
+vaultindex_summary_min_chars: 800

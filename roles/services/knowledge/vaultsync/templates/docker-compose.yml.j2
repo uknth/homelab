@@ -1,0 +1,29 @@
+# Managed by Ansible — services/knowledge/vaultsync
+#
+# A holder container, not a daemon: obsidian-headless is invoked one-shot by
+# vault-ingest.sh via `docker exec`. `ob sync --continuous` is deliberately not
+# used — it would move the sync schedule out of n8n and out of the ntfy failure
+# path (docs/spec/knowledge.md).
+services:
+  vaultsync:
+    image: {{ vaultsync_image }}
+    container_name: vaultsync
+    hostname: vaultsync
+    restart: unless-stopped
+    # PID 1 is `sleep infinity`, which never reaps. A build or sync that dies
+    # mid-way would leave its children orphaned onto it as permanent zombies,
+    # in a container that rebuilds hourly. Docker's init reaps them.
+    init: true
+    user: "{{ vaultsync_uid }}:{{ vaultsync_gid }}"
+    environment:
+      - TZ={{ timezone }}
+      # npm's global prefix and HOME are both volumes so the pinned CLI install
+      # and the `ob login` session outlive the container.
+      - NPM_CONFIG_PREFIX=/npm
+      - HOME=/config
+      - PATH=/npm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      - {{ vaultsync_root_dir }}/npm:/npm
+      - {{ vaultsync_root_dir }}/config:/config
+      - {{ vaultsync_root_dir }}/vaults:/vaults
+    entrypoint: ["sleep", "infinity"]

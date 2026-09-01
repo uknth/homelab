@@ -1,0 +1,9 @@
+---
+# See the vaultsync handler: skipped under --check before the first real deploy.
+- name: Restart quartz
+  become: true
+  when: not ansible_check_mode or _quartz_deployed.stat.exists | default(false)
+  community.docker.docker_compose_v2:
+    project_src: "{{ quartz_root_dir }}/compose"
+    project_name: "quartz"
+    state: restarted

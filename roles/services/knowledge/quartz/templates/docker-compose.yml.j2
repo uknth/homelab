@@ -1,0 +1,56 @@
+# Managed by Ansible — services/knowledge/quartz
+#
+# Two containers: a builder that is only ever driven one-shot by
+# quartz-build.sh, and nginx serving the static output. The wiki has no
+# application server because it does not need one — it is generated HTML.
+services:
+  quartz-build:
+    image: {{ quartz_builder_image }}
+    container_name: quartz-build
+    hostname: quartz-build
+    restart: unless-stopped
+    # PID 1 is `sleep infinity`, which never reaps. A build or sync that dies
+    # mid-way would leave its children orphaned onto it as permanent zombies,
+    # in a container that rebuilds hourly. Docker's init reaps them.
+    init: true
+    user: "{{ quartz_uid }}:{{ quartz_gid }}"
+    working_dir: /src
+    environment:
+      - TZ={{ timezone }}
+      # NOT /src: npm puts its cache and _npx link-installs under HOME, and the
+      # _npx entry symlinks back to /src, producing a path loop that any
+      # recursive walk of the checkout falls into.
+      - HOME=/home/quartz
+      - npm_config_cache=/home/quartz/.npm
+    volumes:
+      - {{ quartz_root_dir }}/src:/src
+      - {{ quartz_root_dir }}/home:/home/quartz
+      # Writable per-vault copy of the mirror. Quartz builds from here, never
+      # from /vaults, so content prep (dataview stripping, root index) cannot
+      # reach the vaults.
+      - {{ quartz_root_dir }}/content:/content
+      - {{ quartz_root_dir }}/public:/out
+      # The merged topic tree, read-only: vaultmerge owns it, and the indexer
+      # (9c) reads the same tree, so the build must not mutate it.
+      - {{ quartz_content_dir }}:/merged:ro
+      # Enrichment sidecar (summaries + related links). Optional: the wiki
+      # builds fine before vaultindex exists.
+      - {{ quartz_enrich_dir }}:/enrich:ro
+    entrypoint: ["sleep", "infinity"]
+
+  quartz-web:
+    image: {{ quartz_web_image }}
+    container_name: quartz-web
+    hostname: quartz-web
+    restart: unless-stopped
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      # Mount the PARENT, not public/site: each build swaps the site directory
+      # with `mv`, which replaces its inode — a bind mount on public/site would
+      # stay pinned to the old, deleted one and serve nothing. nginx roots at
+      # the site/ subdirectory instead.
+      - {{ quartz_root_dir }}/public:/usr/share/nginx/html:ro
+      - {{ quartz_root_dir }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "{{ quartz_port }}:80"          # gw01 nginx -> forward-auth -> here

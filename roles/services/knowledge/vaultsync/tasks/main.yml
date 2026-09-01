@@ -1,0 +1,174 @@
+---
+# Mirrors the Obsidian vaults onto cmp01 with the official headless Sync client,
+# and installs the ingest entry point n8n drives. No systemd timer: n8n owns the
+# schedule so every run is visible and notified in one place (same shape as
+# ops/maintenance and ops/wanwatch).
+
+# Ownership is split on purpose: the ingest script runs as {{ user }} over the
+# forced-command SSH key and writes state.json into the root dir, while the
+# container writes only into npm/, config/ and vaults/ as its own uid.
+- name: Create vaultsync dirs owned by the service user
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ vaultsync_root_dir }}"
+    - "{{ vaultsync_root_dir }}/compose"
+
+- name: Create vaultsync dirs owned by the container uid
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vaultsync_uid }}"
+    group: "{{ vaultsync_gid }}"
+    mode: "0755"
+  loop:
+    - "{{ vaultsync_root_dir }}/npm"
+    - "{{ vaultsync_root_dir }}/config"
+    - "{{ vaultsync_root_dir }}/vaults"
+
+- name: Template vaultsync compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ vaultsync_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart vaultsync
+
+# In --check the dirs above were never really created, so compose would fail on
+# a host where this role has not been applied yet. The GitOps executor runs a
+# full-fleet --check and expects zero failures, so skip only that case; once
+# deployed, check mode still reports drift normally.
+- name: Check whether vaultsync has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ vaultsync_root_dir }}/compose/docker-compose.yml"
+  register: _vaultsync_deployed
+
+- name: Deploy vaultsync
+  become: true
+  when: not ansible_check_mode or _vaultsync_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultsync_root_dir }}/compose"
+    project_name: "vaultsync"
+    state: present
+    pull: missing
+
+# Pinned install into the persistent npm prefix. Guarded on the installed
+# version so a converged host does no network work; bumping
+# vaultsync_headless_version is what reinstalls.
+- name: Check the installed obsidian-headless version
+  when: not ansible_check_mode or _vaultsync_deployed.stat.exists
+  become: true
+  ansible.builtin.command:
+    cmd: docker exec vaultsync node -e "console.log(require('/npm/lib/node_modules/obsidian-headless/package.json').version)"
+  register: _vaultsync_ver
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install obsidian-headless (pinned)
+  become: true
+  ansible.builtin.command:
+    cmd: docker exec vaultsync npm install -g --no-fund --no-audit obsidian-headless@{{ vaultsync_headless_version }}
+  when: _vaultsync_ver.stdout | default('') | trim != vaultsync_headless_version
+  changed_when: true
+
+# 0600 and owned by the script's user. Separate from the script so the script
+# itself stays readable and free of secrets.
+- name: Template the sync secrets file
+  become: true
+  ansible.builtin.template:
+    src: sync-secrets.j2
+    dest: "{{ vaultsync_root_dir }}/sync-secrets"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Template the vault ingest script
+  become: true
+  ansible.builtin.template:
+    src: vault-ingest.sh.j2
+    dest: "{{ vaultsync_script }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+# --- SSH access for n8n ------------------------------------------------------
+# The private key lives on util01, next to the maintenance and wanwatch keys,
+# because that is where n8n runs and where its credential is imported from.
+# cmp01 only ever receives the public half.
+
+- name: Create the vaultsync key dir on util01
+  delegate_to: util01
+  become: true
+  ansible.builtin.file:
+    path: "{{ vaultsync_key_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
+- name: Generate the n8n vaultsync SSH key on util01
+  delegate_to: util01
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -N '' -C 'n8n-vaultsync' -f {{ vaultsync_key_path }}
+    creates: "{{ vaultsync_key_path }}"
+
+- name: Read the vaultsync public key
+  delegate_to: util01
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ vaultsync_key_path }}.pub"
+  register: _vaultsync_pub
+  failed_when: false
+  check_mode: false
+
+# Forced command: this key can invoke nothing but the ingest script, and the
+# script whitelists the flags it accepts. Even with the private key, an attacker
+# gets no shell on cmp01.
+- name: Authorise the key for the ingest script only
+  become: true
+  when: _vaultsync_pub.content is defined
+  ansible.builtin.blockinfile:
+    path: "/home/{{ user }}/.ssh/authorized_keys"
+    marker: "# {mark} ANSIBLE MANAGED — n8n vaultsync (forced command)"
+    create: true
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+    block: >-
+      command="{{ vaultsync_script }}",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
+      {{ _vaultsync_pub.content | b64decode | trim }}
+
+# Surfaced at the end of the run so the manual step is not silently forgotten:
+# `ob login` is interactive (Sync credentials + E2E password) and cannot be
+# automated. Everything else above is idempotent and needs no human.
+- name: Report whether the Sync session is established
+  when: not ansible_check_mode or _vaultsync_deployed.stat.exists
+  become: true
+  ansible.builtin.command:
+    cmd: docker exec vaultsync ob sync-list-local
+  register: _vaultsync_linked
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Show the one-time login instructions
+  when: _vaultsync_linked.rc | default(1) != 0 or '/vaults/' not in (_vaultsync_linked.stdout | default(''))
+  ansible.builtin.debug:
+    msg:
+      - "vaultsync is installed but not linked to Obsidian Sync yet."
+      - "Run these on cmp01 once (see docs/runbooks/knowledge-base.md):"
+      - "  docker exec -it vaultsync ob login"
+      - "  {{ vaultsync_script }} --setup"

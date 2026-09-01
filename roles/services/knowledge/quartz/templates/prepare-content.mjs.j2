@@ -1,0 +1,234 @@
+// Managed by Ansible — services/knowledge/quartz
+//
+// Prepares a build-ready copy of a vault. The mirror itself is read-only (Sync
+// runs mirror-remote and would revert any write), so anything the wiki needs
+// that the vault does not contain has to happen on a staging copy.
+//
+// Two jobs:
+//   1. Strip Dataview blocks. Quartz cannot execute them, so ```dataviewjs
+//      fences render as a wall of raw JavaScript. The vault uses them for
+//      folder-note MOCs, whose job — listing what is in a folder — Quartz
+//      already does natively with folder pages and the explorer.
+//   2. Emit a root index.md when the vault has none. Quartz builds the site
+//      root from content/index.md; without it the vault root has no page at
+//      all. Generating markdown (rather than post-hoc HTML) means the root is
+//      a real Quartz page with explorer, search, graph and breadcrumbs.
+//
+// Usage: node prepare-content.mjs <contentDir> <title>
+import fs from "fs"
+import path from "path"
+
+const [contentDir, title] = process.argv.slice(2)
+if (!contentDir || !title) {
+  console.error("usage: prepare-content.mjs <contentDir> <title>")
+  process.exit(2)
+}
+
+const STRIP_DATAVIEW = {{ 'true' if quartz_strip_dataview else 'false' }}
+
+// Sidecar from services/knowledge/vaultindex: { "<rel>.md": {summary, related} }.
+// Optional — the wiki builds perfectly well before enrichment exists.
+const ENRICH_PATH = "/enrich/enrichment.json"
+const enrichment = fs.existsSync(ENRICH_PATH)
+  ? JSON.parse(fs.readFileSync(ENRICH_PATH, "utf8"))
+  : {}
+
+// A fenced block opened with >=3 backticks and tagged dataview or dataviewjs,
+// through to a closing fence of at least the same length.
+//
+// Note `(?:js)?` and not `js?`: the latter parses as "dataviewj" + optional "s",
+// which matches ```dataviewjs but silently misses plain ```dataview.
+const DATAVIEW_FENCE = /^([ \t]*)(`{3,})[ \t]*dataview(?:js)?\b[^\n]*\n[\s\S]*?^[ \t]*\2[ \t]*$\n?/gim
+
+// Drop headings whose entire section is now empty — the stripped block was all
+// there was. "## Related Notes" with nothing beneath it reads as a broken page,
+// and Quartz already provides backlinks and folder listings natively.
+//
+// Done as a line scan rather than a regex: the obvious lookahead
+// (/heading\n(?=\s*(?:#|$))/m) is wrong, because under the `m` flag `$` matches
+// end-of-LINE, so it fires on almost every heading. This also has to respect
+// code fences, where a `#` is a comment and not a heading.
+function pruneEmptySections(text) {
+  const lines = text.split("\n")
+  const isFence = (l) => /^[ \t]*(`{3,}|~{3,})/.test(l)
+  const headingLevel = (l) => {
+    const m = /^(#{1,6})[ \t]+\S/.exec(l)
+    return m ? m[1].length : 0
+  }
+
+  for (;;) {
+    let inFence = false
+    const fenced = lines.map((l) => {
+      if (isFence(l)) {
+        inFence = !inFence
+        return true
+      }
+      return inFence
+    })
+
+    let removed = -1
+    for (let i = 0; i < lines.length && removed < 0; i++) {
+      if (fenced[i]) continue
+      const lvl = headingLevel(lines[i])
+      if (!lvl) continue
+      // Scan to the next heading of any level, or end of file.
+      let empty = true
+      for (let j = i + 1; j < lines.length; j++) {
+        if (!fenced[j] && headingLevel(lines[j])) break
+        if (lines[j].trim() !== "") {
+          empty = false
+          break
+        }
+      }
+      if (empty) removed = i
+    }
+    if (removed < 0) break
+    lines.splice(removed, 1)
+  }
+  return lines.join("\n")
+}
+
+function walk(dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fp = path.join(dir, e.name)
+    if (e.isDirectory()) {
+      if (e.name === ".git" || e.name === ".obsidian" || e.name === ".trash") continue
+      walk(fp, out)
+    } else if (e.isFile() && e.name.endsWith(".md")) {
+      out.push(fp)
+    }
+  }
+  return out
+}
+
+// Folder index, for materialising the listings the Dataview blocks used to
+// generate at read time.
+const allFiles = walk(contentDir)
+const byDir = new Map()
+for (const fp of allFiles) {
+  const rel = path.relative(contentDir, fp)
+  const d = path.dirname(rel)
+  if (!byDir.has(d)) byDir.set(d, [])
+  byDir.get(d).push(rel)
+}
+
+// A note whose ENTIRE body was a Dataview query is left empty by the strip —
+// 64 of 443 here, mostly folder-note MOCs. Quartz cannot run Dataview, so the
+// listing those queries produced is generated statically instead. Deliberately
+// scoped to notes that would otherwise be blank: a note with real prose plus a
+// Dataview table still reads fine, and should not gain a folder index it never
+// had.
+function materialiseListing(fp) {
+  const rel = path.relative(contentDir, fp)
+  const sibs = (byDir.get(path.dirname(rel)) || [])
+    .filter((s) => s !== rel && path.basename(s) !== "index.md")
+    .sort((a, b) => a.localeCompare(b))
+  if (!sibs.length) return ""
+  const links = sibs
+    .map((s) => `- [[${s.replace(/\.md$/i, "")}|${path.basename(s, ".md")}]]`)
+    .join("\n")
+  return `\n\n## Notes in this folder\n\n${links}\n`
+}
+
+let stripped = 0
+let touched = 0
+let materialised = 0
+if (STRIP_DATAVIEW) {
+  for (const fp of walk(contentDir)) {
+    const src = fs.readFileSync(fp, "utf8")
+    let n = 0
+    let out = src.replace(DATAVIEW_FENCE, () => {
+      n++
+      return ""
+    })
+    if (n > 0) {
+      out = pruneEmptySections(out).replace(/\n{3,}/g, "\n\n")
+      // Emptiness is judged on the BODY, ignoring frontmatter.
+      const bodyOnly = out.replace(/^---[\s\S]*?\n---\n?/, "").trim()
+      if (bodyOnly.length < 40) {
+        const listing = materialiseListing(fp)
+        if (listing) {
+          out = out.replace(/\n+$/, "") + listing
+          materialised++
+        }
+      }
+      fs.writeFileSync(fp, out)
+      stripped += n
+      touched++
+    }
+  }
+}
+
+// --- enrichment injection -------------------------------------------------
+// Generated text goes AROUND the note, never into it: a summary callout above
+// the body and a Related section below. The source text between them is
+// reproduced verbatim. Both are visibly marked as machine-generated, because
+// this wiki is where someone looks up a credential or a financial figure and a
+// confident hallucination is worse than no wiki at all.
+let injected = 0
+let linked = 0
+for (const rel of Object.keys(enrichment)) {
+  const fp = path.join(contentDir, rel)
+  if (!fs.existsSync(fp)) continue
+  const e = enrichment[rel]
+  if (!e || (!e.summary && !(e.related || []).length)) continue
+
+  const src = fs.readFileSync(fp, "utf8")
+  let fmEnd = 0
+  if (src.startsWith("---")) {
+    const end = src.indexOf("\n---", 3)
+    if (end >= 0) fmEnd = end + 4
+  }
+  const head = src.slice(0, fmEnd)
+  let body = src.slice(fmEnd).replace(/^\n+/, "")
+
+  // Idempotent: re-preparing must not stack blocks. The staging copy is
+  // recreated each build, but this also protects a hand-run.
+  body = body
+    .replace(/^> \[!abstract\][\s\S]*?(?=\n\n|$)\n*/m, "")
+    .replace(/\n*## Related\n[\s\S]*?(?=\n## |$)/m, "")
+
+  let out = ""
+  if (e.summary) {
+    out += `> [!abstract] Summary\n`
+    out += e.summary.split("\n").filter(Boolean).map((l) => `> ${l}`).join("\n")
+    out += `\n\n`
+    injected++
+  }
+  out += body.replace(/\n+$/, "")
+  if ((e.related || []).length) {
+    out += `\n\n## Related\n\n`
+    out += e.related.map((r) => `- [[${r.path}|${r.title}]]`).join("\n")
+    out += `\n`
+    linked++
+  }
+  fs.writeFileSync(fp, `${head}${head ? "\n" : ""}${out}\n`)
+}
+
+// Root index — only when the vault does not already provide one.
+const indexPath = path.join(contentDir, "index.md")
+let wroteIndex = false
+if (!fs.existsSync(indexPath)) {
+  const skip = new Set(["static"])
+  const sections = fs
+    .readdirSync(contentDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith(".") && !skip.has(d.name))
+    .map((d) => d.name)
+    .sort((a, b) => a.localeCompare(b))
+
+  const body = sections.map((s) => `- [[${s}/|${s}]]`).join("\n")
+  fs.writeFileSync(
+    indexPath,
+    `---\ntitle: "${title.replace(/"/g, '\\"')}"\n---\n\n` +
+      `${sections.length} section${sections.length === 1 ? "" : "s"}. ` +
+      `Use the explorer, search, or the graph to navigate.\n\n${body}\n`,
+  )
+  wroteIndex = true
+}
+
+console.log(
+  `prepared ${contentDir}: stripped ${stripped} dataview block(s) in ${touched} file(s)` +
+    `${wroteIndex ? ", wrote index.md" : ", index.md already present"}` +
+    `, materialised ${materialised} folder listing(s)` +
+    `; enrichment: ${injected} summaries, ${linked} related blocks`,
+)

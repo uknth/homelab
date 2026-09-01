@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# Managed by Ansible — services/knowledge/vaultsync. Runs on cmp01.
+#
+#   vault-ingest.sh --setup    link + configure each vault (one-time, after `ob login`)
+#   vault-ingest.sh --sync     pull every vault from Obsidian Sync
+#   vault-ingest.sh --all      sync, then reindex + rebuild the wiki if changed
+#   vault-ingest.sh --status   replay the last run as JSON
+#
+# n8n invokes this through a forced-command SSH key, so the requested arguments
+# arrive in SSH_ORIGINAL_COMMAND rather than as real argv. They are whitelisted
+# below — that key cannot run anything else, with any other flags.
+set -uo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+ROOT="{{ vaultsync_root_dir }}"
+VAULTS_DIR="$ROOT/vaults"
+STATE="$ROOT/state.json"
+NTFY="{{ vaultsync_ntfy_url }}/{{ vaultsync_ntfy_topic }}"
+MERGE_SCRIPT="{{ vaultsync_merge_script }}"
+WIKI_SCRIPT="{{ vaultsync_wiki_script }}"
+INDEX_SCRIPT="{{ vaultsync_index_script }}"
+
+VAULT_NAMES="{% for v in vaultsync_vaults %}{{ v.name }} {% endfor %}"
+
+# E2E encryption passwords, one per vault. Kept out of this script so it can
+# stay readable and diffable; the secrets file is 0600 and never enters git.
+SECRETS="$ROOT/sync-secrets"
+# shellcheck source=/dev/null
+[ -r "$SECRETS" ] && . "$SECRETS"
+
+ob() { docker exec -u {{ vaultsync_uid }}:{{ vaultsync_gid }} vaultsync ob "$@"; }
+
+notify() {
+  # $1 title, $2 body, $3 priority (default 3)
+  curl -fsS -m 15 \
+    -H "Title: $1" -H "Priority: ${3:-3}" -H "Tags: books" \
+    -d "$2" "$NTFY" >/dev/null 2>&1 || echo "warn: ntfy post failed" >&2
+}
+
+# Change detection is done here rather than by parsing `ob sync` output: the
+# CLI is 0.0.x and its output format is not contract. A fingerprint over the
+# mirror's markdown (mtime + size + path) is cheap at ~450 files and cannot
+# drift from what the indexer and Quartz will actually see.
+fingerprint() {
+  find "$VAULTS_DIR" -type f -name '*.md' -printf '%T@ %s %p\n' 2>/dev/null \
+    | LC_ALL=C sort | sha256sum | cut -d' ' -f1
+}
+
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+write_state() {
+  # $1 ok(true/false)  $2 changed(true/false)  $3 stage  $4 detail
+  #
+  # Compact, single-line JSON: it is echoed below behind a RESULT marker so the
+  # caller can find it unambiguously. Parsing "the first { in stdout" would
+  # break the moment `ob sync` or the Quartz build printed a brace of its own.
+  local vaults=""
+  for v in $VAULT_NAMES; do
+    n=$(find "$VAULTS_DIR/$v" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+    vaults="${vaults}{\"name\":\"${v}\",\"notes\":${n}},"
+  done
+  vaults="${vaults%,}"
+  printf '{"checked_at":"%s","ok":%s,"changed":%s,"stage":"%s","detail":"%s","vaults":[%s]}\n' \
+    "$(date -Is)" "$1" "$2" "$(json_escape "$3")" "$(json_escape "$4")" "$vaults" > "$STATE"
+  echo "RESULT $(cat "$STATE")"
+}
+
+# Serialise ingests. The hourly n8n tick must not start a second `ob sync` over
+# vaults a previous run is still pulling — the first sync of a large vault takes
+# far longer than the interval. A blocked tick reports success and skips rather
+# than failing, so it does not raise a false alert.
+take_lock() {
+  # Degrade to unlocked rather than to never-running: if flock were missing and
+  # this returned failure, EVERY run would silently skip, which is worse than
+  # the overlap the lock exists to prevent.
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "warn: flock unavailable — running without a lock" >&2
+    return 0
+  fi
+  exec 9>"$ROOT/.ingest.lock" || return 0
+  if ! flock -n 9; then
+    printf 'RESULT {"checked_at":"%s","ok":true,"changed":false,"stage":"locked","detail":"another ingest is already running","vaults":[]}\n' "$(date -Is)"
+    return 1
+  fi
+  return 0
+}
+
+require_container() {
+  if ! docker ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -qx vaultsync; then
+    echo "vaultsync container is not running" >&2
+    return 1
+  fi
+}
+
+# --- stages ------------------------------------------------------------------
+
+do_setup() {
+  # One-time, run by hand after `docker exec -it vaultsync ob login`. Linking
+  # needs the remote vault to already exist in Obsidian Sync; this only creates
+  # the LOCAL link and applies our sync policy to it.
+  require_container || return 1
+  local rc=0
+{% for v in vaultsync_vaults %}
+  echo "== {{ v.name }} =="
+  if ob sync-list-local 2>/dev/null | grep -q '/vaults/{{ v.name }}'; then
+    echo "already linked, re-asserting config"
+  else
+    # The vaults are end-to-end encrypted. `ob sync-setup` prompts for the
+    # password when it is omitted, but there is no TTY here, so it must be
+    # passed. It is only ever needed on this first link.
+    eval "pw=\${PW_{{ v.name }}:-}"
+    if [ -z "$pw" ]; then
+      echo "no E2E password configured for {{ v.name }} — set vault_obsidian_e2e_{{ v.name }}" >&2
+      echo "in hosts/group_vars/all/vault.yml, or link this vault by hand:" >&2
+      echo "  docker exec -it vaultsync ob sync-setup --vault {{ v.remote }} --path /vaults/{{ v.name }} --device-name {{ vaultsync_device_name }}" >&2
+      rc=1
+    else
+      ob sync-setup --vault {{ v.remote | quote }} --path /vaults/{{ v.name }} \
+         --password "$pw" \
+         --device-name {{ vaultsync_device_name | quote }} || rc=1
+    fi
+  fi
+  ob sync-config --path /vaults/{{ v.name }} \
+     --mode {{ vaultsync_mode }} \
+     --file-types {{ vaultsync_file_types | quote }} \
+     --configs {{ vaultsync_configs | quote }} \
+     --excluded-folders {{ v.excluded_folders | default('') | quote }} \
+     --device-name {{ vaultsync_device_name | quote }} || rc=1
+{% endfor %}
+  return $rc
+}
+
+do_sync() {
+  require_container || return 1
+  local rc=0
+  for v in $VAULT_NAMES; do
+    echo "== syncing $v =="
+    ob sync --path "/vaults/$v" || { echo "sync failed: $v" >&2; rc=1; }
+  done
+  return $rc
+}
+
+# --- argument handling -------------------------------------------------------
+# Under the forced-command key the caller's request lands here, not in argv.
+if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
+  ARGS="$SSH_ORIGINAL_COMMAND"
+  # n8n's SSH node prepends a working-directory hop — `cd <dir> ; <command>`
+  # (semicolon; other clients use `&&`). Strip either form before parsing, or a
+  # strict parser exits non-zero and the job fails silently. Same fix as
+  # ops/maintenance and ops/wanwatch.
+  ARGS="$(printf '%s' "$ARGS" | sed -E 's/^[[:space:]]*cd[[:space:]]+[^;&]*(&&|;)[[:space:]]*//')"
+  # shellcheck disable=SC2086
+  set -- $ARGS
+fi
+
+MODE="${1:-}"
+case "$MODE" in
+  --setup)
+    take_lock || exit 0
+    do_setup
+    exit $?
+    ;;
+
+  --status)
+    [ -f "$STATE" ] && cat "$STATE" || echo '{"checked_at":null,"ok":false,"detail":"never run"}'
+    exit 0
+    ;;
+
+  --sync|--all)
+    take_lock || exit 0
+    BEFORE="$(fingerprint)"
+    if ! do_sync; then
+      write_state false false sync "one or more vaults failed to sync"
+      notify "Vault ingest FAILED" "ob sync failed on cmp01 — see the vaultsync container" 4
+      exit 1
+    fi
+    AFTER="$(fingerprint)"
+    CHANGED=false
+    [ "$BEFORE" != "$AFTER" ] && CHANGED=true
+
+    if [ "$MODE" = "--sync" ]; then
+      write_state true "$CHANGED" sync "sync only"
+      exit 0
+    fi
+
+    # Downstream stages are skipped when nothing moved: a quiet hour costs one
+    # SSH round-trip and no GPU work.
+    if [ "$CHANGED" != true ]; then
+      write_state true false idle "no changes"
+      exit 0
+    fi
+
+    # Dissolve the three vaults into one topic tree. Everything downstream —
+    # wiki and index alike — consumes the merged tree, not the raw mirrors.
+    if [ -x "$MERGE_SCRIPT" ]; then
+      if ! "$MERGE_SCRIPT"; then
+        write_state false true merge "vault merge failed"
+        notify "Vault ingest FAILED" "merge failed on cmp01" 4
+        exit 1
+      fi
+    fi
+
+    # Phase 9c. Absent today — picked up automatically once the role lands.
+    if [ -x "$INDEX_SCRIPT" ]; then
+      if ! "$INDEX_SCRIPT"; then
+        write_state false true index "reindex failed"
+        notify "Vault ingest FAILED" "reindex failed on cmp01" 4
+        exit 1
+      fi
+    fi
+
+    if [ -x "$WIKI_SCRIPT" ]; then
+      if ! "$WIKI_SCRIPT"; then
+        write_state false true wiki "quartz build failed"
+        notify "Vault ingest FAILED" "quartz build failed on cmp01" 4
+        exit 1
+      fi
+    else
+      write_state true true wiki "quartz not installed — sync only"
+      exit 0
+    fi
+
+    write_state true true done "sync + wiki rebuilt"
+    exit 0
+    ;;
+
+  *)
+    echo "usage: vault-ingest.sh --setup|--sync|--all|--status" >&2
+    exit 2
+    ;;
+esac

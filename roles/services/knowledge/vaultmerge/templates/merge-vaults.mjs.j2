@@ -1,0 +1,270 @@
+// Managed by Ansible — services/knowledge/vaultmerge
+//
+// Merges the three vault mirrors into ONE topic-organised tree.
+//
+//   /vaults/{pikachu,snorlax,psyduck}   read-only mirrors  ->  /merged/<Topic>/...
+//
+// Three jobs, in order, because each depends on the last:
+//   1. Assign every note a topic (longest path rule, then tags, then Inbox).
+//   2. Resolve name collisions deterministically.
+//   3. Rewrite every wikilink to its new path, resolved WITHIN its source vault
+//      first, so merging never silently re-points a link at another vault's note.
+import fs from "fs"
+import path from "path"
+
+// Paths are arguments so the merge can be exercised outside the container.
+const SRC = process.argv[2] || "/vaults"
+const OUT = process.argv[3] || "/merged"
+
+const SOURCES = {{ vaultmerge_sources | to_json }}
+const PATH_TOPICS = {{ vaultmerge_path_topics | to_json }}
+const TAG_TOPICS = {{ vaultmerge_tag_topics | to_json }}
+const DEFAULT_TOPIC = {{ vaultmerge_default_topic | to_json }}
+const EXCLUDE_DIRS = new Set({{ vaultmerge_exclude_dirs | to_json }})
+const EXCLUDE_GLOBS = {{ vaultmerge_exclude_globs | to_json }}
+
+// Longest prefix wins regardless of the order the rules are written in.
+const RULES = [...PATH_TOPICS].sort((a, b) => b.match.length - a.match.length)
+
+const excluded = (name) =>
+  EXCLUDE_GLOBS.some((g) => {
+    const re = new RegExp("^" + g.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$", "i")
+    return re.test(name)
+  })
+
+function walk(dir, base = dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (EXCLUDE_DIRS.has(e.name)) continue
+    const fp = path.join(dir, e.name)
+    if (e.isDirectory()) walk(fp, base, out)
+    else if (e.isFile() && !excluded(e.name)) out.push(path.relative(base, fp))
+  }
+  return out
+}
+
+// --- frontmatter ----------------------------------------------------------
+function splitFrontmatter(text) {
+  if (!text.startsWith("---")) return { fm: null, body: text }
+  const end = text.indexOf("\n---", 3)
+  if (end < 0) return { fm: null, body: text }
+  return { fm: text.slice(4, end), body: text.slice(end + 4).replace(/^\n/, "") }
+}
+
+// Deliberately not a YAML parser: we only need the tag list, and pulling in a
+// dependency to read it would mean an npm install in the merge path.
+function tagsOf(fm) {
+  if (!fm) return []
+  const tags = []
+  const inline = /^tags:\s*\[([^\]]*)\]/m.exec(fm)
+  if (inline) tags.push(...inline[1].split(",").map((t) => t.trim().replace(/^["']|["']$/g, "")))
+  const block = /^tags:\s*\n((?:[ \t]*-[^\n]*\n?)+)/m.exec(fm)
+  if (block) {
+    for (const line of block[1].split("\n")) {
+      const m = /^[ \t]*-\s*(.+?)\s*$/.exec(line)
+      if (m) tags.push(m[1].replace(/^["']|["']$/g, ""))
+    }
+  }
+  return tags.filter(Boolean)
+}
+
+function topicFor(vault, rel, tags) {
+  const key = `${vault}/${rel}`.split(path.sep).join("/")
+  for (const r of RULES) if (key === r.match || key.startsWith(r.match + "/")) return r.topic
+  for (const t of tags) if (TAG_TOPICS[t]) return TAG_TOPICS[t]
+  return DEFAULT_TOPIC
+}
+
+// --- pass 1: classify -----------------------------------------------------
+const notes = []
+for (const vault of Object.keys(SOURCES)) {
+  const vdir = path.join(SRC, vault)
+  if (!fs.existsSync(vdir)) continue
+  for (const rel of walk(vdir)) {
+    const isMd = rel.toLowerCase().endsWith(".md")
+    const full = path.join(vdir, rel)
+    let fm = null
+    let body = ""
+    if (isMd) {
+      const raw = fs.readFileSync(full, "utf8")
+      ;({ fm, body } = splitFrontmatter(raw))
+    }
+    const tags = isMd ? tagsOf(fm) : []
+    notes.push({
+      vault,
+      src: SOURCES[vault],
+      rel,
+      full,
+      isMd,
+      fm,
+      body,
+      topic: isMd ? topicFor(vault, rel, tags) : topicFor(vault, rel, []),
+      base: path.basename(rel),
+    })
+  }
+}
+
+// --- pass 2: target paths, collisions resolved deterministically ----------
+// A note's path inside its topic drops the prefix that matched the rule, so
+// Career/ does not become Career/Notes/Interview/.
+function subPath(n) {
+  const key = `${n.vault}/${n.rel}`.split(path.sep).join("/")
+  for (const r of RULES) {
+    if (key === r.match || key.startsWith(r.match + "/")) {
+      const rest = key.slice(r.match.length).replace(/^\//, "")
+      return rest || n.base
+    }
+  }
+  return n.rel.split(path.sep).join("/")
+}
+
+for (const n of notes) n.want = `${n.topic}/${subPath(n)}`
+
+// Every member of a colliding set gets the source segment — not just the
+// losers — so the result never depends on processing order.
+const byWant = new Map()
+for (const n of notes) {
+  if (!byWant.has(n.want)) byWant.set(n.want, [])
+  byWant.get(n.want).push(n)
+}
+let collisions = 0
+for (const [want, group] of byWant) {
+  if (group.length === 1) {
+    group[0].dest = want
+    continue
+  }
+  collisions += group.length
+  for (const n of group) {
+    const d = path.dirname(want)
+    const b = path.basename(want)
+    n.dest = d === "." ? `${n.topic}/${n.src}/${b}` : `${d}/${n.src}/${b}`
+  }
+}
+
+// --- pass 3: link resolution ---------------------------------------------
+// Per-vault lookup tables. Obsidian resolves a bare [[Name]] against the whole
+// vault, so both an exact-path and a basename index are needed.
+const byVault = {}
+for (const n of notes) {
+  const v = (byVault[n.vault] ||= { byPath: new Map(), byName: new Map() })
+  const noExt = n.rel.replace(/\.md$/i, "").split(path.sep).join("/")
+  v.byPath.set(noExt.toLowerCase(), n)
+  v.byPath.set(n.rel.split(path.sep).join("/").toLowerCase(), n)
+  const nameNoExt = n.base.replace(/\.md$/i, "").toLowerCase()
+  if (!v.byName.has(nameNoExt)) v.byName.set(nameNoExt, [])
+  v.byName.get(nameNoExt).push(n)
+  if (!n.isMd) {
+    if (!v.byName.has(n.base.toLowerCase())) v.byName.set(n.base.toLowerCase(), [])
+    v.byName.get(n.base.toLowerCase()).push(n)
+  }
+}
+
+function resolve(vault, target) {
+  const v = byVault[vault]
+  if (!v) return null
+  const t = target.trim().replace(/^\.\//, "")
+  const hit = v.byPath.get(t.toLowerCase()) || v.byPath.get(t.toLowerCase().replace(/\.md$/i, ""))
+  if (hit) return hit
+  const cands = v.byName.get(path.basename(t).toLowerCase().replace(/\.md$/i, ""))
+  if (cands && cands.length) {
+    // Deterministic when a vault has several notes of the same name.
+    return [...cands].sort((a, b) => a.rel.localeCompare(b.rel))[0]
+  }
+  return null
+}
+
+// [[target#heading|alias]] and the ![[...]] embed form.
+const WIKILINK = /(!?)\[\[([^\]|#^]+)((?:[#^][^\]|]*)?)(?:\|([^\]]*))?\]\]/g
+
+let rewritten = 0
+let unresolved = 0
+const dangling = new Map()
+
+// Rewrite links only OUTSIDE fenced code. A shell snippet containing [[ ... ]]
+// is a test expression, not a wikilink, and rewriting it would corrupt the
+// code sample — the dangling report caught exactly that (`-z "$url`).
+function rewriteOutsideCode(text, fn) {
+  const lines = text.split("\n")
+  let inFence = false
+  for (let i = 0; i < lines.length; i++) {
+    if (/^[ \t]*(`{3,}|~{3,})/.test(lines[i])) {
+      inFence = !inFence
+      continue
+    }
+    if (!inFence) lines[i] = fn(lines[i])
+  }
+  return lines.join("\n")
+}
+for (const n of notes) {
+  if (!n.isMd) continue
+  n.body = rewriteOutsideCode(n.body, (line) =>
+    line.replace(WIKILINK, (m, bang, target, anchor, alias) => {
+    const hit = resolve(n.vault, target)
+    if (!hit) {
+      unresolved++
+      const k = `${n.vault}|${target.trim()}`
+      dangling.set(k, (dangling.get(k) || 0) + 1)
+      return m
+    }
+    rewritten++
+    const dest = hit.dest.replace(/\.md$/i, "")
+    // Keep the display text short: without an explicit alias the reader would
+    // otherwise see the full merged path.
+    const shown = alias !== undefined ? alias : path.basename(target)
+    return `${bang}[[${dest}${anchor || ""}|${shown}]]`
+    }),
+  )
+}
+
+// --- write ----------------------------------------------------------------
+// Clear the CONTENTS, not the directory: OUT is a bind mount and rmdir on a
+// mount point fails with EACCES. Emptying it keeps the merge a clean rebuild
+// (notes deleted upstream must disappear here too) without touching the mount.
+fs.mkdirSync(OUT, { recursive: true })
+for (const e of fs.readdirSync(OUT)) {
+  fs.rmSync(path.join(OUT, e), { recursive: true, force: true })
+}
+for (const n of notes) {
+  const dest = path.join(OUT, n.dest)
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  if (!n.isMd) {
+    fs.copyFileSync(n.full, dest)
+    continue
+  }
+  // Provenance lives in frontmatter, not in the folder tree — that is what
+  // "vaults dissolved" means, but where a note came from stays queryable.
+  //
+  // Namespaced keys, not `source:`/`topic:`: notes already use `source:` for
+  // their own citation metadata, and a duplicate YAML key fails the whole
+  // build. Any previous run's keys are stripped first so re-merging is
+  // idempotent rather than accumulating.
+  const extra = `merged_from: ${n.vault}\nmerged_topic: ${n.topic}\n`
+  const cleaned =
+    n.fm === null
+      ? null
+      : n.fm.replace(/^merged_(?:from|topic):[^\n]*\n?/gim, "").replace(/\n+$/, "")
+  const fm = cleaned === null ? extra : `${cleaned}\n${extra}`
+  fs.writeFileSync(dest, `---\n${fm}---\n\n${n.body.replace(/^\n+/, "")}`)
+}
+
+// A link that does not resolve is almost always already dangling in Obsidian —
+// a person mentioned in a meeting note, a note since deleted, a template
+// placeholder. Reported rather than silently swallowed so the difference
+// between "broken in the vault" and "broken by the merge" stays visible.
+const report = [...dangling.entries()]
+  .map(([k, count]) => {
+    const [vault, target] = k.split("|")
+    return { vault, target, count }
+  })
+  .sort((a, b) => b.count - a.count || a.target.localeCompare(b.target))
+fs.writeFileSync(path.join(OUT, ".dangling-links.json"), JSON.stringify(report, null, 2))
+
+const perTopic = {}
+for (const n of notes) if (n.isMd) perTopic[n.topic] = (perTopic[n.topic] || 0) + 1
+console.log(
+  `merged ${notes.filter((n) => n.isMd).length} notes + ` +
+    `${notes.filter((n) => !n.isMd).length} attachments into ${OUT}\n` +
+    `  topics: ${Object.entries(perTopic).sort().map(([t, c]) => `${t}=${c}`).join(" ")}\n` +
+    `  collisions disambiguated: ${collisions}\n` +
+    `  links rewritten: ${rewritten}, unresolved: ${unresolved} ` +
+    `(${report.length} distinct; see ${OUT}/.dangling-links.json)`,
+)

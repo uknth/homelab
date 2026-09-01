@@ -1,0 +1,10 @@
+---
+# Guarded like the deploy task: under --check on a host that has never had this
+# role applied, the compose dir does not exist and restarting is meaningless.
+- name: Restart vaultsync
+  become: true
+  when: not ansible_check_mode or _vaultsync_deployed.stat.exists | default(false)
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultsync_root_dir }}/compose"
+    project_name: "vaultsync"
+    state: restarted

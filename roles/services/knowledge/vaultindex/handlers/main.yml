@@ -1,0 +1,8 @@
+---
+- name: Restart vaultindex
+  become: true
+  when: not ansible_check_mode or _vaultindex_deployed.stat.exists | default(false)
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultindex_root_dir }}/compose"
+    project_name: "vaultindex"
+    state: restarted

@@ -1,0 +1,21 @@
+# Managed by Ansible — services/knowledge/quartz
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html/site;
+    index index.html;
+
+    # Quartz emits clean URLs as <page>.html plus per-folder index.html, so a
+    # bare /pikachu/Notes/Foo must fall through to Foo.html before 404ing.
+    location / {
+        try_files $uri $uri/ $uri.html =404;
+    }
+
+    # Generated assets are content-hashed; the HTML around them is not.
+    location ~* \.(css|js|woff2?|svg|png|jpg|jpeg|gif|webp)$ {
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    access_log off;
+}

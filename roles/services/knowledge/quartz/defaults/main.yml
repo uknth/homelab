@@ -1,0 +1,63 @@
+---
+# services/knowledge/quartz — the read-only wiki at wiki.puhome.net.
+#
+# Quartz is a static site generator that is Obsidian-native: it resolves
+# [[wikilinks]], transclusions and callouts, and generates backlinks and a graph
+# without conversion. Output is plain HTML served by nginx — no database and no
+# application server, which is the whole point: the vaults stay the single
+# writer and this is a disposable read model (docs/spec/knowledge.md).
+#
+# Quartz is a template repo, not an npm package, so it is git-cloned at a pinned
+# tag. v5 reads `quartz.config.yaml` from the working directory and has no
+# --config flag, hence the per-vault config swap in quartz-build.sh.
+
+quartz_root_dir: "{{ service_root }}/quartz"          # /opt/homelab/quartz
+quartz_repo: "https://github.com/jackyzha0/quartz.git"
+quartz_version: "v5.0.0"
+
+# node:22 (full), not -slim: `quartz plugin install` shells out to `git clone`
+# to fetch each community plugin, and the slim image ships no git. Upstream's
+# own Dockerfile uses -slim and gets away with it only because it never re-runs
+# the install.
+quartz_builder_image: "node:22"
+quartz_web_image: "nginx:alpine"
+quartz_port: 8101
+
+quartz_uid: "{{ media_uid }}"
+quartz_gid: "{{ media_gid }}"
+
+# Source content is the MERGED tree, not the per-vault mirrors: the wiki is one
+# topic-organised site, not three vault sites (docs/spec/knowledge.md).
+# Mounted read-only into the builder.
+quartz_content_dir: "{{ vaultmerge_out_dir | default(service_root + '/vaultmerge/merged') }}"
+
+quartz_build_script: "{{ service_root }}/quartz/quartz-build.sh"
+
+# Enrichment sidecar produced by services/knowledge/vaultindex.
+quartz_enrich_dir: "{{ vaultindex_root_dir | default(service_root + '/vaultindex') }}/data"
+
+# Quartz cannot execute Obsidian's Dataview plugin, so ```dataviewjs fences
+# would render as raw JavaScript. The vault uses them for folder-note MOCs,
+# and Quartz's own folder pages + explorer already do that job.
+quartz_strip_dataview: true
+
+quartz_domain: "wiki.{{ base_domain }}"
+
+# ONE site. The earlier per-vault split was reversed 2026-09-01: the vault
+# boundaries are the thing the wiki exists to remove, and vaultmerge has already
+# dissolved them, so wikilinks now resolve across what used to be three vaults.
+quartz_site_title: "Homelab Wiki"
+
+# Vault machinery, not content. Note Secrets/ and Finances/ are deliberately
+# absent — per the user's 2026-09-01 decision the wiki publishes them, since it
+# is LAN-only and Authentik-gated.
+quartz_ignore_patterns:
+  # Most exclusion now happens upstream in vaultmerge, which never copies Utils/
+  # or plugin state into the merged tree. These stay as a backstop: one bad file
+  # aborts the whole build, so a drawing that slipped through would take the
+  # entire site down.
+  - "**/*.excalidraw.md"
+  - "**/*.excalidraw"
+  - ".obsidian"
+  - ".trash"
+  - ".git"

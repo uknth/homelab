@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Managed by Ansible — services/knowledge/quartz. Runs on cmp01.
+#
+# Builds THE wiki — one site, from the merged topic tree that vaultmerge
+# produces. Invoked by vault-ingest.sh after the merge, and safe to run by hand.
+#
+# The CLI is invoked directly rather than via `npx quartz`: npx link-installs the
+# package into an _npx cache under HOME and that cache symlinks back to /src,
+# which is both pointless work and a path loop. bootstrap-cli.mjs is the same
+# entry point package.json's bin points at.
+set -uo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+RC=0
+q() { docker exec -u {{ quartz_uid }}:{{ quartz_gid }} -w /src quartz-build "$@"; }
+
+if ! docker ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -qx quartz-build; then
+  echo "quartz-build container is not running" >&2
+  exit 1
+fi
+
+if [ -z "$(ls -A '{{ quartz_content_dir }}' 2>/dev/null)" ]; then
+  echo "no merged content yet — run the merge first" >&2
+  exit 1
+fi
+
+# Build from a writable copy: content prep strips Dataview blocks and adds a
+# root index.md, and the merged tree is the indexer's input too — neither stage
+# should mutate the other's source.
+q sh -c 'rm -rf /content/wiki && mkdir -p /content/wiki && cp -a /merged/. /content/wiki/' || RC=1
+q node /src/prepare-content.mjs /content/wiki {{ quartz_site_title | quote }} || RC=1
+
+# Stage and swap, so a failed build leaves the served wiki intact rather than
+# half-replacing it. The swap runs inside the container: /out is owned by the
+# container uid and this script runs as the SSH user.
+if q node /src/quartz/bootstrap-cli.mjs build -d /content/wiki -o /out/.staging; then
+  q sh -c 'rm -rf /out/site.old; \
+           [ -d /out/site ] && mv /out/site /out/site.old; \
+           mv /out/.staging /out/site; \
+           rm -rf /out/site.old' || RC=1
+else
+  echo "wiki build failed" >&2
+  q rm -rf /out/.staging
+  RC=1
+fi
+
+exit $RC

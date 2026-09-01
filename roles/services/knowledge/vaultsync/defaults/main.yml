@@ -1,0 +1,91 @@
+---
+# services/knowledge/vaultsync — read-only mirror of the Obsidian vaults on cmp01.
+#
+# Transport is the OFFICIAL Obsidian headless Sync client
+# (https://obsidian.md/help/sync/headless), not Syncthing and not git: the vaults
+# already live in Obsidian Sync, so this adds no second sync mechanism. See
+# docs/spec/knowledge.md.
+#
+# The client runs in a container because obsidian-headless needs Node >= 22 and
+# Debian ships older; a node:22-slim container avoids adding the NodeSource apt
+# repo to cmp01 for one CLI. npm's global prefix and HOME are both volumes, so
+# the install and the `ob login` session survive container replacement.
+
+vaultsync_root_dir: "{{ service_root }}/vaultsync"       # /opt/homelab/vaultsync
+vaultsync_image: "node:22-slim"
+
+# Pinned deliberately: obsidian-headless is 0.0.x and Diun does not watch npm,
+# so nothing will tell us when this moves. Bump by hand.
+vaultsync_headless_version: "0.0.14"
+
+vaultsync_uid: "{{ media_uid }}"
+vaultsync_gid: "{{ media_gid }}"
+
+# The vaults to mirror. `remote` is the vault name as Obsidian Sync knows it
+# (`ob sync-list-remote`); `name` is the local directory and the wiki path.
+#
+# Per the user's 2026-09-01 decision, Secrets/ and Finances/ are NOT excluded —
+# every surface here is LAN-only and Authentik-gated. Set `excluded_folders` on
+# a vault to change that; it maps to `ob sync-config --excluded-folders`.
+#
+# `password` is the vault's end-to-end encryption password. Each remote vault
+# has its OWN key, so there is deliberately no shared fallback — a global
+# default could only ever resolve to the wrong password, and would fail at
+# decrypt time rather than at configuration time. Leave one empty to link that
+# vault by hand instead; --setup prints the command for it.
+#
+# Needed only when FIRST linking a vault. Re-running --setup on an already
+# linked vault re-asserts its config and never asks again.
+vaultsync_vaults:
+  - name: pikachu
+    remote: Pikachu
+    password: "{{ vault_obsidian_e2e_pikachu | default('') }}"
+    excluded_folders: ""
+  - name: snorlax
+    remote: Snorlax
+    password: "{{ vault_obsidian_e2e_snorlax | default('') }}"
+    excluded_folders: ""
+  - name: psyduck
+    remote: Psyduck
+    password: "{{ vault_obsidian_e2e_psyduck | default('') }}"
+    excluded_folders: ""
+
+# mirror-remote = "only download, revert local changes". This is the golden rule
+# as a mechanism rather than a convention: nothing downstream can write back
+# into a vault, and a stray local edit is undone rather than merely ignored.
+vaultsync_mode: "mirror-remote"
+
+# Attachments worth serving on the wiki. Skips audio/video/unsupported, which is
+# most of the vaults' bulk and none of their content.
+vaultsync_file_types: "image,pdf"
+
+# Config categories to sync. Empty: .obsidian is vault machinery, not content,
+# and never needs to reach cmp01 (this is also why the plugin-state exclusions
+# in the spec need no explicit rule).
+vaultsync_configs: ""
+
+vaultsync_device_name: "cmp01-knowledge"
+
+# Ingest entry point. n8n calls this over a forced-command SSH key; it takes no
+# free-form arguments (see the whitelist in the script).
+vaultsync_script: "{{ service_root }}/vaultsync/vault-ingest.sh"
+
+# The merge stage: three vaults -> one topic tree. Optional in the same way as
+# the wiki stage, so vaultsync stays useful standalone.
+vaultsync_merge_script: "{{ service_root }}/vaultmerge/merge-vaults.sh"
+
+# The wiki build stage. Optional: if the quartz role has not run, --all still
+# syncs and simply reports the wiki stage as skipped.
+vaultsync_wiki_script: "{{ service_root }}/quartz/quartz-build.sh"
+
+# Phase 9b. Absent today; --all picks it up automatically once it exists.
+vaultsync_index_script: "{{ service_root }}/vaultindex/reindex.sh"
+
+# Every run reports here, pass or fail — no silent jobs.
+vaultsync_ntfy_url: "http://{{ hostvars['util01'].ansible_host }}:{{ ntfy_port | default(8091) }}"
+vaultsync_ntfy_topic: "homelab-jobs"
+
+# SSH key n8n uses to invoke the script. Generated on util01 (where n8n runs and
+# where its credential is imported from); cmp01 only receives the public half.
+vaultsync_key_dir: "{{ service_root }}/vaultsync"
+vaultsync_key_path: "{{ service_root }}/vaultsync/n8n_vault_ed25519"

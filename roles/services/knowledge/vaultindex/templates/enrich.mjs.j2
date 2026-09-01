@@ -1,0 +1,258 @@
+// Managed by Ansible — services/knowledge/vaultindex
+//
+// Reads the merged tree and produces, per note, a summary and a list of related
+// notes. Output is a single sidecar file; the merged tree is never modified,
+// because it is this stage's input and Quartz's alike.
+//
+// Everything is keyed by note content-hash. A note whose text has not changed is
+// never re-embedded and never re-summarised, so the hourly run costs nothing
+// until something is actually edited.
+import fs from "fs"
+import path from "path"
+import crypto from "crypto"
+
+// --check  : report how many notes need summarising, touching no model at all.
+//            reindex.sh uses this to decide whether starting the 6.8 GiB model
+//            is worth it — usually it is not, because nothing changed.
+// --no-llm : embeddings and related links only.
+const args = process.argv.slice(2)
+const CHECK_ONLY = args.includes("--check")
+const NO_LLM = args.includes("--no-llm")
+const pos = args.filter((a) => !a.startsWith("--"))
+const MERGED = pos[0] || "/merged"
+const OUT = pos[1] || "/data"
+
+const EMBED_URL = "http://vaultindex-embed:{{ vaultindex_embed_port }}"
+const LLM_URL = "http://vaultindex-llm:{{ vaultindex_llm_port }}"
+const RELATED_N = {{ vaultindex_related_count }}
+const MIN_SCORE = {{ vaultindex_related_min_score }}
+const SUMMARY_MIN = {{ vaultindex_summary_min_chars }}
+const RELATED_MIN = {{ vaultindex_related_min_chars }}
+const SUMMARY_INPUT = {{ vaultindex_summary_input_chars }}
+const SUMMARY_TOKENS = {{ vaultindex_summary_max_tokens }}
+// bge-small has a HARD 512-token limit (max_position_embeddings) — an
+// architectural property of the model, not a setting. llama.cpp rejects an
+// over-long input outright rather than truncating.
+//
+// So rather than embedding only a note's opening, the note is split into
+// windows that each fit, embedded separately, and the vectors averaged
+// (mean-pooling). The whole note therefore contributes to how it ranks against
+// every other note, which is the point of the related-links layer. English runs
+// ~3.7 chars/token here, so 1500 chars per window leaves real headroom.
+const EMBED_WINDOW_CHARS = 1500
+// Cap the windows per note: past ~15k chars the average stops moving and this
+// is a ranking signal, not a reproduction of the text.
+const EMBED_MAX_WINDOWS = 10
+
+const CACHE_PATH = path.join(OUT, "cache.json")
+const SIDECAR_PATH = path.join(OUT, "enrichment.json")
+
+const cache = fs.existsSync(CACHE_PATH) ? JSON.parse(fs.readFileSync(CACHE_PATH, "utf8")) : {}
+
+function walk(dir, base = dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue
+    const fp = path.join(dir, e.name)
+    if (e.isDirectory()) walk(fp, base, out)
+    else if (e.isFile() && e.name.endsWith(".md")) out.push(path.relative(base, fp))
+  }
+  return out
+}
+
+function stripFrontmatter(t) {
+  if (!t.startsWith("---")) return t
+  const end = t.indexOf("\n---", 3)
+  return end < 0 ? t : t.slice(end + 4)
+}
+
+// Strip the markup that carries no meaning for either embedding or summarising:
+// link syntax, fences, images. Keeps the signal density high in a 512-token
+// embedding window.
+function plain(t) {
+  return stripFrontmatter(t)
+    .replace(/^[ \t]*(`{3,}|~{3,})[\s\S]*?^[ \t]*\1[ \t]*$/gm, " ")
+    .replace(/!\[\[[^\]]*\]\]/g, " ")
+    .replace(/\[\[([^\]|]*)\|?([^\]]*)\]\]/g, (m, a, b) => b || a)
+    .replace(/`[^`]*`/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[#*_>|-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+async function post(url, body, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      return await r.json()
+    } catch (e) {
+      if (i === tries - 1) throw e
+      await new Promise((r) => setTimeout(r, 2000 * (i + 1)))
+    }
+  }
+}
+
+async function embedOne(text) {
+  const r = await post(`${EMBED_URL}/embedding`, { content: text })
+  const v = Array.isArray(r) ? r[0]?.embedding : r.embedding
+  return Array.isArray(v?.[0]) ? v[0] : v
+}
+
+// Embed the WHOLE note: window it, embed each window, average the vectors.
+async function embed(text) {
+  const windows = []
+  for (let i = 0; i < text.length && windows.length < EMBED_MAX_WINDOWS; i += EMBED_WINDOW_CHARS) {
+    windows.push(text.slice(i, i + EMBED_WINDOW_CHARS))
+  }
+  if (!windows.length) return null
+  const vecs = []
+  for (const w of windows) vecs.push(await embedOne(w))
+  if (vecs.length === 1) return vecs[0]
+  const dims = vecs[0].length
+  const mean = new Array(dims).fill(0)
+  for (const v of vecs) for (let i = 0; i < dims; i++) mean[i] += v[i] / vecs.length
+  return mean
+}
+
+async function summarise(title, text) {
+  const r = await post(`${LLM_URL}/v1/chat/completions`, {
+    model: "{{ vaultindex_llm_alias }}",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You summarise personal wiki notes. Write 2-3 plain sentences stating what " +
+          "the note contains, for a reader deciding whether to open it. Use only the " +
+          "note's own content — never infer, extrapolate, or add facts. No preamble, " +
+          "no markdown, no bullet points. If the note is too fragmentary to " +
+          "summarise, reply exactly: SKIP",
+      },
+      { role: "user", content: `Title: ${title}\n\n${text.slice(0, SUMMARY_INPUT)}` },
+    ],
+    temperature: 0.2,
+    max_tokens: SUMMARY_TOKENS,
+  })
+  const out = (r.choices?.[0]?.message?.content || "").trim()
+  return !out || out === "SKIP" || out.startsWith("SKIP") ? null : out
+}
+
+const cos = (a, b) => {
+  let d = 0
+  for (let i = 0; i < a.length; i++) d += a[i] * b[i]
+  return d // vectors are normalised below, so the dot product is the cosine
+}
+const norm = (v) => {
+  const m = Math.sqrt(v.reduce((s, x) => s + x * x, 0)) || 1
+  return v.map((x) => x / m)
+}
+
+// --check: hash every note, count the ones with no cached summary, exit.
+if (CHECK_ONLY) {
+  let need = 0
+  for (const rel of walk(MERGED)) {
+    const body = plain(fs.readFileSync(path.join(MERGED, rel), "utf8"))
+    if (body.length < SUMMARY_MIN) continue
+    const hash = crypto.createHash("sha256").update(body).digest("hex").slice(0, 32)
+    if (!cache[hash] || cache[hash].summary === undefined) need++
+  }
+  console.log(String(need))
+  process.exit(0)
+}
+
+// A note is "navigation" if it is a folder note (named after its own folder) or
+// tagged as a map-of-content. These are short, structurally near-identical, and
+// therefore cluster tightly in embedding space — left in, they dominated every
+// related list ("Resources, Topics, Projects") and pushed out real content.
+// They still GET related links; they are just never offered as one.
+function isNavNote(rel, raw) {
+  const parent = path.basename(path.dirname(rel))
+  const base = path.basename(rel, ".md")
+  if (parent !== "." && base.toLowerCase() === parent.toLowerCase()) return true
+  const fm = raw.startsWith("---") ? raw.slice(0, raw.indexOf("\n---", 3)) : ""
+  return /^\s*-?\s*(type:\s*)?moc\s*$/im.test(fm) || /\bmoc\b/i.test(/tags:[\s\S]{0,120}/.exec(fm)?.[0] || "")
+}
+
+const files = walk(MERGED)
+const notes = []
+let embedded = 0
+let summarised = 0
+let reused = 0
+
+for (const rel of files) {
+  const raw = fs.readFileSync(path.join(MERGED, rel), "utf8")
+  const body = plain(raw)
+  const title = path.basename(rel, ".md")
+  const nav = isNavNote(rel, raw)
+  const hash = crypto.createHash("sha256").update(body).digest("hex").slice(0, 32)
+
+  let entry = cache[hash]
+  if (entry) {
+    reused++
+  } else {
+    entry = { vec: null, summary: null }
+    if (body.length > 0) {
+      try {
+        entry.vec = norm(await embed(`${title}\n${body}`))
+        embedded++
+      } catch (e) {
+        // One awkward note must not abort the whole run. It simply gets no
+        // related links this pass, and is retried next time (not cached).
+        console.error(`embed failed for ${rel}: ${e.message}`)
+        entry = { ...entry, vec: null, partial: true }
+      }
+    }
+    if (body.length >= SUMMARY_MIN && !NO_LLM) {
+      try {
+        entry.summary = await summarise(title, body)
+        summarised++
+      } catch (e) {
+        // A model hiccup must not fail the whole run: the note simply goes
+        // without a summary this pass and is retried next time (not cached).
+        console.error(`summary failed for ${rel}: ${e.message}`)
+        entry = { ...entry, summary: null, partial: true }
+      }
+    }
+    if (!entry.partial) cache[hash] = entry
+  }
+  // Too little text to relate on — see vaultindex_related_min_chars.
+  const thin = body.length < RELATED_MIN
+  notes.push({ rel, title, hash, nav, thin, vec: entry.vec, summary: entry.summary })
+}
+
+// Related notes: brute-force cosine. At ~450 notes this is ~100k comparisons —
+// microseconds, and it keeps a vector database out of the picture entirely.
+const sidecar = {}
+for (const n of notes) {
+  const related = []
+  if (n.vec) {
+    for (const m of notes) {
+      if (m.rel === n.rel || !m.vec || m.nav || m.thin) continue
+      const score = cos(n.vec, m.vec)
+      if (score >= MIN_SCORE) related.push({ path: m.rel.replace(/\.md$/, ""), title: m.title, score })
+    }
+    related.sort((a, b) => b.score - a.score)
+  }
+  sidecar[n.rel] = {
+    summary: n.summary,
+    related: related
+      .slice(0, RELATED_N)
+      .map(({ path, title, score }) => ({ path, title, score: Math.round(score * 1000) / 1000 })),
+  }
+}
+
+fs.mkdirSync(OUT, { recursive: true })
+fs.writeFileSync(CACHE_PATH, JSON.stringify(cache))
+fs.writeFileSync(SIDECAR_PATH, JSON.stringify(sidecar, null, 2))
+
+const withSummary = Object.values(sidecar).filter((v) => v.summary).length
+const withRelated = Object.values(sidecar).filter((v) => v.related.length).length
+console.log(
+  `enriched ${notes.length} notes: ${embedded} embedded, ${summarised} summarised, ` +
+    `${reused} reused from cache\n` +
+    `  ${withSummary} have a summary, ${withRelated} have related links`,
+)
