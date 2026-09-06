@@ -4,6 +4,7 @@
 
 const jobsById = new Map(); // id -> { summary, detail, expanded, es }
 let order = []; // job ids, newest first
+let engines = []; // [{id, label, available, is_default}], from GET /api/engines
 
 const jobsEl = document.getElementById('jobs');
 const emptyEl = document.getElementById('empty');
@@ -11,6 +12,7 @@ const hintEl = document.getElementById('hint');
 const form = document.getElementById('compose');
 const topicInput = document.getElementById('topic');
 const depthSelect = document.getElementById('depth');
+const engineSelect = document.getElementById('engine');
 const submitBtn = document.getElementById('submit');
 
 const TERMINAL = new Set(['ready', 'published', 'failed', 'cancelled']);
@@ -44,6 +46,15 @@ function dotClass(status) {
   return 'running';
 }
 
+function engineLabelFor(id) {
+  // Falls back to the raw id (rather than hiding the badge) for a job
+  // whose engine has since been removed from the registry -- see
+  // pipeline.py's native fallback for the job-side half of this.
+  if (!id) return '';
+  const found = engines.find((e) => e.id === id);
+  return found ? found.label : id;
+}
+
 // -------------------------------------------------------------- render ----
 
 function render() {
@@ -75,12 +86,14 @@ function renderCard(id) {
     ? `<a class="job-link" href="${esc(s.wiki_url)}" target="_blank" rel="noopener">view in wiki &rarr;</a>`
     : '';
   const check = s.status === 'published' ? '<span class="check">&#10003;</span> ' : '';
+  const engineLabel = engineLabelFor(s.engine);
 
   return `
     <li class="job${entry.expanded ? ' open' : ''}" data-id="${id}">
       <div class="job-head">
         <span class="job-topic">${check}${esc(s.topic)}</span>
         <span class="job-depth">depth ${s.depth}</span>
+        ${engineLabel ? `<span class="job-engine">${esc(engineLabel)}</span>` : ''}
         <span class="job-date">${fmtDate(s.created_at)}</span>
       </div>
       <div class="job-status">
@@ -232,14 +245,14 @@ async function refreshDetail(id) {
 function rerun(id) {
   const entry = jobsById.get(id);
   if (!entry || !entry.summary) return;
-  submitJob(entry.summary.source_url || entry.summary.topic, entry.summary.depth);
+  submitJob(entry.summary.source_url || entry.summary.topic, entry.summary.depth, entry.summary.engine);
 }
 
-async function submitJob(topic, depth) {
+async function submitJob(topic, depth, engine) {
   submitBtn.disabled = true;
   hintEl.textContent = '';
   hintEl.classList.remove('err');
-  const body = isUrl(topic) ? { url: topic, depth } : { topic, depth };
+  const body = isUrl(topic) ? { url: topic, depth, engine } : { topic, depth, engine };
   try {
     const res = await fetch('/api/research', {
       method: 'POST',
@@ -258,6 +271,7 @@ async function submitJob(topic, depth) {
         topic: isUrl(topic) ? topic : topic,
         source_url: isUrl(topic) ? topic : null,
         depth,
+        engine,
         status: 'queued',
         error: null,
         wiki_url: null,
@@ -279,11 +293,24 @@ form.addEventListener('submit', (e) => {
   e.preventDefault();
   const topic = topicInput.value.trim();
   if (!topic) return;
-  submitJob(topic, Number(depthSelect.value));
+  submitJob(topic, Number(depthSelect.value), engineSelect.value);
   topicInput.value = '';
 });
 
 // --------------------------------------------------------------- boot -----
+
+async function loadEngines() {
+  try {
+    const res = await fetch('/api/engines');
+    engines = await res.json();
+  } catch {
+    engines = []; // the compose form's engine select is just left empty
+  }
+  engineSelect.innerHTML = engines.map((e) => {
+    const label = e.available ? e.label : `${e.label} (unavailable)`;
+    return `<option value="${esc(e.id)}"${e.is_default ? ' selected' : ''}${e.available ? '' : ' disabled'}>${esc(label)}</option>`;
+  }).join('');
+}
 
 async function loadJobs() {
   try {
@@ -303,4 +330,5 @@ async function loadJobs() {
   }
 }
 
+loadEngines();
 loadJobs();

@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     status       TEXT NOT NULL,
     error        TEXT,
     wiki_url     TEXT,
+    engine       TEXT NOT NULL DEFAULT 'native',
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
@@ -73,6 +74,21 @@ CREATE INDEX IF NOT EXISTS idx_excerpts_source ON excerpts(source_id);
 _lock = threading.Lock()
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """`CREATE TABLE IF NOT EXISTS` never touches a table that already
+    exists, so a column added to SCHEMA after the live db on ctl01 was first
+    created (the `jobs.engine` column, added when the engine seam landed)
+    would otherwise silently never appear on that deployed db. Each
+    migration here is its own `PRAGMA table_info` check so it is safe to
+    run on every startup, forever, including against a brand-new db where
+    SCHEMA already created the column.
+    """
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "engine" not in cols:
+        conn.execute("ALTER TABLE jobs ADD COLUMN engine TEXT NOT NULL DEFAULT 'native'")
+        conn.commit()
+
+
 def connect(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -80,6 +96,7 @@ def connect(db_path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
     conn.commit()
+    _migrate(conn)
     return conn
 
 
@@ -112,14 +129,14 @@ def _write(conn: sqlite3.Connection):
 
 def create_job(
     conn: sqlite3.Connection, *, job_id: str, topic: str, source_url: str | None,
-    depth: int, slug: str, status: str = "queued",
+    depth: int, slug: str, status: str = "queued", engine: str = "native",
 ) -> None:
     now = _now()
     with _write(conn) as cur:
         cur.execute(
-            "INSERT INTO jobs (id, topic, source_url, depth, slug, status, "
-            "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-            (job_id, topic, source_url, depth, slug, status, now, now),
+            "INSERT INTO jobs (id, topic, source_url, depth, slug, status, engine, "
+            "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (job_id, topic, source_url, depth, slug, status, engine, now, now),
         )
 
 

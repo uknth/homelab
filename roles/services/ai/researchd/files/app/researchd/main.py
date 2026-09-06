@@ -65,6 +65,7 @@ def _job_summary(job: dict) -> dict:
         "status": job["status"],
         "error": job["error"],
         "wiki_url": job["wiki_url"],
+        "engine": job["engine"],
         "created_at": job["created_at"],
         "updated_at": job["updated_at"],
     }
@@ -100,8 +101,25 @@ async def create_research(request: Request) -> JobCreated:
     except (ValidationError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    job_id = pipeline.submit(topic=req.topic, url=req.url, depth=req.depth)
+    engine = req.engine or settings.default_engine
+    if engine not in pipeline.engines:
+        raise HTTPException(status_code=422, detail=f"unknown engine {engine!r}")
+
+    job_id = pipeline.submit(topic=req.topic, url=req.url, depth=req.depth, engine=engine)
     return JobCreated(job_id=job_id)
+
+
+@app.get("/api/engines")
+async def list_engines() -> list[dict]:
+    return [
+        {
+            "id": engine.id,
+            "label": engine.label,
+            "available": await engine.healthy(),
+            "is_default": engine.id == settings.default_engine,
+        }
+        for engine in pipeline.engines.values()
+    ]
 
 
 @app.get("/api/jobs")

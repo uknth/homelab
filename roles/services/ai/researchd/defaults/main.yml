@@ -200,3 +200,85 @@ researchd_command_env:
   PATH: "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
   HOME: "/Users/{{ user }}"
   DOCKER_HOST: "{{ researchd_docker_host }}"
+
+# --- Pluggable research engines -------------------------------------------
+# researchd's own loop is no longer the only way a job can be researched: the
+# UI offers an engine per job, and an alternative engine runs as a SIDECAR
+# CONTAINER on this same project network rather than as a library inside the
+# researchd image. That is not fastidiousness — a third-party engine drags in
+# its own dependency closure (GPT Researcher needs `langchain>=1.0` and
+# `numpy<2.3`; STORM, evaluated and dropped, hard-pinned `dspy_ai==2.4.9` and
+# torch) and those sets do not co-resolve with each other or reliably with
+# ours. One container per engine makes that a non-problem and keeps the
+# researchd image as small as it was.
+#
+# The sidecar publishes no port. It is reached only as
+# http://researchd-gptr:8111 on this network, exactly like searxng — so the
+# LAN allowlist below still reduces to one address, and adding engines never
+# widens it.
+researchd_engines_dir: "{{ researchd_root_dir }}/engines"
+
+researchd_gptr_container_name: "researchd-gptr"
+researchd_gptr_port: 8111
+
+# Which engine the UI preselects. "native" is the default deliberately: it is
+# the only engine hardened against this specific model's failure modes, and
+# the only one whose security properties are fully those argued in
+# docs/spec/research.md. "gptr" is offered alongside it and is the fallback
+# target whenever a job names an engine that no longer exists.
+researchd_default_engine: "native"
+
+# --- Embeddings sidecar ---------------------------------------------------
+# Both third-party engines need an embedding model, and omlx on ai01 serves
+# chat completions ONLY — there is no /v1/embeddings there to point at.
+#
+# This is deliberately a container on the project network rather than a
+# native llama.cpp on ctl01's macOS. A host-side server would sit at
+# 10.0.2.4, which the egress chain below DROPs along with the rest of
+# 10.0.0.0/8, so it would need its own hole punched in the allowlist. On the
+# project network it needs no rule at all: the intra-project ACCEPT already
+# covers it. Verified empirically — a container CAN route to ctl01's own LAN
+# address (the Colima VM reaches it via gvproxy), so the rule would have
+# worked; it is simply not worth adding a permanent exception for something
+# that can live inside the sandbox instead.
+#
+# CPU-only, and that is fine: embedding is one forward pass per chunk, not
+# generation. The model choice is explained where it is set below.
+researchd_embed_container_name: "researchd-embed"
+researchd_embed_port: 8082
+# 512 — bge-small's native context, and ample. gpt-researcher's compressor
+# pipeline is [RecursiveCharacterTextSplitter(chunk_size=1000),
+# EmbeddingsFilter], so every page is already split to ~1000 characters
+# (~250 tokens) before anything is embedded; nothing near this ceiling is
+# ever sent.
+#
+# This was briefly raised to 2048 (with an 8192 batch, and a switch to
+# nomic-embed-text-v1.5) while chasing
+#     "input (1202 tokens) is too large to process"
+# from llama.cpp. That error is NOT a context-size problem, however exactly it
+# reads like one: 1202 is the length of the INTEGER TOKEN ARRAY langchain
+# posts when check_embedding_ctx_length is left at its default of True, not
+# real text. Fixing that one flag (files/engines/gptr/gptr/config.py) removed
+# every embedding error; none of the size changes did. Reverted, so this stays
+# the same model vaultindex runs on cmp01.
+researchd_embed_ctx: 512
+
+# Same model and quantisation vaultindex already runs on cmp01
+# (roles/services/knowledge/vaultindex/defaults/main.yml) — 33M params, ~36
+# MiB resident, mean pooling. Deliberately identical: one embedding model in
+# the fleet rather than two, and vectors from research and from the wiki index
+# stay comparable should anything ever want to match one against the other.
+researchd_embed_model_name: "bge-small-en-v1.5"
+researchd_embed_model_repo: "CompendiumLabs/bge-small-en-v1.5-gguf"
+researchd_embed_model_file: "bge-small-en-v1.5-q8_0.gguf"
+researchd_embed_model_sha256: "ec38e8da142596baa913124ae50550de284b6916bf59577ef2f0cb9660c2f514"
+researchd_models_dir: "{{ researchd_root_dir }}/models"
+
+# `:server` is the CPU image — NOT `:server-cuda`, which is what vaultindex
+# uses on cmp01's A4000. ctl01 is an M1 Mac with no NVIDIA GPU, and the CUDA
+# variant would not start. Pinned tag+digest for the same reason searxng is
+# (see above); arm64 is present in this manifest list, verified 2026-09-06.
+researchd_llama_image_repo: "ghcr.io/ggml-org/llama.cpp"
+researchd_llama_image_tag: "server"
+researchd_llama_image_digest: "sha256:8459c3e6a16f4e1d92fecd0ad8d015169e9f108c1862a366eb44923192b576f8"
+researchd_llama_image: "{{ researchd_llama_image_repo }}:{{ researchd_llama_image_tag }}@{{ researchd_llama_image_digest }}"

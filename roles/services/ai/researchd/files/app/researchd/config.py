@@ -36,6 +36,15 @@ class Settings:
     searxng_url: str = os.environ.get("RESEARCHD_SEARXNG_URL", "http://searxng:8080")
     search_timeout: float = _float("RESEARCHD_SEARCH_TIMEOUT", 15.0)
 
+    # --- research engines ---
+    # gptr is a sidecar container on the compose project network, not
+    # yet built. Both are still registered by default (engines/__init__.py)
+    # so the UI dropdown and /api/engines always list them; until a sidecar
+    # actually exists at these urls, `healthy()` just reports them
+    # unavailable rather than the registry omitting them outright.
+    gptr_url: str = os.environ.get("RESEARCHD_GPTR_URL", "http://researchd-gptr:8111")
+    default_engine: str = os.environ.get("RESEARCHD_DEFAULT_ENGINE", "gptr")
+
     # --- storage ---
     data_dir: str = os.environ.get("RESEARCHD_DATA_DIR", "/data")
 

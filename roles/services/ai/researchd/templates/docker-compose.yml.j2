@@ -77,6 +77,83 @@ services:
     networks:
       default:
 
+  # --- embeddings -----------------------------------------------------
+  # The gptr engine needs embeddings and omlx serves chat completions only,
+  # so this llama.cpp server is research's own /v1/embeddings. CPU image and
+  # no --n-gpu-layers: ctl01 is an M1 Mac, and bge-small is 33M params —
+  # embedding is one forward pass per chunk, not generation.
+  #
+  # No published port and no LAN address, so the egress allowlist needs no
+  # new rule for it: the intra-project ACCEPT already covers this network.
+  {{ researchd_embed_container_name }}:
+    image: {{ researchd_llama_image }}
+    container_name: {{ researchd_embed_container_name }}
+    hostname: {{ researchd_embed_container_name }}
+    restart: unless-stopped
+    volumes:
+      # Read-only: the model is delivered by Ansible (checksummed), never
+      # written by the container.
+      - {{ researchd_models_dir }}:/models:ro
+    command:
+      - "-m"
+      - "/models/{{ researchd_embed_model_file }}"
+      - "--embedding"
+      # `mean` pooling, matching what vaultindex already runs for this exact
+      # model on cmp01 — the two must agree or embeddings from the wiki index
+      # and from research would not be comparable.
+      - "--pooling"
+      - "mean"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "{{ researchd_embed_port }}"
+      - "--ctx-size"
+      - "{{ researchd_embed_ctx }}"
+    # Overridden, not inherited. The upstream image bakes in
+    # `curl -f http://localhost:8080/health` — its own default port — so
+    # running on {{ researchd_embed_port }} leaves the baked check probing a
+    # port nothing listens on, and the container sits permanently
+    # `(unhealthy)` while serving embeddings perfectly well. A false red is
+    # worse than no check: it trains you to ignore the column.
+    #
+    # start_period is generous because llama.cpp binds its port before the
+    # GGUF has finished loading, so early probes would fail on a container
+    # that is merely still starting.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ researchd_embed_port }}/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    networks:
+      default:
+
+  # --- engine sidecar -------------------------------------------------
+  # Built from source like researchd itself, never pulled, and in its own
+  # image so its dependency tree can never constrain researchd's — see the
+  # long note in defaults/main.yml.
+  #
+  # researchd deliberately does NOT depends_on this: an engine that fails to
+  # build or start must degrade to `available: false` in the UI dropdown,
+  # not stop researchd from coming up.
+  {{ researchd_gptr_container_name }}:
+    build:
+      context: {{ researchd_engines_dir }}/gptr
+      dockerfile: Dockerfile
+    image: researchd-gptr:local
+    container_name: {{ researchd_gptr_container_name }}
+    hostname: {{ researchd_gptr_container_name }}
+    restart: unless-stopped
+    env_file:
+      - researchd.env
+    depends_on:
+      searxng:
+        condition: service_started
+      {{ researchd_embed_container_name }}:
+        condition: service_started
+    networks:
+      default:
+
 networks:
   default:
     name: {{ researchd_network_name }}

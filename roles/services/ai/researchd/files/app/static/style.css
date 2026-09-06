@@ -58,7 +58,7 @@ li.job {
 
 .job-head { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
 .job-topic { font-weight: 600; font-size: 1.02rem; flex: 1 1 auto; min-width: 0; }
-.job-depth {
+.job-depth, .job-engine {
   font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint);
   border: 1px solid var(--line); border-radius: 99px; padding: .1rem .55rem; white-space: nowrap;
 }

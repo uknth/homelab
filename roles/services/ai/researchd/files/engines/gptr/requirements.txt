@@ -1,0 +1,12 @@
+# Pinned, per repo convention (see ../../app/requirements.txt) -- single-
+# maintainer service, no auto-update path, review before bumping.
+#
+# Versions below are exactly what `pip install gpt-researcher==0.16.0
+# fastapi uvicorn[standard]` resolved in a scratch venv used to confirm
+# gpt-researcher's actual API surface for this build (see engine.py's
+# module docstring). gpt-researcher's own dependency closure pulls in no
+# torch/sentence-transformers -- keep it that way; do not add either.
+
+gpt-researcher==0.16.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.4

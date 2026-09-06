@@ -110,6 +110,22 @@ declarative, no runtime state the roles do not own.
 
 ## Pipeline
 
+This is the **`native` engine's** pipeline, and it is the one the security
+argument above is written about. The `gptr` engine covers the same stages but
+decides internally how — and property #1 is genuinely **weaker** for it: it
+lets the model choose search queries *and* which results to scrape, which is
+closer to "the model chooses an action" than the native loop's strict
+search-then-fetch. It gets no shell, no tool registry and no credential, and
+what it hands back is schema-validated data — but the honest statement is that
+#1 holds fully only for `native`. That is a large part of why `native` is the
+default.
+
+What is unchanged for every engine is #2, #3 and #4: no credentials, no host
+filesystem, and the same `DOCKER-USER` allowlist — the sidecar sits on the same
+project network and inherits the identical rules, so its blast radius is the
+same as researchd's own. That is what actually bounds the risk here. See
+[Engines](#engines).
+
 ```
   topic | url | article
         │
@@ -259,6 +275,115 @@ queued -> planning -> searching -> fetching -> summarising
 only by n8n's callback after the Quartz rebuild. The UI's completion checkmark
 tracks `published`, not `ready`, so a green tick always means the link works.
 
+## Engines
+
+The research loop is **pluggable**. A job names an engine at submit time and the
+UI offers a dropdown beside the depth selector; everything downstream — the
+writer, the wiki contract, the API, the SSE stream, the bundle, the n8n publish
+path — is identical no matter which one ran.
+
+| id | Label | State |
+|---|---|---|
+| `native` | Built-in | researchd's own loop. **The default.** The only engine hardened against this model's failure modes (the bare-list plan coercion, note-local footnote renumbering) and the only one the security argument above holds for in full. |
+| `gptr` | GPT Researcher | `gpt-researcher` 0.16.0, Apache-2.0, actively maintained. Works, with a known sourcing limitation — see below. |
+
+**STORM was evaluated and dropped.** Stanford's `knowledge-storm` has the better
+research method on paper (multi-perspective question asking) and its
+Wikipedia-shaped output would have suited the wiki well, but: its last real
+release is v1.1.0 from January 2025 and its last commit of any kind is
+2025-09-30, so it is effectively frozen; it hard-pins `dspy_ai==2.4.9` and drags
+in `sentence-transformers`/torch; it calls
+`SentenceTransformer("paraphrase-MiniLM-L6-v2")` unconditionally with no
+injection hook; and driving its stage methods directly — required to keep the
+in-memory article objects `.run()` discards — leaves its `callback_handler`
+unset, so the first stage dies on
+`'NoneType' object has no attribute 'on_identify_perspective_start'`. Not worth
+carrying. The sidecar contract below is engine-agnostic, so adding it back later
+costs only the sidecar itself.
+
+### Why a sidecar container, not a library
+
+A third-party engine brings its own dependency closure, and those closures do
+not reliably co-resolve with researchd's or with each other (GPT Researcher
+needs `langchain>=1.0` and `numpy<2.3`; STORM wanted `dspy_ai==2.4.9` and
+torch). One container per engine makes that a non-problem and leaves the
+researchd image exactly as small as it was.
+
+The sidecar speaks one small HTTP contract on the project network:
+
+```
+GET  /healthz                -> {"ok": true, "engine": str}
+POST /research               {topic, depth, job_id} -> {engine_job_id}
+GET  /research/{eid}         -> {status, stage, detail, error, result}
+POST /research/{eid}/cancel
+```
+
+researchd polls the sidecar and republishes its `stage`/`detail` as its own SSE
+events, so the UI shows live progress for a remote engine as for the native one.
+The `result` field names match `write.NoteSpec` / `SourceCitation` exactly, so
+conversion is a field-by-field copy rather than a remapping that could quietly
+drop something — and it is **schema-validated on arrival**
+(`models.RemoteEngineResult`), because it crosses a trust boundary just as model
+output does.
+
+An engine that is down reports `available: false` and is disabled in the
+dropdown; researchd deliberately does not `depends_on` its engines, so a broken
+sidecar can never stop researchd starting. A job naming an engine that no longer
+exists falls back to `native`.
+
+### Embeddings
+
+`gptr` needs an embedding model and **omlx serves chat completions only** —
+there is no `/v1/embeddings` on ai01. So the project runs its own: llama.cpp
+serving `bge-small-en-v1.5` (q8_0, ~36 MiB, 384-dim, mean pooling) — the same
+model `services/knowledge/vaultindex` already runs on cmp01, so the fleet has
+one embedding model and the two systems' vectors stay comparable.
+
+It is a **container on the project network**, not a native macOS service on
+ctl01 and not vaultindex's endpoint on cmp01:
+
+- On the project network the intra-project ACCEPT already covers it, so it needs
+  **no new allowlist rule at all**.
+- A host-side server on ctl01 would sit at `10.0.2.4`, inside the `10.0.0.0/8`
+  DROP, needing a permanent exception. (It *would* work — the Colima VM routes
+  to ctl01's own LAN address via gvproxy, verified — it is simply not worth an
+  exception for something that can live in the sandbox.)
+- Reusing vaultindex's endpoint would mean letting researchd reach the host
+  holding the Obsidian vaults, contradicting an explicitly asserted and verified
+  property of this design.
+
+### The llama.cpp / OpenAI embedding mismatch
+
+llama.cpp's `/v1/embeddings` is not quite OpenAI's, and gpt-researcher is
+written against OpenAI's. langchain's `OpenAIEmbeddings` defaults to
+`check_embedding_ctx_length=True`, which posts **tiktoken integer arrays**
+rather than text — legal against OpenAI, which shares that vocabulary. llama.cpp
+reads those integers as ids in the SERVED model's vocabulary instead, which
+surfaces as two different-looking errors from one cause:
+
+| Served model | Error |
+|---|---|
+| bge-small (512 ctx) | `input (1202 tokens) is too large to process` — the array length, not real text |
+| nomic (2048 ctx) | `400 {'message': 'Prompt contains invalid tokens'}` — ids out of range |
+
+The first reads exactly like a genuine context-size problem and is not one.
+The fix is `check_embedding_ctx_length: False` (plain strings on the wire), set
+in the sidecar's `EMBEDDING_KWARGS`.
+
+**There is no size limitation on sources.** gpt-researcher's compressor pipeline
+is `[RecursiveCharacterTextSplitter(chunk_size=1000), EmbeddingsFilter]` — it
+splits every scraped page into ~1000-character (~250-token) chunks *before*
+embedding, so nothing close to any model's context ever reaches the endpoint.
+Verified in the running container: across two jobs, 33 sources added and zero
+embedding errors.
+
+Worth recording because it cost several rounds: a longer-context model
+(`nomic-embed-text-v1.5`) and raised `--ctx-size`/batch sizes were tried first,
+on the assumption that the bge-small error was about size. None of it helped,
+and all of it was reverted. bge-small's 512-token context is ample for
+250-token chunks, and keeping it means one embedding model in the fleet rather
+than two.
+
 ## Web UI
 
 One page, served by the same container, at `research.puhome.net`.
@@ -375,6 +500,12 @@ cache tier are configured rather than left default.
 | ai01 (10.0.2.9) | 8000 | omlx | first service on the host |
 | ctl01 (10.0.2.4) | 8110 | researchd API + UI | first published port on the host |
 | ctl01 | *(none)* | SearXNG | project network only, no published port |
+| ctl01 | *(none)* | `researchd-embed` (llama.cpp) | project network only, no published port |
+| ctl01 | *(none)* | `researchd-gptr` engine sidecar | project network only, no published port |
+
+Only the first of those is published. Every engine and support service is
+reached by container name on the project network, which is why adding engines
+never widens the LAN allowlist — see "Engines" below.
 
 | Domain | Backend | Gate |
 |---|---|---|
@@ -451,6 +582,8 @@ top-level wiki section and never interleave with hand-written notes.
 | `system/colima` | ctl01 | **new, and a hard prerequisite** — does not exist |
 | `services/ai/researchd` | ctl01 | **new** — pipeline, API, UI |
 | SearXNG | ctl01 | **new** — a second service inside the researchd compose project, not its own role |
+| `researchd-embed` | ctl01 | **new** — llama.cpp embeddings, inside the researchd compose project, not its own role |
+| `researchd-gptr` | ctl01 | **new** — the engine sidecar, built from `files/engines/gptr`, inside the same project |
 | `services/knowledge/researchpull` | cmp01 | **new** — pulls the bundle, unpacks it |
 | `services/knowledge/vaultmerge` | cmp01 | edit — fourth source |
 | `services/productivity/n8n` | util01 | edit — `workflow-agent-research.json.j2` |

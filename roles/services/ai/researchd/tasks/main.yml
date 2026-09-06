@@ -27,6 +27,7 @@
     - "{{ researchd_compose_dir }}"
     - "{{ researchd_searxng_dir }}"
     - "{{ researchd_root_dir }}/egress"
+    - "{{ researchd_engines_dir }}"
 
 - name: Create the app dir (build context) owned by the service user
   become: true
@@ -137,6 +138,50 @@
   no_log: true
   notify: Restart researchd
 
+# Build context for the engine sidecar. Its own directory, and
+# therefore separate images: an engine's dependency tree is its own problem
+# and must never be able to constrain researchd's — see defaults/main.yml.
+- name: Copy the engine sidecar sources (build contexts)
+  become: true
+  ansible.builtin.copy:
+    src: engines/
+    dest: "{{ researchd_engines_dir }}/"
+    owner: "{{ user }}"
+    group: staff
+  notify: Restart researchd
+
+- name: Create the researchd model dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ researchd_models_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: staff
+    mode: "0755"
+
+# Checksummed so a truncated download cannot leave llama.cpp crash-looping on
+# a corrupt model, the same guard vaultindex uses for its own. Small
+# (~146 MiB q8_0), so the retries here are about a flaky link, not size.
+#
+# World-readable on purpose: the llama.cpp container runs as its own uid and
+# only ever reads this, and the bind mount into the Colima VM does not
+# preserve ownership usefully anyway.
+- name: Download the embedding GGUF model
+  become: true
+  ansible.builtin.get_url:
+    url: "https://huggingface.co/{{ researchd_embed_model_repo }}/resolve/main/{{ researchd_embed_model_file }}"
+    dest: "{{ researchd_models_dir }}/{{ researchd_embed_model_file }}"
+    checksum: "sha256:{{ researchd_embed_model_sha256 }}"
+    owner: "{{ user }}"
+    group: staff
+    mode: "0644"
+    timeout: 60
+  register: _researchd_embed_model
+  retries: 3
+  delay: 10
+  until: _researchd_embed_model is succeeded
+  notify: Restart researchd
+
 - name: Template researchd compose
   become: true
   ansible.builtin.template:
@@ -194,6 +239,13 @@
     state: present
     pull: missing
     build: always
+    # Removing a service from the compose file does NOT stop its container —
+    # compose leaves it running as an orphan, and it keeps answering on the
+    # project network as though it were still deployed. Dropping the STORM
+    # engine left exactly that: a `researchd-storm` container still up and
+    # healthy after every trace of it had gone from this role. Declarative
+    # deployment has to mean the running set matches the file.
+    remove_orphans: true
     docker_cli: "{{ researchd_docker_bin }}"
     docker_host: "{{ researchd_docker_host }}"
   environment: "{{ researchd_command_env }}"

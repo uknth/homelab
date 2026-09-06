@@ -80,9 +80,44 @@
   when: not ansible_check_mode
 
   environment: "{{ researchd_command_env }}"
+- name: "Egress check: researchd CAN reach the embeddings sidecar"
+  ansible.builtin.command: >-
+    docker exec {{ researchd_container_name }} python3 -c
+    "import socket,sys; s=socket.socket(); s.settimeout(4);
+    sys.exit(0 if s.connect_ex(('{{ researchd_embed_container_name }}', {{ researchd_embed_port }})) == 0 else 1)"
+  register: _researchd_verify_embed
+  changed_when: false
+  failed_when: _researchd_verify_embed.rc != 0
+  when: not ansible_check_mode
+  environment: "{{ researchd_command_env }}"
+
+# Reachability alone is not enough for this one. llama.cpp binds its port
+# before the GGUF has finished loading, so a TCP connect succeeds against a
+# server that cannot yet embed anything — and a truncated or wrong-pooling
+# model would fail only at the first real call, i.e. halfway through someone's
+# research job. Asking for an actual vector is the only check that proves the
+# model loaded.
+- name: "Embeddings check: the sidecar returns a real vector"
+  ansible.builtin.command: >-
+    docker exec {{ researchd_container_name }} python3 -c
+    "import json,urllib.request,sys;
+    r=urllib.request.urlopen(urllib.request.Request(
+    'http://{{ researchd_embed_container_name }}:{{ researchd_embed_port }}/v1/embeddings',
+    data=json.dumps({'input':'homelab embedding smoke test',
+    'model':'{{ researchd_embed_model_name }}'}).encode(),
+    headers={'Content-Type':'application/json'}), timeout=30);
+    d=json.load(r); v=d['data'][0]['embedding'];
+    sys.exit(0 if isinstance(v,list) and len(v)>=64 else 1)"
+  register: _researchd_verify_embed_vector
+  changed_when: false
+  failed_when: _researchd_verify_embed_vector.rc != 0
+  when: not ansible_check_mode
+  environment: "{{ researchd_command_env }}"
+
 - name: Egress allowlist verification summary
   ansible.builtin.debug:
     msg: >-
       researchd egress allowlist verified: omlx reachable, public internet
-      reachable, searxng reachable, util01 and cmp01 both unreachable.
+      reachable, searxng reachable, embeddings sidecar reachable and
+      returning vectors, util01 and cmp01 both unreachable.
   when: not ansible_check_mode
