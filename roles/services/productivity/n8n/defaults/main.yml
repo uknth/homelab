@@ -51,7 +51,13 @@ n8n_vault_interval_hours: 1
 # than a cross-role lookup (same reasoning as researchpull_api_url). See
 # docs/spec/research.md#ports-and-domains.
 n8n_research_api_url: "http://{{ hostvars['ctl01'].ansible_host }}:8110"
-n8n_research_poll_minutes: 5
+# 1 minute, not 5: "research started" notifications need to be timely, and
+# this is only safe because the workflow tracks in-flight job ids in static
+# data and skips any job whose ~20-minute ingest is already running (see
+# 'Skip in-flight jobs' in workflow-agent-research.json.j2). Raising this
+# again later without keeping that guard would re-introduce concurrent
+# duplicate ingests of the same job.
+n8n_research_poll_minutes: 1
 
 # --- ntfy alert summary -----------------------------------------------------
 # ntfy answers history as NDJSON, which Homepage's customapi widget cannot
