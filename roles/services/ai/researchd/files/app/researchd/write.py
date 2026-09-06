@@ -203,14 +203,17 @@ def render_footnotes(sources: list[SourceCitation]) -> str:
 
 def render_note(
     *, title: str, research_topic: str, research_slug: str, research_depth: int,
-    research_generated: str, research_model: str, body: str, sources: list[SourceCitation],
+    research_generated: str, research_model: str, research_engine: str, engine_label: str,
+    body: str, sources: list[SourceCitation],
 ) -> str:
     fm = render_frontmatter(
         title=title, research_topic=research_topic, research_slug=research_slug,
         research_depth=research_depth, research_generated=research_generated,
-        research_model=research_model,
+        research_model=research_model, research_engine=research_engine,
     )
-    callout = render_callout(research_topic, research_generated, len(sources))
+    callout = render_callout(
+        research_topic, research_generated, len(sources), engine_label=engine_label,
+    )
     parts = [fm, "", callout, "", body.strip()]
     footnotes = render_footnotes(sources)
     if footnotes:
@@ -220,7 +223,8 @@ def render_note(
 
 def render_simple_list_note(
     *, title: str, research_topic: str, research_slug: str, research_depth: int,
-    research_generated: str, research_model: str, intro: str, items: list[str],
+    research_generated: str, research_model: str, research_engine: str, intro: str,
+    items: list[str],
 ) -> str:
     """Related-Topics.md / Open-Questions.md: a plain bullet list of
     strings the synthesise call proposed. These strings are validated as
@@ -231,7 +235,7 @@ def render_simple_list_note(
     fm = render_frontmatter(
         title=title, research_topic=research_topic, research_slug=research_slug,
         research_depth=research_depth, research_generated=research_generated,
-        research_model=research_model,
+        research_model=research_model, research_engine=research_engine,
     )
     lines = [fm, "", intro, ""]
     lines += [f"- {item}" for item in items]
@@ -239,12 +243,13 @@ def render_simple_list_note(
 
 
 def render_sources_note(
-    *, topic: str, slug: str, depth: int, model_id: str, generated_at: str,
+    *, topic: str, slug: str, depth: int, model_id: str, generated_at: str, engine: str,
     sources: list[SourceCitation],
 ) -> str:
     fm = render_frontmatter(
         title="Sources", research_topic=topic, research_slug=slug,
         research_depth=depth, research_generated=generated_at, research_model=model_id,
+        research_engine=engine,
     )
     lines = [fm, "", f"Full bibliography for {wikilink(slug, topic)}.", ""]
     for src in sources:
@@ -254,16 +259,17 @@ def render_sources_note(
 
 
 def render_moc(
-    *, topic: str, slug: str, depth: int, model_id: str, generated_at: str,
-    note_slugs: list[tuple[NoteSpec, str]], has_related: bool, has_open_questions: bool,
-    n_sources: int, history: list[str],
+    *, topic: str, slug: str, depth: int, model_id: str, generated_at: str, engine: str,
+    engine_label: str, note_slugs: list[tuple[NoteSpec, str]], has_related: bool,
+    has_open_questions: bool, n_sources: int, history: list[str],
 ) -> str:
     extra = {"research_generated_history": history} if history else None
     fm = render_frontmatter(
         title=topic, research_topic=topic, research_slug=slug, research_depth=depth,
-        research_generated=generated_at, research_model=model_id, extra=extra,
+        research_generated=generated_at, research_model=model_id, research_engine=engine,
+        extra=extra,
     )
-    callout = render_callout(topic, generated_at, n_sources)
+    callout = render_callout(topic, generated_at, n_sources, engine_label=engine_label)
     lines = [
         fm, "", callout, "",
         f"Map of content for **{topic}**, researched at depth {depth}.",
@@ -324,8 +330,8 @@ def _read_prior_history(dir_path: Path, slug: str) -> list[str]:
 
 
 def write_tree(
-    base_dir: Path, *, topic: str, slug: str, depth: int, model_id: str,
-    notes: list[NoteSpec], all_sources: list[SourceCitation],
+    base_dir: Path, *, topic: str, slug: str, depth: int, model_id: str, engine: str,
+    engine_label: str, notes: list[NoteSpec], all_sources: list[SourceCitation],
     related_topics: list[str] | None = None, open_questions: list[str] | None = None,
 ) -> Path:
     """Write the full note tree for `topic` under `base_dir/<slug>/`.
@@ -338,6 +344,11 @@ def write_tree(
     Re-running an existing topic replaces its directory wholesale -- never
     `-2` duplicates -- and the MOC's `research_generated_history` picks up
     the previous run's timestamp(s) before the old directory is removed.
+
+    `engine`/`engine_label` are the ResearchEngine that actually produced
+    `notes`/`all_sources` (its `.id`/`.label`), threaded into every note
+    this function writes -- MOC, subtopic notes, Sources, Related-Topics,
+    Open-Questions -- so provenance is never only on the folder note.
     """
     dir_path = Path(base_dir) / slug
     generated_at = now_iso()
@@ -358,20 +369,22 @@ def write_tree(
         content = render_note(
             title=note.subtopic_title, research_topic=topic, research_slug=slug,
             research_depth=depth, research_generated=generated_at, research_model=model_id,
+            research_engine=engine, engine_label=engine_label,
             body=note.body, sources=note.sources,
         )
         (dir_path / f"{note_slug}.md").write_text(content, encoding="utf-8")
 
     moc_content = render_moc(
         topic=topic, slug=slug, depth=depth, model_id=model_id, generated_at=generated_at,
-        note_slugs=note_slugs, has_related=bool(related_topics),
-        has_open_questions=bool(open_questions), n_sources=len(all_sources), history=history,
+        engine=engine, engine_label=engine_label, note_slugs=note_slugs,
+        has_related=bool(related_topics), has_open_questions=bool(open_questions),
+        n_sources=len(all_sources), history=history,
     )
     (dir_path / f"{slug}.md").write_text(moc_content, encoding="utf-8")
 
     sources_content = render_sources_note(
         topic=topic, slug=slug, depth=depth, model_id=model_id, generated_at=generated_at,
-        sources=all_sources,
+        engine=engine, sources=all_sources,
     )
     (dir_path / f"{SOURCES_SLUG}.md").write_text(sources_content, encoding="utf-8")
 
@@ -379,6 +392,7 @@ def write_tree(
         content = render_simple_list_note(
             title="Related Topics", research_topic=topic, research_slug=slug,
             research_depth=depth, research_generated=generated_at, research_model=model_id,
+            research_engine=engine,
             intro=f"Topics {wikilink(slug, topic)} suggests for further research.",
             items=related_topics,
         )
@@ -388,6 +402,7 @@ def write_tree(
         content = render_simple_list_note(
             title="Open Questions", research_topic=topic, research_slug=slug,
             research_depth=depth, research_generated=generated_at, research_model=model_id,
+            research_engine=engine,
             intro=f"Questions {wikilink(slug, topic)} leaves unanswered.",
             items=open_questions,
         )

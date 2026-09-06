@@ -306,10 +306,14 @@ async def run_job(pipeline: Pipeline, job_id: str) -> None:
 
         # ---- writing -----------------------------------------------------
         await on_stage("writing", "")
+        # `engine` is the object _lookup_engine actually resolved, not
+        # job["engine"] as requested -- the unknown-id fallback above can
+        # silently swap in native, and a page claiming an engine that did
+        # not write it is worse than no label at all.
         dir_path = write.write_tree(
             Path(pipeline.settings.tree_dir), topic=topic, slug=slug, depth=job["depth"],
-            model_id=pipeline.settings.llm_model, notes=result.notes,
-            all_sources=result.all_sources,
+            model_id=pipeline.settings.llm_model, engine=engine.id, engine_label=engine.label,
+            notes=result.notes, all_sources=result.all_sources,
             related_topics=result.related_topics or None,
             open_questions=result.open_questions or None,
         )

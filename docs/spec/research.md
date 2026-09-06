@@ -208,10 +208,19 @@ research_slug: How-To-Write-Spark-Jobs
 research_depth: 2
 research_generated: 2026-09-03T14:32:11+05:30
 research_model: <model id and quantisation>
+research_engine: native | gptr
 merged_topic: Agent-Research
 merged_from: agent-research
 tags: [agent-research, generated]
 ```
+
+`research_engine` is the ENGINE ID, not its label, because this is the value a
+Dataview query filters on and a label can be reworded where an id cannot. It
+records the engine that actually ran — which is not always the one the job
+asked for, since an unknown id falls back to `native`, and a page claiming an
+engine that did not write it would be worse than no label. Every file in the
+tree carries it, not only the MOC. The human-readable label appears in each
+note's machine-written callout instead.
 
 `merged_topic` / `merged_from` are the keys `vaultmerge` already uses, so these
 notes flow through the existing merge without special-casing. The namespacing

@@ -30,7 +30,8 @@ def test_every_wikilink_resolves_to_a_real_file(tmp_path):
     all_sources = [c for n in notes for c in n.sources]
     dir_path = write_tree(
         tmp_path, topic="How to write Spark Jobs?", slug=slugify("How to write Spark Jobs?"),
-        depth=2, model_id="test-model", notes=notes, all_sources=all_sources,
+        depth=2, model_id="test-model", engine="native", engine_label="Built-in",
+        notes=notes, all_sources=all_sources,
     )
 
     existing_stems = {p.stem for p in dir_path.glob("*.md")}
@@ -53,7 +54,8 @@ def test_moc_never_uses_the_bare_title_link_form(tmp_path):
     all_sources = [c for n in notes for c in n.sources]
     dir_path = write_tree(
         tmp_path, topic="How to write Spark Jobs?", slug=slugify("How to write Spark Jobs?"),
-        depth=2, model_id="test-model", notes=notes, all_sources=all_sources,
+        depth=2, model_id="test-model", engine="native", engine_label="Built-in",
+        notes=notes, all_sources=all_sources,
     )
     moc = (dir_path / "How-To-Write-Spark-Jobs.md").read_text(encoding="utf-8")
     assert "[[Spark Execution Model]]" not in moc
@@ -65,7 +67,8 @@ def test_related_topics_and_open_questions_are_linked_from_the_moc(tmp_path):
     all_sources = [c for n in notes for c in n.sources]
     dir_path = write_tree(
         tmp_path, topic="How to write Spark Jobs?", slug=slugify("How to write Spark Jobs?"),
-        depth=5, model_id="test-model", notes=notes, all_sources=all_sources,
+        depth=5, model_id="test-model", engine="native", engine_label="Built-in",
+        notes=notes, all_sources=all_sources,
         related_topics=["structured streaming checkpoints"],
         open_questions=["how does AQE interact with dynamic allocation?"],
     )
@@ -83,11 +86,13 @@ def test_note_filenames_are_deterministic_and_rerun_replaces_in_place(tmp_path):
     all_sources = [c for n in notes for c in n.sources]
     first = write_tree(tmp_path, topic="How to write Spark Jobs?",
                         slug=slugify("How to write Spark Jobs?"), depth=2, model_id="m",
+                        engine="native", engine_label="Built-in",
                         notes=notes, all_sources=all_sources)
     first_files = sorted(p.name for p in first.glob("*.md"))
 
     second = write_tree(tmp_path, topic="How to write Spark Jobs?",
                          slug=slugify("How to write Spark Jobs?"), depth=2, model_id="m",
+                         engine="native", engine_label="Built-in",
                          notes=notes, all_sources=all_sources)
     second_files = sorted(p.name for p in second.glob("*.md"))
 
@@ -102,7 +107,8 @@ def test_duplicate_subtopic_titles_get_unique_stable_slugs(tmp_path):
     ]
     dir_path = write_tree(
         tmp_path, topic="Duplicate Titles Test", slug=slugify("Duplicate Titles Test"),
-        depth=1, model_id="m", notes=dup_notes, all_sources=[],
+        depth=1, model_id="m", engine="native", engine_label="Built-in",
+        notes=dup_notes, all_sources=[],
     )
     stems = {p.stem for p in dir_path.glob("*.md")}
     assert "Overview" in stems
