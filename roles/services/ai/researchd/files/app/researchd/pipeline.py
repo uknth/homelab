@@ -4,7 +4,10 @@ markdown tree.
 `queued -> planning -> searching -> fetching -> summarising ->
 synthesising -> writing -> ready`, plus `failed` / `cancelled`.
 `published` is set only by the external callback endpoint (main.py),
-never by anything in this module.
+never by anything in this module. Same for the `publishing` status in
+between `ready` and `published` -- entirely owned by main.py's
+`/claim` and `/unclaim` endpoints, which this module never calls and
+never checks for.
 
 Concurrency is 1: a single asyncio worker task pulls job ids off an
 in-process queue and runs them one at a time, because there is exactly
@@ -155,7 +158,14 @@ class Pipeline:
 
     def cancel(self, job_id: str) -> bool:
         job = db.get_job(self.conn, job_id)
-        if job is None or job["status"] in ("ready", "published", "failed", "cancelled"):
+        # `publishing` is blocked alongside `ready`/`published`: once n8n has
+        # claimed the job the SSH ingest is running against whatever is
+        # already on disk, entirely outside this process's control. Setting
+        # status to `cancelled` here would not stop that ingest, and would
+        # instead pull the rug out from under /unclaim and /published --
+        # both of which are about to be called by a run that has no idea the
+        # job was "cancelled" out from under it.
+        if job is None or job["status"] in ("ready", "publishing", "published", "failed", "cancelled"):
             return False
         db.update_job_status(self.conn, job_id, "cancelled")
         self.events.publish(job_id, {"type": "stage", "stage": "cancelled"})

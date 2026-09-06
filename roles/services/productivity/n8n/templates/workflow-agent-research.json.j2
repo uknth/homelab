@@ -53,12 +53,17 @@
       "position": [180, 0]
     },
     {
-      "parameters": { "jsCode": "// Skips any job whose ingest is still in flight. The API keeps reporting\n// `ready` for a job on every poll until researchd's /published callback\n// runs, and the SSH ingest (pull + vaultmerge + vaultindex + Quartz rebuild)\n// takes ~20 minutes -- well over the poll interval -- so without this guard\n// the same job gets ingested several times concurrently. Marked in-flight\n// here; cleared by 'Clear in-flight' once this job's run reaches Mark\n// published or the failure branch.\nconst sd = $getWorkflowStaticData('global');\nconst inFlight = sd.researchInFlight || (sd.researchInFlight = {});\nconst items = $input.all();\nconst out = [];\nfor (const item of items) {\n  const id = item.json.id;\n  if (inFlight[id]) continue;\n  inFlight[id] = true;\n  out.push(item);\n}\nreturn out;" },
-      "id": "n-inflight",
-      "name": "Skip in-flight jobs",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [290, 140]
+      "parameters": {
+        "method": "POST",
+        "url": "={{ n8n_research_api_url }}/api/jobs/{% raw %}{{ $json.id }}{% endraw %}/claim",
+        "options": {}
+      },
+      "id": "n-claim",
+      "name": "Claim job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [290, 0],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -72,7 +77,7 @@
       "name": "Pull + wiki rebuild",
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
-      "position": [400, 0],
+      "position": [500, 0],
       "onError": "continueErrorOutput",
       "credentials": {
         "sshPrivateKey": {
@@ -87,7 +92,7 @@
       "name": "Parse result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [620, 0]
+      "position": [720, 0]
     },
     {
       "parameters": {
@@ -109,7 +114,7 @@
       "name": "Ingest ok?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [840, 0]
+      "position": [940, 0]
     },
     {
       "parameters": {
@@ -125,7 +130,7 @@
       "name": "Mark published",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1060, -80],
+      "position": [1160, -80],
       "onError": "continueErrorOutput"
     },
     {
@@ -150,7 +155,20 @@
       "name": "Notify research failure",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1060, 160],
+      "position": [1160, 160],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ n8n_research_api_url }}/api/jobs/{% raw %}{{ $('Ready jobs').item.json.id }}{% endraw %}/unclaim",
+        "options": {}
+      },
+      "id": "n-unclaim",
+      "name": "Unclaim job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 160],
       "onError": "continueErrorOutput"
     },
     {
@@ -175,21 +193,13 @@
       "name": "Notify published",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1280, -160],
+      "position": [1380, -160],
       "onError": "continueErrorOutput"
     },
     {
-      "parameters": { "jsCode": "// Ends the in-flight guard for this job's ingest run, on whichever path it\n// took -- success (via Notify published) or failure (via Notify research\n// failure). Without clearing on the failure path too, one failed ingest\n// would permanently block that job from ever being retried.\nconst sd = $getWorkflowStaticData('global');\nconst inFlight = sd.researchInFlight || (sd.researchInFlight = {});\nconst items = $input.all();\n// FAIL OPEN, deliberately. Resolving the job id here depends on the\n// pairedItem chain surviving every node between 'Ready jobs' and this one.\n// If that ever breaks, throwing would leave the guard set forever and NO\n// job would be ingested again -- the pipeline would wedge silently. Clearing\n// the whole map instead risks at worst one duplicate ingest, which is a far\n// cheaper failure than a permanent stall.\nfor (let i = 0; i < items.length; i++) {\n  try {\n    const jobId = $('Ready jobs').itemMatching(i).json.id;\n    delete inFlight[jobId];\n  } catch (e) {\n    console.log('clear-inflight: could not resolve job id, clearing all:', e.message);\n    for (const k of Object.keys(inFlight)) delete inFlight[k];\n  }\n}\nreturn items;" },
-      "id": "n-clear-inflight",
-      "name": "Clear in-flight",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1500, 0]
-    },
-    {
-      "parameters": { "jsCode": "// researchd's job list has no history, only current status, so 'started'/\n// 'ready' transitions have to be derived by diffing against what this\n// workflow saw on the previous poll. Persisted in workflow static data --\n// survives across polls, reset only if the workflow is reimported.\n//\n// First execution ever (static data absent) seeds the map with NO\n// notifications: there are already ~16 historical jobs in researchd's\n// database, and without this guard enabling this workflow would fire one\n// 'started' notification per existing job.\nconst sd = $getWorkflowStaticData('global');\nconst WORKING = new Set(['queued', 'planning', 'searching', 'fetching', 'summarising', 'synthesising', 'writing']);\n\nconst seeding = sd.researchStatus === undefined;\nif (seeding) sd.researchStatus = {};\nconst prevMap = sd.researchStatus;\n\nconst items = $input.all();\nconst seenIds = new Set();\nconst out = [];\n\nfor (const item of items) {\n  const job = item.json;\n  seenIds.add(job.id);\n  const prev = prevMap[job.id];\n  prevMap[job.id] = job.status;\n\n  if (seeding || prev === job.status) continue;\n\n  if (WORKING.has(job.status) && !WORKING.has(prev || '')) {\n    out.push({ json: {\n      title: `Research started: ${job.slug}`,\n      body: `topic: ${job.topic || job.source_url || '(untitled)'} | depth ${job.depth}`,\n    } });\n  } else if (job.status === 'ready' && prev !== 'ready') {\n    out.push({ json: {\n      title: `Research ready: ${job.slug}`,\n      body: 'Markdown is ready; awaiting wiki publish.',\n    } });\n  }\n}\n\n// Prune ids the API no longer returns, so this map cannot grow without bound.\nfor (const id of Object.keys(prevMap)) {\n  if (!seenIds.has(id)) delete prevMap[id];\n}\n\nreturn out;" },
-      "id": "n-track",
-      "name": "Track job status",
+      "parameters": { "jsCode": "// researchd's job list carries only CURRENT status + timestamps, no\n// history, and nothing is persisted in this workflow any more -- n8n\n// workflow static data does not survive here at all (confirmed live: it\n// read back empty on every run), so \"started\"/\"ready\" transitions are\n// derived from timestamps alone, fresh on every poll, instead of by\n// diffing against a remembered previous status.\n//\n// The window is 70s against a 60s poll: 10s of slack, so poll jitter or a\n// slow researchd cannot drop an event, while an event is normally seen by\n// exactly ONE poll. This started at 90s, which was wrong in practice rather\n// than in theory -- 90 > 60 means EVERY event falls inside two consecutive\n// polls, so every notification fired twice, not just occasionally (observed\n// live). Keep this above the poll interval and close to it.\n// The residual cost of that overlap is at worst one duplicate notification for the\n// same transition -- far cheaper than silently dropping one, which is the\n// risk an exact, non-overlapping window would carry.\nconst WINDOW_MS = 70 * 1000;\nconst now = Date.now();\n\nconst items = $input.all();\nconst out = [];\n\nfor (const item of items) {\n  const job = item.json;\n  const createdAt = Date.parse(job.created_at);\n  const updatedAt = Date.parse(job.updated_at);\n\n  if (!Number.isNaN(createdAt) && now - createdAt <= WINDOW_MS) {\n    out.push({ json: {\n      title: `Research started: ${job.slug}`,\n      body: `topic: ${job.topic || job.source_url || '(untitled)'} | depth ${job.depth}`,\n    } });\n  }\n\n  if (job.status === 'ready' && !Number.isNaN(updatedAt) && now - updatedAt <= WINDOW_MS) {\n    out.push({ json: {\n      title: `Research ready: ${job.slug}`,\n      body: 'Markdown is ready; awaiting wiki publish.',\n    } });\n  }\n}\n\nreturn out;" },
+      "id": "n-transitions",
+      "name": "Detect status transitions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [180, -220]
@@ -225,12 +235,17 @@
       "main": [
         [
           { "node": "Ready jobs", "type": "main", "index": 0 },
-          { "node": "Track job status", "type": "main", "index": 0 }
+          { "node": "Detect status transitions", "type": "main", "index": 0 }
         ]
       ]
     },
-    "Ready jobs": { "main": [[{ "node": "Skip in-flight jobs", "type": "main", "index": 0 }]] },
-    "Skip in-flight jobs": { "main": [[{ "node": "Pull + wiki rebuild", "type": "main", "index": 0 }]] },
+    "Ready jobs": { "main": [[{ "node": "Claim job", "type": "main", "index": 0 }]] },
+    "Claim job": {
+      "main": [
+        [{ "node": "Pull + wiki rebuild", "type": "main", "index": 0 }],
+        []
+      ]
+    },
     "Pull + wiki rebuild": {
       "main": [
         [{ "node": "Parse result", "type": "main", "index": 0 }],
@@ -250,18 +265,12 @@
         [{ "node": "Notify research failure", "type": "main", "index": 0 }]
       ]
     },
-    "Notify published": {
-      "main": [
-        [{ "node": "Clear in-flight", "type": "main", "index": 0 }],
-        [{ "node": "Clear in-flight", "type": "main", "index": 0 }]
-      ]
-    },
     "Notify research failure": {
       "main": [
-        [{ "node": "Clear in-flight", "type": "main", "index": 0 }],
-        [{ "node": "Clear in-flight", "type": "main", "index": 0 }]
+        [{ "node": "Unclaim job", "type": "main", "index": 0 }],
+        [{ "node": "Unclaim job", "type": "main", "index": 0 }]
       ]
     },
-    "Track job status": { "main": [[{ "node": "Notify job transition", "type": "main", "index": 0 }]] }
+    "Detect status transitions": { "main": [[{ "node": "Notify job transition", "type": "main", "index": 0 }]] }
   }
 }

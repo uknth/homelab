@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     error        TEXT,
     wiki_url     TEXT,
     engine       TEXT NOT NULL DEFAULT 'native',
+    claimed_at   TEXT,
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
@@ -86,6 +87,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
     if "engine" not in cols:
         conn.execute("ALTER TABLE jobs ADD COLUMN engine TEXT NOT NULL DEFAULT 'native'")
+        conn.commit()
+    if "claimed_at" not in cols:
+        # Added for the ready -> publishing claim/unclaim contract (main.py's
+        # /claim and /unclaim). Nullable, no default: only a claimed job ever
+        # has one, and a bare `ALTER TABLE ... ADD COLUMN` with no DEFAULT is
+        # NULL for every existing row -- exactly "never claimed", which is
+        # the correct backfilled meaning for rows that predate this column.
+        conn.execute("ALTER TABLE jobs ADD COLUMN claimed_at TEXT")
         conn.commit()
 
 
@@ -179,6 +188,65 @@ def update_job_slug(conn: sqlite3.Connection, job_id: str, slug: str) -> None:
         )
 
 
+def claim_job(conn: sqlite3.Connection, job_id: str, stale_minutes: int) -> bool:
+    """Atomically move a job `ready` -> `publishing`, reporting whether THIS
+    call won the claim.
+
+    n8n polls `/api/jobs` every minute and a job stays `ready` (researchd
+    never changes it) until n8n's SSH ingest finishes ~20 minutes later --
+    so every poll in between would start another concurrent ingest of the
+    same job without a guard. n8n workflow static data used to be that
+    guard and turned out not to persist at all (see the commit that added
+    this), so the lock has to live where the durable state actually is:
+    here, in the jobs table, as a single conditional UPDATE. A read-then-
+    write (SELECT status, then UPDATE if ready) would race two overlapping
+    polls right back into the same double-ingest bug this exists to fix --
+    the whole point is that the WHERE clause and the write happen as one
+    atomic statement the database itself serialises.
+
+    STALE CLAIM RECOVERY: the WHERE clause also matches a row already in
+    `publishing` whose `claimed_at` is older than `stale_minutes`. Without
+    this, an n8n run that dies mid-ingest (a network blip, ai01 rebooting,
+    the SSH session dropping) leaves the job in `publishing` forever --
+    nothing will ever call /unclaim for it, and no future poll will look
+    twice at a job that is not `ready`. That is exactly the permanent-wedge
+    failure mode this whole change exists to avoid, just shifted one status
+    to the right, so a claim is allowed to reclaim its own stale lock.
+    """
+    now = _now()
+    # Same ISO-8601 "Z" string format _now() produces, so this compares
+    # correctly against claimed_at with a plain text `<` -- no parsing
+    # needed, same trick list_jobs already relies on for created_at.
+    stale_before = time.strftime(
+        "%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - stale_minutes * 60)
+    ) + "Z"
+    with _write(conn) as cur:
+        cur.execute(
+            "UPDATE jobs SET status='publishing', claimed_at=?, updated_at=? "
+            "WHERE id=? AND ("
+            "  status='ready'"
+            "  OR (status='publishing' AND claimed_at IS NOT NULL AND claimed_at < ?)"
+            ")",
+            (now, now, job_id, stale_before),
+        )
+        return cur.rowcount == 1
+
+
+def unclaim_job(conn: sqlite3.Connection, job_id: str) -> bool:
+    """`publishing` -> `ready`, so a failed ingest is retried on the next
+    poll instead of being stuck forever. Called by n8n's failure branch;
+    also safe to call on a job that already moved on (published, or
+    reclaimed by someone else) -- the WHERE clause makes that a no-op
+    rather than an error.
+    """
+    with _write(conn) as cur:
+        cur.execute(
+            "UPDATE jobs SET status='ready', updated_at=? WHERE id=? AND status='publishing'",
+            (_now(), job_id),
+        )
+        return cur.rowcount == 1
+
+
 def get_latest_job_for_slug(conn: sqlite3.Connection, slug: str) -> dict | None:
     row = conn.execute(
         "SELECT * FROM jobs WHERE slug=? ORDER BY created_at DESC LIMIT 1", (slug,)
@@ -194,9 +262,19 @@ def list_jobs(conn: sqlite3.Connection, limit: int = 200) -> list[dict]:
 
 
 def list_active_jobs(conn: sqlite3.Connection) -> list[dict]:
+    # `publishing` is excluded alongside `ready` -- deliberately, not an
+    # oversight. This list drives Pipeline.start()'s restart recovery, which
+    # marks anything it finds "failed" on the theory that a mid-flight
+    # internal stage has no safe resume point. But `publishing` is NOT a
+    # mid-flight internal stage: it means n8n's SSH ingest owns the job right
+    # now, entirely outside this process. If researchd restarted while a job
+    # sat in `publishing`, recovery must leave it alone exactly as it leaves
+    # `ready` alone -- the claim/unclaim contract (and the stale-claim
+    # reclaim in `claim_job` below) is what un-wedges it if n8n itself dies,
+    # not a researchd restart.
     rows = conn.execute(
         "SELECT * FROM jobs WHERE status NOT IN "
-        "('ready','published','failed','cancelled') ORDER BY created_at"
+        "('ready','publishing','published','failed','cancelled') ORDER BY created_at"
     ).fetchall()
     return [dict(r) for r in rows]
 

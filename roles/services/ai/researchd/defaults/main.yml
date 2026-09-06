@@ -70,6 +70,14 @@ researchd_llm_base_url: "http://{{ researchd_llm_host }}:{{ omlx_port }}/v1"
 # matches the default already coded in files/app/researchd/config.py.
 researchd_llm_model: "Qwen3-30B-A3B-Instruct-2507-4bit"
 
+# --- ready -> publishing claim ------------------------------------------
+# How long n8n's SSH ingest (pull + vaultmerge + vaultindex + Quartz
+# rebuild, ~20 min) may hold a job in `publishing` before another poll's
+# claim is allowed to reclaim it as stuck. Matches
+# files/app/researchd/config.py's own default (60) -- set here explicitly
+# so it is one visible, tunable value rather than a silent code default.
+researchd_claim_stale_minutes: 60
+
 # --- Depth dial ---------------------------------------------------------
 # One dial, 1-5, default 2 (docs/spec/research.md#depth). Mirrored here for
 # visibility against the table the app actually runs

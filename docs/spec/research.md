@@ -267,6 +267,8 @@ GET  /api/jobs                                  -> list with status
 GET  /api/jobs/{id}                             -> job detail + per-stage state
 GET  /api/jobs/{id}/events                      -> SSE progress stream
 GET  /api/jobs/{id}/bundle.tar.gz               -> the markdown output
+POST /api/jobs/{id}/claim                       ready -> publishing (n8n, before ingest)
+POST /api/jobs/{id}/unclaim                      publishing -> ready (n8n, on ingest failure)
 POST /api/jobs/{id}/published                   {wiki_url}  <- n8n's callback
 POST /api/jobs/{id}/cancel
 GET  /healthz
@@ -276,13 +278,24 @@ GET  /healthz
 
 ```
 queued -> planning -> searching -> fetching -> summarising
-       -> synthesising -> writing -> ready -> published
+       -> synthesising -> writing -> ready -> publishing -> published
                                        └─> failed | cancelled
 ```
 
 `ready` means the markdown exists. **`published` means it is in the wiki** — set
 only by n8n's callback after the Quartz rebuild. The UI's completion checkmark
 tracks `published`, not `ready`, so a green tick always means the link works.
+
+`publishing` sits in between, entirely owned by n8n's poll and never by the
+pipeline itself: `/claim` is a single conditional `UPDATE ... WHERE
+status='ready'` that atomically moves a job into it right before the SSH
+ingest starts, so an overlapping poll cannot start a second ingest of the
+same job. n8n workflow static data was tried as this guard first and does
+not persist on this deployment at all — the lock has to live in researchd's
+own database instead. `/claim` also reclaims a `publishing` row whose claim
+is older than `researchd_claim_stale_minutes` (default 60), so a job whose
+ingest died mid-flight is retried rather than wedged forever; `/unclaim` does
+the same on the ingest's own explicit failure branch.
 
 ## Engines
 

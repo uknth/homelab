@@ -48,6 +48,15 @@ class Settings:
     # --- storage ---
     data_dir: str = os.environ.get("RESEARCHD_DATA_DIR", "/data")
 
+    # --- ready -> publishing claim (main.py's /claim, /unclaim) ---
+    # How long a `publishing` claim is honoured before another /claim call is
+    # allowed to steal it back to `ready`. Long enough that a normal ~20
+    # minute ingest never gets reclaimed out from under itself; short enough
+    # that an n8n run that died mid-ingest does not wedge the job forever.
+    # See db.claim_job's stale-claim-recovery comment for the failure mode
+    # this exists to bound.
+    claim_stale_minutes: int = _int("RESEARCHD_CLAIM_STALE_MINUTES", 60)
+
     # --- server ---
     port: int = _int("RESEARCHD_PORT", 8110)
 

@@ -7,6 +7,8 @@ Route surface matches docs/spec/research.md exactly:
     GET  /api/jobs/{id}                                  -> detail + per-stage state
     GET  /api/jobs/{id}/events                           -> SSE progress stream
     GET  /api/jobs/{id}/bundle.tar.gz                    -> the markdown output
+    POST /api/jobs/{id}/claim                            -> ready -> publishing
+    POST /api/jobs/{id}/unclaim                          -> publishing -> ready
     POST /api/jobs/{id}/published   {wiki_url}           -> marks published
     POST /api/jobs/{id}/cancel
     GET  /healthz
@@ -14,6 +16,13 @@ Route surface matches docs/spec/research.md exactly:
 `published` is set only by this module's `/published` handler, called by
 n8n after the Quartz rebuild -- never by the pipeline itself (pipeline.py
 only ever reaches `ready`).
+
+`publishing` sits between `ready` and `published`, entirely owned by n8n:
+`/claim` moves a job into it right before n8n's SSH ingest starts, `/unclaim`
+moves it back to `ready` if that ingest fails, and `/published` moves it on to
+`published` if it succeeds. Nothing in pipeline.py ever sets or reads it --
+see db.claim_job for why this replaced n8n's own (non-persistent) in-flight
+guard.
 """
 
 from __future__ import annotations
@@ -140,6 +149,15 @@ def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
+# `publishing` is deliberately NOT in here. This set decides when the SSE
+# stream stops listening, and it already stops at `ready` -- a design that
+# predates `publishing` and does not change because of it: a client watching
+# a job's live progress cares about the research pipeline finishing, not
+# about the later, separate ingest/publish handshake between researchd and
+# n8n. Concretely, /claim and /unclaim never call pipeline.events.publish, so
+# no stage event tagged "publishing" is ever emitted for this set to need to
+# recognise -- by the time a job reaches `publishing`, any subscriber to this
+# stream has already disconnected at the `ready` event.
 _TERMINAL_STAGES = {"ready", "failed", "cancelled", "published"}
 
 
@@ -175,7 +193,12 @@ async def get_bundle(job_id: str) -> StreamingResponse:
     job = db.get_job(pipeline.conn, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
-    if job["status"] not in ("ready", "published"):
+    # `publishing` must serve the bundle exactly like `ready` does: it is the
+    # SAME markdown tree, already on disk, and this is precisely the endpoint
+    # n8n's SSH ingest calls (indirectly, via the researchd API) while the job
+    # sits in `publishing`. Refusing it here would break the ingest the claim
+    # was taken specifically to allow.
+    if job["status"] not in ("ready", "publishing", "published"):
         raise HTTPException(status_code=409, detail=f"job is {job['status']}, not ready")
 
     tree_path = Path(settings.tree_dir) / job["slug"]
@@ -191,12 +214,50 @@ async def get_bundle(job_id: str) -> StreamingResponse:
     return StreamingResponse(buf, media_type="application/gzip", headers=headers)
 
 
+@app.post("/api/jobs/{job_id}/claim")
+async def claim_job(job_id: str) -> dict:
+    """Atomically claims a job for ingest: `ready` -> `publishing`. Called by
+    n8n immediately before it starts the SSH ingest for a job, instead of the
+    workflow-static-data guard that turned out not to persist at all -- see
+    db.claim_job. 200 + the job body means THIS call won the claim; 409 means
+    it did not (already claimed and not stale, already published, or any
+    other status), and the caller must not proceed to ingest.
+    """
+    job = db.get_job(pipeline.conn, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    won = db.claim_job(pipeline.conn, job_id, settings.claim_stale_minutes)
+    if not won:
+        raise HTTPException(status_code=409, detail=f"job is {job['status']}, not claimable")
+    return _job_detail(job_id)
+
+
+@app.post("/api/jobs/{job_id}/unclaim")
+async def unclaim_job(job_id: str) -> dict:
+    """`publishing` -> `ready`, called by n8n's failure branch so a job whose
+    ingest died is retried on the next poll instead of being stuck in
+    `publishing` forever. A job not currently `publishing` is left alone
+    (see db.unclaim_job) and this still reports {"ok": True} either way --
+    the caller (a failure branch already reporting its own error) has no use
+    for a second failure mode here.
+    """
+    job = db.get_job(pipeline.conn, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    db.unclaim_job(pipeline.conn, job_id)
+    return {"ok": True}
+
+
 @app.post("/api/jobs/{job_id}/published")
 async def mark_published(job_id: str, body: PublishedRequest) -> dict:
     job = db.get_job(pipeline.conn, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
-    if job["status"] not in ("ready", "published"):
+    # `publishing` is the expected status here: n8n claims the job (`ready`
+    # -> `publishing`) before it ingests, then calls this endpoint once the
+    # Quartz rebuild succeeds. `ready` is still accepted too, for a caller
+    # that never claimed the job at all (e.g. a manual re-publish).
+    if job["status"] not in ("ready", "publishing", "published"):
         raise HTTPException(status_code=409, detail=f"job is {job['status']}, not ready to publish")
 
     db.update_job_status(pipeline.conn, job_id, "published", wiki_url=body.wiki_url)

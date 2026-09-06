@@ -52,9 +52,12 @@ n8n_vault_interval_hours: 1
 # docs/spec/research.md#ports-and-domains.
 n8n_research_api_url: "http://{{ hostvars['ctl01'].ansible_host }}:8110"
 # 1 minute, not 5: "research started" notifications need to be timely, and
-# this is only safe because the workflow tracks in-flight job ids in static
-# data and skips any job whose ~20-minute ingest is already running (see
-# 'Skip in-flight jobs' in workflow-agent-research.json.j2). Raising this
+# this is only safe because every ready job is claimed (POST .../claim,
+# researchd-side, an atomic ready -> publishing UPDATE) before its ~20-minute
+# ingest starts -- see workflow-agent-research.json.j2's 'Claim job' node and
+# researchd's db.claim_job. n8n workflow static data was tried here first and
+# turned out not to persist at all on this deployment, which is why the lock
+# lives in researchd's own database instead of in this workflow. Raising this
 # again later without keeping that guard would re-introduce concurrent
 # duplicate ingests of the same job.
 n8n_research_poll_minutes: 1
