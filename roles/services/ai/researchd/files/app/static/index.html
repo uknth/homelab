@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- researchd -- served by the app itself, no CDN links, no external assets. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>Research</h1>
+  <p class="tagline">A topic or a link goes in; a cited body of notes comes out, published to the wiki.</p>
+
+  <form class="compose" id="compose">
+    <input id="topic" type="text" placeholder="A topic, or paste a URL to start from…" autocomplete="off" autofocus>
+    <select id="depth">
+      <option value="1">Depth 1 — quick</option>
+      <option value="2" selected>Depth 2 — default</option>
+      <option value="3">Depth 3 — thorough</option>
+      <option value="4">Depth 4 — deep</option>
+      <option value="5">Depth 5 — exhaustive</option>
+    </select>
+    <button type="submit" id="submit">Research</button>
+  </form>
+  <div class="hint" id="hint"></div>
+
+  <ul class="jobs" id="jobs"></ul>
+  <div class="empty" id="empty" hidden>No research yet — start with a topic above.</div>
+
+  <footer>Generated notes land under <code>Agent-Research/</code> in the wiki once published.</footer>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

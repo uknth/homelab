@@ -25,6 +25,12 @@
   loop:
     - "{{ vaultmerge_root_dir }}/app"
     - "{{ vaultmerge_out_dir }}"
+    # Must exist BEFORE compose up. It is a bind-mount source, and Docker
+    # silently creates a missing one as root:root — which would then be
+    # unwritable by researchpull, and the failure would surface much later as
+    # an empty Agent-Research section rather than as a mount error here.
+    # Owned by the container uid because researchpull unpacks into it.
+    - "{{ vaultmerge_research_dir }}"
 
 - name: Template the merge script
   become: true

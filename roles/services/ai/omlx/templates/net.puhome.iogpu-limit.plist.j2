@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Managed by Ansible (roles/services/ai/omlx) — do not edit by hand.
+
+     Raises the kernel's cap on how much unified memory Metal may wire.
+     This is a BOOT-TIME job, not a service: sysctl values do not persist
+     across a reboot and macOS has no /etc/sysctl.conf equivalent that
+     covers iogpu, so the only way to make it durable is to set it again
+     on every boot. RunAtLoad with KeepAlive false is exactly that — it
+     runs once, exits 0, and launchd does not restart it.
+
+     Without this, omlx clamps its own memory ceiling to metal_cap and
+     rejects even very small prompts. See omlx_iogpu_wired_limit_mb. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{ omlx_iogpu_label }}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/sbin/sysctl</string>
+        <string>-w</string>
+        <string>iogpu.wired_limit_mb={{ omlx_iogpu_wired_limit_mb }}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>{{ omlx_root_dir }}/iogpu-limit.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{ omlx_root_dir }}/iogpu-limit.err.log</string>
+</dict>
+</plist>

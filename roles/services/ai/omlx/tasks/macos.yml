@@ -1,0 +1,256 @@
+---
+# omlx on ai01 (launchd LaunchDaemon, not `brew services` — see
+# templates/net.puhome.omlx.plist.j2 for why). Included when
+# ansible_system == Darwin. Requires roles/system/brew to have already run
+# against this host (uknth needs a working `brew` before this role can
+# install/upgrade anything).
+
+- name: Ensure omlx directories exist
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: staff
+    mode: "0755"
+  loop:
+    - "{{ omlx_root_dir }}"
+    - "{{ omlx_model_dir }}"
+    - "{{ omlx_paged_ssd_cache_dir }}"
+
+# --- Install/upgrade the omlx binary ---------------------------------------
+# Gated on the *installed version* rather than a `creates:`/state:present
+# shortcut — roles/system/beszel_agent documents the exact bug that pattern
+# has: a bump to omlx_version would silently no-op because the binary is
+# already there. ai01 has 0.4.4rc1 today, so this must actually fire once.
+- name: Query the installed omlx version
+  become: true
+  ansible.builtin.command: "{{ omlx_bin }} --version"
+  register: _omlx_version_out
+  changed_when: false
+  failed_when: false
+
+- name: Record the installed omlx version
+  ansible.builtin.set_fact:
+    _omlx_installed_version: >-
+      {{ _omlx_version_out.stdout | default('') | regex_search('[0-9]+\.[0-9]+\.[0-9]+(rc[0-9]+)?') | default('', true) }}
+
+# `brew upgrade` resolves against LOCAL formula definitions, and nothing on
+# this fleet ever refreshes them: ai01's Homebrew and every tap sat at a
+# 2026-06-12 checkout, still declaring omlx 0.4.4rc1 while upstream had moved
+# to 0.6.4.
+#
+# This is `brew update`, NOT a targeted `git pull` on the omlx tap. That was
+# tried first and is wrong: Homebrew's own code and the formula definitions
+# are a matched set. Pulling one tap forward against a 3-month-old Homebrew
+# produced `Error: unknown install step: configure_clang_system` — a freshly
+# pulled dependency declaring a post-install step the old Homebrew does not
+# implement. Move them together or not at all.
+#
+# Note `community.general.homebrew` sets HOMEBREW_NO_AUTO_UPDATE=1 for
+# determinism, so brew will never do this for us during the upgrade below;
+# it has to be an explicit step.
+#
+# Gated on the pin being unsatisfied, so a steady-state run makes no network
+# call and cannot be surprised by upstream moving.
+- name: Update Homebrew and all formula definitions (uknth)
+  become: true
+  become_user: "{{ omlx_brew_user }}"
+  ansible.builtin.command: "{{ omlx_brew_prefix }}/bin/brew update"
+  register: _omlx_brew_update
+  changed_when: "'Already up-to-date' not in (_omlx_brew_update.stdout | default(''))"
+  when: _omlx_installed_version != omlx_version
+
+- name: Clear superseded and part-staged kegs before upgrading (uknth)
+  become: true
+  become_user: "{{ omlx_brew_user }}"
+  ansible.builtin.command: "{{ omlx_brew_prefix }}/bin/brew cleanup"
+  register: _omlx_brew_cleanup
+  changed_when: "'Removing:' in (_omlx_brew_cleanup.stdout | default(''))"
+  when: _omlx_installed_version != omlx_version
+
+- name: Upgrade omlx via Homebrew (uknth)
+  become: true
+  become_user: "{{ omlx_brew_user }}"
+  community.general.homebrew:
+    name: "{{ omlx_formula }}"
+    state: latest
+    path: "{{ omlx_brew_prefix }}/bin"
+  when: _omlx_installed_version != omlx_version
+  register: _omlx_brew_upgrade
+
+# Both gated with `and not ansible_check_mode`: community.general.homebrew
+# fully supports check mode and will correctly predict "changed" under
+# --check, but the `command` re-query below does not run under --check
+# (module has no check-mode support, so Ansible skips it), which would leave
+# the assert comparing the pin against an empty string and failing a plain
+# --check dry-run (this fleet runs one nightly via ops/gitops_executor).
+- name: Re-query the installed omlx version
+  become: true
+  ansible.builtin.command: "{{ omlx_bin }} --version"
+  register: _omlx_version_recheck
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+# The tap's formula version is whatever jundot has currently published — brew
+# has no "install exactly 0.6.4" verb for a third-party tap the way the
+# beszel_agent role gets from a pinned GitHub release tag. This assert is the
+# substitute: it fails loudly if the tap has moved past the pin, so a drift
+# gets noticed and omlx_version gets bumped deliberately instead of quietly
+# drifting.
+- name: Assert the installed version matches the pin
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_omlx_version_recheck.stdout | default('') | regex_search('[0-9]+\.[0-9]+\.[0-9]+(rc[0-9]+)?') | default(''))
+        == omlx_version
+    fail_msg: >-
+      omlx on ai01 is {{ _omlx_version_recheck.stdout | default('unknown') }},
+      but omlx_version is pinned to {{ omlx_version }}. Either the tap has
+      moved PAST the pin (bump omlx_version deliberately — see
+      defaults/main.yml), or it is still BEHIND it, which means the tap
+      checkout at {{ omlx_brew_prefix }}/Library/Taps/jundot/homebrew-omlx did
+      not refresh — check that `git pull --ff-only` succeeded there as
+      {{ omlx_brew_user }}.
+  # Every run, not just after an upgrade. `state: latest` on a third-party
+  # tap installs whatever jundot has published, which may be past the pin —
+  # and once the host is past it, brew reports no change, so gating this on
+  # `is changed` would let the drift sit undetected forever.
+  when: not ansible_check_mode
+
+# --- Hugging Face CLI (to pre-place the model) ------------------------------
+- name: Install the Hugging Face CLI (uknth)
+  become: true
+  become_user: "{{ omlx_brew_user }}"
+  community.general.homebrew:
+    name: "{{ omlx_hf_formula }}"
+    state: present
+    path: "{{ omlx_brew_prefix }}/bin"
+
+# --- Pre-place the model -----------------------------------------------
+# omlx must never pull this from Hugging Face itself at runtime — that's the
+# unmanaged-runtime-state objection that got Ollama rejected. Ansible fetches
+# the pinned revision once, and a marker file (holding the revision that was
+# actually downloaded) makes this idempotent AND revision-bump-aware: a plain
+# `stat` on the model dir would not notice omlx_model_revision changing.
+- name: Check the model revision already on disk
+  ansible.builtin.slurp:
+    src: "{{ omlx_model_local_dir }}/.omlx_revision"
+  register: _omlx_model_marker
+  failed_when: false
+
+- name: Download the pinned model revision from Hugging Face
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.command: >-
+    {{ omlx_hf_bin }} download {{ omlx_model_repo }}
+    --revision {{ omlx_model_revision }}
+    --local-dir {{ omlx_model_local_dir }}
+  environment:
+    # ~17 GB of model. Without this, any staging the CLI does lands in the
+    # ansible service account's home instead of the omlx directory.
+    HF_HOME: "{{ omlx_root_dir }}/hf"
+    HF_HUB_DISABLE_TELEMETRY: "1"
+    # tqdm progress bars redraw thousands of times across a 17 GB transfer,
+    # and Ansible captures every byte of that through the SSH channel. It
+    # killed the connection within seconds on ai01 — reported as UNREACHABLE
+    # ("Shared connection closed"), not a task failure, with 0 bytes written.
+    HF_HUB_DISABLE_PROGRESS_BARS: "1"
+  # `.content is not defined` is the real "no marker yet" test. NOT
+  # `_omlx_model_marker is failed`: failed_when: false forces .failed to
+  # False even when slurp could not read the file, so that test never fires
+  # and evaluation falls through to .content — which is undefined on a first
+  # run, killing the play with "'dict object' has no attribute 'content'".
+  when: >-
+    _omlx_model_marker.content is not defined or
+    (_omlx_model_marker.content | b64decode | trim) != omlx_model_revision
+  register: _omlx_model_download
+  changed_when: true
+  # Run detached and poll rather than holding one SSH channel open for the
+  # whole transfer: each poll is a short-lived connection, so a drop mid-pull
+  # can no longer fail the play. `retries`/`until` is deliberately NOT used
+  # with async — it would restart the job rather than resume it. `hf download`
+  # is itself resumable, and the revision marker below means simply re-running
+  # the play continues where this left off.
+  async: 7200
+  poll: 30
+
+- name: Record the downloaded model revision
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.copy:
+    dest: "{{ omlx_model_local_dir }}/.omlx_revision"
+    content: "{{ omlx_model_revision }}\n"
+    mode: "0644"
+  when: _omlx_model_download is changed
+
+# --- Metal wired-memory ceiling -------------------------------------------
+# Must be in place BEFORE the server starts, or omlx computes its ceiling from
+# the old, lower metal_cap and rejects prompts until it is restarted.
+- name: Install the iogpu wired-limit boot job
+  become: true
+  ansible.builtin.template:
+    src: net.puhome.iogpu-limit.plist.j2
+    dest: "{{ omlx_iogpu_plist }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  register: _omlx_iogpu_plist
+  # omlx reads metal_cap ONCE, at startup, and clamps its own ceiling to it.
+  # Raising the limit without restarting the server changes nothing — measured:
+  # the sysctl read 20480 while omlx still reported "metal_cap ceiling 17.8GB"
+  # and kept rejecting 1,056-token prompts.
+  notify: Reload omlx (launchd)
+
+- name: Bootstrap the iogpu wired-limit job
+  become: true
+  ansible.builtin.shell: >-
+    launchctl print system/{{ omlx_iogpu_label }} >/dev/null 2>&1
+    || launchctl bootstrap system {{ omlx_iogpu_plist }}
+  changed_when: false
+
+# Apply immediately too — the plist alone only takes effect at the next boot,
+# and we want the ceiling raised now.
+- name: Read the current Metal wired-memory limit
+  become: true
+  ansible.builtin.command: sysctl -n iogpu.wired_limit_mb
+  register: _omlx_iogpu_current
+  changed_when: false
+
+- name: Raise the Metal wired-memory limit now
+  become: true
+  ansible.builtin.command: sysctl -w iogpu.wired_limit_mb={{ omlx_iogpu_wired_limit_mb }}
+  when: (_omlx_iogpu_current.stdout | trim | int) != (omlx_iogpu_wired_limit_mb | int)
+  notify: Reload omlx (launchd)
+
+# --- Service -----------------------------------------------------------
+# NOT `brew services`: the formula's bundled plist runs `omlx serve` with
+# zero arguments (127.0.0.1 bind, no auth, no memory guard, no SSD cache).
+# This is our own plist with the real flags — see the template for the exact
+# command line and why the API key is an env var, not an argv flag.
+- name: Install the omlx launchd daemon plist
+  become: true
+  # no_log because this template renders OMLX_API_KEY in clear. Without it,
+  # any --diff run prints the key to stdout — and ops/gitops_executor runs
+  # `site.yml --check --diff` on a timer, writing it into
+  # /tmp/gitops-check.log on util01 on every poll. Costs us the diff for this
+  # one task; that is the right trade for a secret.
+  no_log: true
+  ansible.builtin.template:
+    src: net.puhome.omlx.plist.j2
+    dest: "{{ omlx_macos_plist }}"
+    owner: root
+    group: wheel
+    # 0600, not 0644: this plist carries OMLX_API_KEY in plaintext, and
+    # /Library/LaunchDaemons is world-readable. launchd runs as root and
+    # requires only that the file be root-owned and not group/world writable.
+    mode: "0600"
+  notify: Reload omlx (launchd)
+
+- name: Ensure the omlx daemon is bootstrapped
+  become: true
+  ansible.builtin.shell: >-
+    launchctl print system/{{ omlx_macos_label }} >/dev/null 2>&1
+    || launchctl bootstrap system {{ omlx_macos_plist }}
+  changed_when: false

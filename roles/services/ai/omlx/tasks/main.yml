@@ -1,0 +1,9 @@
+---
+# Entry point. omlx is native macOS only (ai01) — no Docker, Metal isn't
+# accelerated through it. Dispatches like every other system-style role even
+# though only one host will ever include it, for consistency with the rest
+# of roles/system/*.
+
+- name: Deploy omlx (macOS)
+  ansible.builtin.import_tasks: macos.yml
+  when: ansible_system == "Darwin"

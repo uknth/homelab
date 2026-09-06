@@ -1,0 +1,30 @@
+---
+# services/knowledge/researchpull — pulls a `ready` job's bundle from
+# researchd (ctl01) and unpacks it into research_tree_dir on cmp01, so
+# vaultmerge can fold it into the wiki as a fourth source. See
+# docs/spec/research.md#wiring-into-the-wiki.
+#
+# No container, no compose project: this is a single script, invoked locally
+# (never over SSH itself) by vault-ingest.sh's --research branch — the same
+# shape as vaultmerge's merge-vaults.sh wrapper, minus the daemon it wraps.
+
+researchpull_root_dir: "{{ service_root }}/researchpull"
+researchpull_script: "{{ researchpull_root_dir }}/research-pull.sh"
+
+# researchd's own address. ctl01 runs a SEPARATE playbook from cmp01's, so its
+# role defaults (roles/services/ai/researchd/defaults/main.yml, notably
+# researchd_port) are never loaded into this play — this is a literal fact of
+# the deployment rather than a cross-role variable lookup. See
+# docs/spec/research.md#ports-and-domains.
+researchpull_api_url: "http://{{ hostvars['ctl01'].ansible_host }}:8110"
+
+# Caps on the untrusted bundle. A depth-5 job's markdown + MOC + bibliography
+# tree is a few hundred KB at most; these are generous multiples of that,
+# bounding the worst case rather than the expected one.
+researchpull_max_download_bytes: 52428800     # 50 MiB, compressed on the wire
+researchpull_max_extracted_bytes: 209715200   # 200 MiB, uncompressed
+
+# vaultmerge's container reads this uid/gid — see
+# roles/services/knowledge/vaultmerge/defaults/main.yml (vaultmerge_uid/gid).
+researchpull_uid: "{{ media_uid }}"
+researchpull_gid: "{{ media_gid }}"

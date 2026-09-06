@@ -1,0 +1,7 @@
+---
+# Entry point — dispatches to the OS-specific task file. macOS only: Homebrew
+# is not part of the Linux hosts' toolchain (they use apt).
+
+- name: Configure Homebrew for Ansible use (macOS)
+  ansible.builtin.import_tasks: macos.yml
+  when: ansible_system == "Darwin"

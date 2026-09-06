@@ -81,6 +81,15 @@ vaultsync_wiki_script: "{{ service_root }}/quartz/quartz-build.sh"
 # Phase 9b. Absent today; --all picks it up automatically once it exists.
 vaultsync_index_script: "{{ service_root }}/vaultindex/reindex.sh"
 
+# --research <job_id> mode: pulls one researchd job (ctl01) into the tree
+# services/knowledge/researchpull manages, then runs the same
+# merge -> index -> wiki chain as --all. A literal path rather than a
+# cross-role default lookup — playbooks/hosts/cmp01.yml applies vaultsync and
+# researchpull as separate role entries in the same play, and role-default
+# load order between them is not a contract worth depending on (same
+# reasoning as vaultmerge_source_dir's fallback in vaultmerge/defaults).
+vaultsync_research_script: "{{ service_root }}/researchpull/research-pull.sh"
+
 # Every run reports here, pass or fail — no silent jobs.
 vaultsync_ntfy_url: "http://{{ hostvars['util01'].ansible_host }}:{{ ntfy_port | default(8091) }}"
 vaultsync_ntfy_topic: "homelab-jobs"

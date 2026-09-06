@@ -43,6 +43,24 @@
           key: {{ hp_paperless_key }}
 {% endif %}
 
+- Knowledge:
+    # The research agent commissions work on the local LLM and publishes into
+    # the wiki, so it sits next to the wiki rather than under a tools heading.
+    # No widget: researchd exposes job state on its own API, and Homepage has
+    # no matching widget type — the tile is a link, deliberately.
+    - Research:
+        href: https://research.{{ base_domain }}
+        icon: mdi-flask-outline
+        description: Commission researched, cited notes
+    - Wiki:
+        href: https://wiki.{{ base_domain }}
+        icon: mdi-book-open-page-variant
+        description: Merged Obsidian vaults
+    - Ask:
+        href: https://ask.{{ base_domain }}
+        icon: mdi-text-search
+        description: Hybrid search over the wiki
+
 - Weather:
     - Bengaluru:
         icon: mdi-weather-partly-cloudy

@@ -1,0 +1,73 @@
+---
+# services/ai/omlx — the resident LLM on ai01. Native macOS service (launchd),
+# NOT Docker: Docker on macOS gets no Metal acceleration, which defeats the
+# point of an Apple-Silicon inference engine. See
+# docs/spec/research.md#inference--ai01-runs-omlx-and-only-omlx for the full
+# decision record (why omlx over llama.cpp/Ollama, why one resident model).
+#
+# Operational values (bind address, port, memory guard, SSD cache sizing, the
+# API key reference) live in hosts/group_vars/all/vars.yml, prefixed omlx_ —
+# they're host-deployment specifics, not identity. What's pinned here is the
+# role's own identity: the exact binary version and the exact model, because
+# both are "bump by hand" facts the role must assert against, not tunables.
+
+# --- Binary -----------------------------------------------------------
+# Installed from the third-party tap jundot/omlx (already added on ai01; this
+# role does not add it). Bumped by hand, same posture as obsidian-headless,
+# Kavita and the Beszel agent — Diun does not watch Homebrew taps, so there's
+# no auto-update path for a single-maintainer pre-1.0 dependency, and none is
+# wanted. ai01 currently has 0.4.4rc1 (a release candidate, never run); 0.6.x
+# specifically fixed continuous batching and prefix-cache reconstruction,
+# which this workload leans on directly — see research.md.
+omlx_version: "0.6.4"
+omlx_tap: "jundot/omlx"
+omlx_formula: "jundot/omlx/omlx"
+
+# The Hugging Face CLI, needed to pre-place the model (see tasks/macos.yml).
+# Homebrew's formula for it was renamed huggingface-cli -> hf; installed
+# unpinned (state: present) because it's a fetch utility, not the service.
+omlx_hf_formula: "hf"
+
+# Brew-driven installs/upgrades run as uknth (the prefix's real owner) via
+# become_user — never as root or `ansible`. Mirrors roles/system/brew's
+# brew_user; kept as its own default so this role has no hard dependency on
+# that role having run in the same play.
+omlx_brew_user: "uknth"
+omlx_brew_prefix: "{{ homebrew_prefix | default('/opt/homebrew') }}"
+omlx_bin: "{{ omlx_brew_prefix }}/bin/omlx"
+omlx_hf_bin: "{{ omlx_brew_prefix }}/bin/hf"
+
+# --- Model --------------------------------------------------------------
+# Qwen3-30B-A3B, 4-bit MLX (user decision, 2026-09-03): a mixture-of-experts
+# model with ~3B active params/token — small-model speed, larger-model
+# synthesis. Pre-placed here and pointed at with --model-dir; omlx is never
+# allowed to pull it from Hugging Face on its own at runtime, which is
+# exactly the unmanaged-runtime-state objection that got Ollama rejected.
+omlx_model_repo: "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit"
+# Pinned commit, not "main" — looked up via the HF Hub API 2026-09-03 (the
+# repo's HEAD revision at pin time; last-modified 2025-08-06). Bump by hand,
+# same as the version above.
+omlx_model_revision: "e9675aa3ca5f900ccef55267914466d55ab325fa"
+omlx_model_local_dir: "{{ omlx_model_dir }}/{{ omlx_model_repo | basename }}"
+
+# --- launchd --------------------------------------------------------------
+omlx_macos_label: "net.puhome.omlx"
+
+# Boot-time job that raises the Metal wired-memory cap. Separate label and
+# plist from the server itself: it is a one-shot sysctl at boot, not a
+# service, and it must run whether or not omlx starts.
+omlx_iogpu_label: "net.puhome.iogpu-limit"
+omlx_iogpu_plist: "/Library/LaunchDaemons/net.puhome.iogpu-limit.plist"
+omlx_macos_plist: "/Library/LaunchDaemons/{{ omlx_macos_label }}.plist"
+
+# Memory ceiling. Both are overridden per-deployment in group_vars (that is
+# where the sizing arithmetic for a specific host lives); these defaults only
+# keep the role from failing on a host that has not been sized yet.
+#
+# Empty means "no explicit ceiling" — the template falls back to the named
+# tier below. Set omlx_memory_guard_gb to a number to pin --memory-guard-gb
+# instead, which is strongly preferred: the named tiers do not tell you what
+# ceiling they actually impose, and on ai01 both `safe` and `balanced` turned
+# out to sit below what this model needs. See the notes in group_vars.
+omlx_memory_guard_gb: ""
+omlx_memory_guard: "balanced"

@@ -1,0 +1,292 @@
+---
+# Colima on ctl01 (launchd LaunchDaemon, RunAtLoad one-shot — see
+# templates/net.puhome.colima.plist.j2 for why not KeepAlive:true and not
+# `brew services`). Included when ansible_system == Darwin. Requires
+# roles/system/brew to have already run against this host (uknth needs a
+# working `brew` before this role can install/upgrade anything — same
+# dependency omlx has, see its tasks/macos.yml).
+
+- name: Ensure Colima's config directory exists
+  ansible.builtin.file:
+    path: "{{ colima_home }}/.colima/{{ colima_profile }}"
+    state: directory
+    owner: "{{ colima_user }}"
+    group: staff
+    mode: "0755"
+
+- name: Ensure Colima's log directory exists
+  ansible.builtin.file:
+    path: "{{ colima_log_dir }}"
+    state: directory
+    owner: "{{ colima_user }}"
+    group: staff
+    mode: "0755"
+
+# --- Install/upgrade the colima binary --------------------------------
+# Gated on the *installed version* rather than a `creates:`/state:present
+# shortcut — see roles/services/ai/omlx/tasks/macos.yml for the exact bug
+# that pattern has (a version bump would silently no-op because the binary
+# is already there). colima is homebrew-core, not a third-party tap, but
+# ctl01's local tap checkout can be exactly as stale as ai01's was — this
+# has to actually fire once rather than assume `brew` is current.
+- name: Query the installed colima version
+  ansible.builtin.command: "{{ colima_bin }} version"
+  register: _colima_version_out
+  changed_when: false
+  failed_when: false
+  environment: "{{ colima_command_env }}"
+
+- name: Record the installed colima version
+  ansible.builtin.set_fact:
+    _colima_installed_version: >-
+      {{ _colima_version_out.stdout | default('') | regex_search('[0-9]+\.[0-9]+\.[0-9]+') | default('', true) }}
+
+# See roles/services/ai/omlx/tasks/macos.yml for the full reasoning: `brew
+# upgrade`/`state: latest` resolve against the LOCAL formula definition, and
+# nothing on this fleet refreshes that automatically. Gated on the pin being
+# unsatisfied so a steady-state run makes no network call.
+- name: Update Homebrew and all formula definitions (uknth)
+  become: true
+  become_user: "{{ colima_brew_user }}"
+  ansible.builtin.command: "{{ colima_brew_prefix }}/bin/brew update"
+  register: _colima_brew_update
+  changed_when: "'Already up-to-date' not in (_colima_brew_update.stdout | default(''))"
+  when: _colima_installed_version != colima_version
+
+- name: Clear superseded and part-staged kegs before upgrading (uknth)
+  become: true
+  become_user: "{{ colima_brew_user }}"
+  ansible.builtin.command: "{{ colima_brew_prefix }}/bin/brew cleanup"
+  register: _colima_brew_cleanup
+  changed_when: "'Removing:' in (_colima_brew_cleanup.stdout | default(''))"
+  when: _colima_installed_version != colima_version
+
+- name: Install/upgrade colima via Homebrew (uknth)
+  become: true
+  become_user: "{{ colima_brew_user }}"
+  community.general.homebrew:
+    name: "{{ colima_formula }}"
+    state: latest
+    path: "{{ colima_brew_prefix }}/bin"
+  when: _colima_installed_version != colima_version
+
+# Gated `and not ansible_check_mode` for the same reason as omlx: the
+# `command` re-query has no check-mode support, so under --check it never
+# runs and the assert would compare the pin against an empty string.
+- name: Re-query the installed colima version
+  ansible.builtin.command: "{{ colima_bin }} version"
+  register: _colima_version_recheck
+  changed_when: false
+  failed_when: false
+  environment: "{{ colima_command_env }}"
+  when: not ansible_check_mode
+
+- name: Assert the installed colima version matches the pin
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_colima_version_recheck.stdout | default('') | regex_search('[0-9]+\.[0-9]+\.[0-9]+') | default(''))
+        == colima_version
+    fail_msg: >-
+      colima on ctl01 is {{ _colima_version_recheck.stdout | default('unknown') }},
+      but colima_version is pinned to {{ colima_version }}. Either
+      homebrew-core has moved PAST the pin (bump colima_version deliberately
+      — see defaults/main.yml), or it is still BEHIND it, meaning `brew
+      update` did not refresh {{ colima_brew_prefix }} as expected.
+  when: not ansible_check_mode
+
+# --- Docker CLI + compose plugin ---------------------------------------
+# Unpinned: these are clients that talk to whatever engine Colima exposes,
+# not the VM runtime itself. NOT Docker Desktop — there is no engine here
+# except the one Colima provides.
+- name: Install the Docker CLI (uknth)
+  become: true
+  become_user: "{{ colima_brew_user }}"
+  community.general.homebrew:
+    name: "{{ colima_docker_formula }}"
+    state: present
+    path: "{{ colima_brew_prefix }}/bin"
+
+- name: Install docker-compose (uknth)
+  become: true
+  become_user: "{{ colima_brew_user }}"
+  community.general.homebrew:
+    name: "{{ colima_docker_compose_formula }}"
+    state: present
+    path: "{{ colima_brew_prefix }}/bin"
+
+# --- VM state, checked BEFORE templating the config --------------------
+# Whether it's safe to `colima restart` (below) vs. only ever `colima
+# start` depends on whether an instance already exists — `colima restart`
+# hard-fails ("instance not found") against a profile that was never
+# created. This check has to happen before the config is written, so the
+# "was it running" answer reflects the OLD config, not the one about to be
+# applied.
+- name: Check Colima's current status
+  ansible.builtin.command: "{{ colima_bin }} status --profile {{ colima_profile }}"
+  register: _colima_status
+  changed_when: false
+  failed_when: false
+  environment: "{{ colima_command_env }}"
+
+# --- Declarative VM config ----------------------------------------------
+# This file, not one-off `colima start` flags, is what makes `mounts: null`
+# durable across a `colima restart` run by hand at the console — see the
+# template for the full reasoning (and the mounts: [] vs. mounts: null
+# footgun this role exists to avoid).
+- name: Template Colima's declarative VM config
+  ansible.builtin.template:
+    src: colima.yaml.j2
+    dest: "{{ colima_home }}/.colima/{{ colima_profile }}/colima.yaml"
+    owner: "{{ colima_user }}"
+    group: staff
+    mode: "0644"
+  register: _colima_config
+
+# A config edit only reaches an ALREADY-RUNNING VM via an explicit restart
+# — `colima start` against a running instance is a no-op. Guarded on
+# _colima_status (captured above, before the template task) so this never
+# fires against a profile that doesn't exist yet; the start task below
+# covers that case instead.
+- name: Restart Colima to apply a changed config
+  ansible.builtin.command: "{{ colima_bin }} restart --profile {{ colima_profile }} --force"
+  environment: "{{ colima_command_env }}"
+  when: _colima_status.rc == 0 and _colima_config is changed
+  register: _colima_restart
+  changed_when: true
+  async: 900
+  poll: 15
+
+# Covers both "never created" (first run) and "created but currently
+# stopped" — `colima start` reads the config just templated above either
+# way. Skipped if the restart above already brought it up with the new
+# config.
+- name: Start Colima
+  ansible.builtin.command: "{{ colima_bin }} start --profile {{ colima_profile }}"
+  environment: "{{ colima_command_env }}"
+  when: >-
+    _colima_status.rc != 0 and
+    not (_colima_restart is defined and _colima_restart is changed)
+  register: _colima_start
+  changed_when: true
+  async: 900
+  poll: 15
+
+# --- launchd: RunAtLoad only, so the VM is back up after a reboot --------
+- name: Install the colima launchd daemon plist
+  become: true
+  ansible.builtin.template:
+    src: net.puhome.colima.plist.j2
+    dest: "{{ colima_macos_plist }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: Reload colima (launchd)
+
+- name: Ensure the colima daemon is bootstrapped
+  become: true
+  ansible.builtin.shell: >-
+    launchctl print system/{{ colima_macos_label }} >/dev/null 2>&1
+    || launchctl bootstrap system {{ colima_macos_plist }}
+  changed_when: false
+
+# --- CRITICAL SECURITY CHECK ---------------------------------------------
+# ctl01 holds fleet-root credentials (~/.config/homelab/.vault_pass,
+# keys/ansible_rsa.private). A silent regression here — anything that puts
+# $HOME back in the VM's mount table — is a full fleet compromise, not a
+# config bug, so this is checked against the LIVE VM every single run,
+# never just assumed from the config file's content. See the `mounts: null`
+# comment in templates/colima.yaml.j2 for the exact upstream behaviour this
+# guards against (`mounts: []` looking like "disabled" while actually
+# meaning "use the default $HOME mount").
+- name: Check for host filesystem mounts inside the running VM
+  ansible.builtin.command: "{{ colima_bin }} ssh --profile {{ colima_profile }} -- mount"
+  register: _colima_mount_check
+  changed_when: false
+  environment: "{{ colima_command_env }}"
+
+- name: Assert the VM has NOT mounted the host filesystem
+  ansible.builtin.assert:
+    that:
+      # Two conditions, and the first one matters as much as the second.
+      #
+      # "no /Users in the output" is trivially true of EMPTY output, so on its
+      # own it passes whenever the check did not actually run. That is not
+      # hypothetical: `colima` shells out to `limactl` via $PATH, and a
+      # PATH-less invocation dies with "lima not found" and produces nothing —
+      # which greps as a clean pass. `command:` failing on a non-zero rc covers
+      # most of that, but this makes the assertion prove it saw a real mount
+      # table rather than inferring safety from silence.
+      - "' on / type ' in _colima_mount_check.stdout"
+      - "'/Users' not in _colima_mount_check.stdout"
+    fail_msg: >-
+      colima ssh -- mount shows a /Users path mounted inside the VM. That
+      exposes ctl01's vault password and keys/ansible_rsa.private (fleet
+      root) to every container that runs here — this is a full-compromise
+      regression, not a config nit. Check
+      {{ colima_home }}/.colima/{{ colima_profile }}/colima.yaml for
+      `mounts:` and confirm it is `null`, not `[]` (they mean opposite
+      things — see the template).
+    success_msg: "Confirmed: no host filesystem mount present inside the Colima VM."
+
+# --- Docker compose plugin ------------------------------------------------
+# Homebrew installs docker-compose into /opt/homebrew/lib/docker/cli-plugins,
+# which is NOT one of the directories the docker CLI searches for plugins (it
+# looks in ~/.docker/cli-plugins, /usr/local/lib/docker/cli-plugins and
+# /usr/libexec/docker/cli-plugins). Without this link `docker compose` does not
+# exist as a subcommand, and community.docker.docker_compose_v2 fails with
+# "Docker CLI ... does not have the compose plugin installed" — even though
+# `docker-compose` the standalone binary is on PATH and works.
+#
+# A symlink into the user's own plugin dir rather than editing
+# ~/.docker/config.json's cliPluginsExtraDirs: the config file is rewritten by
+# `colima start` (it sets currentContext), so a key we add there is liable to
+# be clobbered, whereas the symlink is ours alone.
+- name: Ensure the docker CLI plugin dir exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ colima_home }}/.docker/cli-plugins"
+    state: directory
+    owner: "{{ colima_user }}"
+    group: staff
+    mode: "0755"
+
+- name: Link docker-compose in as a docker CLI plugin
+  become: true
+  ansible.builtin.file:
+    src: "{{ colima_brew_prefix }}/lib/docker/cli-plugins/docker-compose"
+    dest: "{{ colima_home }}/.docker/cli-plugins/docker-compose"
+    state: link
+    owner: "{{ colima_user }}"
+    group: staff
+    force: true
+
+- name: Verify `docker compose` resolves as a subcommand
+  ansible.builtin.command: "{{ colima_docker_bin }} compose version"
+  register: _colima_compose_version
+  changed_when: false
+  environment: "{{ colima_command_env }}"
+
+# --- Docker reachability --------------------------------------------------
+# The whole point of this role: `docker ps` must work non-interactively as
+# the ansible user, with no manual `docker context use` step. Colima's
+# autoActivate (see colima.yaml.j2) is what wires the context up on start;
+# this is what proves it actually happened rather than assuming it did.
+- name: Verify docker CLI can reach the Colima daemon
+  ansible.builtin.command: "{{ colima_docker_bin }} ps"
+  register: _colima_docker_ps
+  changed_when: false
+  retries: 3
+  delay: 10
+  until: _colima_docker_ps.rc == 0
+  environment: "{{ colima_command_env }}"
+
+- name: Assert docker ps succeeded
+  ansible.builtin.assert:
+    that:
+      - _colima_docker_ps.rc == 0
+    fail_msg: >-
+      `docker ps` failed as {{ colima_user }} — the docker CLI is not
+      pointed at Colima's socket. Check `docker context ls` and
+      `{{ colima_home }}/.docker/config.json` (currentContext) as
+      {{ colima_user }}.

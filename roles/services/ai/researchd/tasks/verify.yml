@@ -1,0 +1,88 @@
+---
+# Proves the egress allowlist from INSIDE the researchd container, not just
+# that the iptables rules look right on paper. Uses python3 (guaranteed
+# present — it's the app's own runtime) rather than curl, which the image
+# has no reason to ship (docs/spec/research.md: "no shell tooling beyond the
+# Python runtime"). `socket.connect_ex` is used instead of `connect()` +
+# try/except so each check is one line and returns a plain errno rather than
+# needing exception handling; a DROPped destination times out (not an
+# immediate refusal), so each check gets a short, explicit timeout rather
+# than hanging on the OS default.
+#
+# Imported from tasks/main.yml, tagged researchd_verify so it can be run on
+# its own once the container is confirmed up:
+#   ansible-playbook playbooks/hosts/ctl01.yml --tags researchd_verify
+#
+# `when: not ansible_check_mode` on every command task below for the same
+# reason as tasks/egress.yml: the command module has no check-mode support,
+# so it's skipped under `--check` regardless, but the failed_when checks
+# would crash on a skipped task's missing `.rc` if left unguarded — and
+# actually exec-ing into a container is exactly the kind of side-effecting
+# action a dry run must not attempt anyway.
+
+- name: "Egress check: researchd CAN reach omlx ({{ researchd_egress_lan_allow_ip }}:{{ researchd_egress_lan_allow_port }})"
+  ansible.builtin.command: >-
+    docker exec {{ researchd_container_name }} python3 -c
+    "import socket,sys; s=socket.socket(); s.settimeout(4);
+    sys.exit(0 if s.connect_ex(('{{ researchd_egress_lan_allow_ip }}', {{ researchd_egress_lan_allow_port }})) == 0 else 1)"
+  register: _researchd_verify_omlx
+  changed_when: false
+  failed_when: _researchd_verify_omlx.rc != 0
+  when: not ansible_check_mode
+
+  environment: "{{ researchd_command_env }}"
+- name: "Egress check: researchd CAN reach the public internet (1.1.1.1:443)"
+  ansible.builtin.command: >-
+    docker exec {{ researchd_container_name }} python3 -c
+    "import socket,sys; s=socket.socket(); s.settimeout(4);
+    sys.exit(0 if s.connect_ex(('1.1.1.1', 443)) == 0 else 1)"
+  register: _researchd_verify_public
+  changed_when: false
+  failed_when: _researchd_verify_public.rc != 0
+  when: not ansible_check_mode
+
+  environment: "{{ researchd_command_env }}"
+- name: "Egress check: researchd CAN reach searxng:8080 (project network)"
+  ansible.builtin.command: >-
+    docker exec {{ researchd_container_name }} python3 -c
+    "import socket,sys; s=socket.socket(); s.settimeout(4);
+    sys.exit(0 if s.connect_ex(('searxng', 8080)) == 0 else 1)"
+  register: _researchd_verify_searxng
+  changed_when: false
+  failed_when: _researchd_verify_searxng.rc != 0
+  when: not ansible_check_mode
+
+# Port 22, not an app port: every managed Linux host runs sshd, so a
+# connection reaching it proves the FIREWALL let the packet through,
+# independent of whatever happens to be listening on any one service port
+# that day. The DROP rules in defaults/main.yml match on destination IP
+# only, not port, so this is a faithful test of the actual rule.
+  environment: "{{ researchd_command_env }}"
+- name: "Egress check: researchd CANNOT reach util01 (10.0.2.8)"
+  ansible.builtin.command: >-
+    docker exec {{ researchd_container_name }} python3 -c
+    "import socket,sys; s=socket.socket(); s.settimeout(4);
+    sys.exit(0 if s.connect_ex(('10.0.2.8', 22)) == 0 else 1)"
+  register: _researchd_verify_util01
+  changed_when: false
+  failed_when: _researchd_verify_util01.rc == 0
+  when: not ansible_check_mode
+
+  environment: "{{ researchd_command_env }}"
+- name: "Egress check: researchd CANNOT reach cmp01 (10.0.2.5)"
+  ansible.builtin.command: >-
+    docker exec {{ researchd_container_name }} python3 -c
+    "import socket,sys; s=socket.socket(); s.settimeout(4);
+    sys.exit(0 if s.connect_ex(('10.0.2.5', 22)) == 0 else 1)"
+  register: _researchd_verify_cmp01
+  changed_when: false
+  failed_when: _researchd_verify_cmp01.rc == 0
+  when: not ansible_check_mode
+
+  environment: "{{ researchd_command_env }}"
+- name: Egress allowlist verification summary
+  ansible.builtin.debug:
+    msg: >-
+      researchd egress allowlist verified: omlx reachable, public internet
+      reachable, searxng reachable, util01 and cmp01 both unreachable.
+  when: not ansible_check_mode

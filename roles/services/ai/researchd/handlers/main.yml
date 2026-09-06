@@ -1,0 +1,22 @@
+---
+# docker_cli/docker_host/environment for the same reasons as the deploy task
+# in tasks/main.yml — Homebrew's bin is not on the PATH Ansible gets, and
+# Colima's socket is not /var/run/docker.sock. A handler that omits them fails
+# only when something actually changes, which is the worst time to find out.
+- name: Restart researchd
+  when: not ansible_check_mode or _researchd_deployed.stat.exists | default(false)
+  community.docker.docker_compose_v2:
+    project_src: "{{ researchd_compose_dir }}"
+    project_name: "{{ researchd_compose_project }}"
+    state: restarted
+    docker_cli: "{{ researchd_docker_bin }}"
+    docker_host: "{{ researchd_docker_host }}"
+  environment: "{{ researchd_command_env }}"
+
+- name: Reload researchd egress agent (launchd)
+  become: true
+  ansible.builtin.shell: |
+    launchctl bootout system {{ researchd_egress_macos_plist }} 2>/dev/null || true
+    launchctl bootstrap system {{ researchd_egress_macos_plist }}
+    launchctl enable system/{{ researchd_egress_macos_label }}
+    launchctl kickstart -k system/{{ researchd_egress_macos_label }}

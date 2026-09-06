@@ -96,8 +96,9 @@ helper is already PIA-shaped).
 
 | Service | Target role | Status | Notes |
 |---|---|---|---|
-| Ollama (native) | `services/ai/ollama` | 🔵 net-new | Homebrew + launchd, **not Docker** (Metal accel) |
-| Qwen model pull | part of `services/ai/ollama` | 🔵 net-new | latest Qwen |
+| omlx (native) | `services/ai/omlx` | 🔵 planned (8b) | Apple-MLX inference server, Homebrew tap + **own launchd plist**, not Docker (Metal) and not `brew services` (its bundled plist passes no flags). Pinned **0.6.4**; ai01 currently has 0.4.4rc1, never run. Binds `10.0.2.9,127.0.0.1` — *not* `0.0.0.0` — with `--api-key` from the vault |
+| Qwen3-30B-A3B 4-bit (MLX) | part of `services/ai/omlx` | 🔵 planned (8b) | MoE, ~3B active/token. **Pre-placed by Ansible** into `--model-dir`; never pulled on demand, which would be the runtime state that got Ollama rejected. ~16–17 GB of 24 GB — tight, hence `--memory-guard` + SSD paged KV cache |
+| ~~Ollama~~ | — | ⚫ **rejected** | Superseded by omlx (2026-09-03): MLX is native on Apple Silicon, has continuous batching, and unlike Ollama supports an API key |
 | ~~paperless-ai~~ | — | ⚫ **moved to cmp01** | Deployed 2026-08-31 inside the Paperless compose project with its own llama.cpp, not here — see the cmp01 table above |
 
 ## Knowledge base — Obsidian vaults (cmp01 + ai01)
@@ -116,12 +117,24 @@ helper is already PIA-shaped).
 | Search | `services/knowledge/vaultask` | `ask.puhome.net` | 🟢 built | FTS5/BM25 + cosine over note embeddings, fused with RRF. `node:sqlite` — no native modules, no `sqlite-vec`. Search only, no generation. Feeds the `dash.puhome.net` header search |
 | Merge (topic tree) | `services/knowledge/vaultmerge` | — | 🔵 planned (9b) | Dissolves the three vaults into one topic-organised tree; resolves 35 filename collisions, rewrites wikilinks source-vault-first |
 | Wiki (Quartz) | `services/knowledge/quartz` | `wiki.puhome.net` | 🟢 built | Quartz **v5.0.0** (pinned git checkout). Static HTML — Obsidian-native wikilinks/backlinks/graph, per-vault configs generated from upstream defaults. **Read-only**: Docmost/DokuWiki rejected as they become a second writer |
-| Answer/agent endpoint | `services/ai/llama_server` (ai01) | — | 🔵 planned | One shared resident model on ai01 (24 GB unified memory fits exactly one). Serves vault Q&A now, the Phase 8b agent later |
+| Answer/agent endpoint | `services/ai/omlx` (ai01) | — | 🔵 planned (8b) | One shared resident model on ai01 (24 GB unified memory fits exactly one). Serves the research agent first, vault Q&A after. Engine decided 2026-09-03: **omlx**, not llama.cpp — see [`research.md`](research.md#inference--ai01-runs-omlx-and-only-omlx) |
 
 **Not backed up by design** — the mirror's source of truth is the Mac; the index and wiki
 build are derived. See [`knowledge.md`](knowledge.md#backups).
 
-## `ctl01` — Dev toolchain
+## `ctl01` — Dev toolchain + research agent
+
+> **ctl01 holds the vault password and `ansible_rsa.private` — fleet-wide root.**
+> Anything here that reads untrusted input is a compromise path. `system/colima`
+> must therefore be built with **`mounts: []`**: Colima mounts `$HOME` into its VM
+> by default, which would put those credentials inside the VM that runs the
+> research container. See [`research.md`](research.md#the-security-argument-first).
+
+| Service | Target role | Domain | Status | Notes |
+|---|---|---|---|---|
+| Colima | `system/colima` | — | 🔵 planned (8c) | Docker runtime (Linux VM). **Hard prerequisite** for researchd. `mounts: []` |
+| Research agent | `services/ai/researchd` | `research.puhome.net` | 🔵 planned (10) | Commissioned research → wiki. Purpose-built pipeline, **not** Hermes/OpenClaw. Container with no host mounts, no credentials but the omlx key, and a `DOCKER-USER` egress allowlist. Delivery is a **pull**: cmp01 fetches the bundle |
+| SearXNG | part of `services/ai/researchd` | — | 🔵 planned (10) | Meta-search backing the agent. Moved off util01 (2026-09-03, already carrying 12 services) and folded into researchd's compose project — same pattern as paperless-ai inside Paperless. No published port, no domain, so researchd keeps exactly **one** allowed LAN destination |
 
 | Package | Target role | Status | v2 reference |
 |---|---|---|---|

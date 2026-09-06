@@ -38,6 +38,9 @@ drift ahead of the design.
   backups (Restic → nas02 over SFTP), the ntfy notification sink.
 - [`spec/knowledge.md`](spec/knowledge.md) — the Obsidian vaults: read-only mirror, hybrid
   search index, static wiki, and the local-only answering path.
+- [`spec/research.md`](spec/research.md) — the research agent: commissioned research
+  published into the wiki, the containment model that makes it safe on ctl01, and the
+  ai01 inference decision.
 - [`spec/conventions.md`](spec/conventions.md) — role directory layout, variable naming,
   tagging scheme, secrets handling for v3.
 

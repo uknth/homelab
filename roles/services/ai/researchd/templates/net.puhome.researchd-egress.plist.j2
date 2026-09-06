@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Managed by Ansible (roles/services/ai/researchd) — do not edit by hand.
+
+     Self-healing re-application of the researchd egress allowlist. See
+     apply-egress-rules.sh.j2 for why this exists at all: netfilter rules
+     inside the Colima VM live in kernel memory only, so anything that
+     restarts the VM outside of an `ansible-playbook` run (a host reboot,
+     `colima restart` at the console) silently drops them back to whatever
+     Docker's own default is. This LaunchDaemon re-runs the same idempotent
+     script every {{ researchd_egress_recheck_interval }}s so that window is
+     bounded instead of open-ended.
+
+     A LaunchDaemon (system domain, UserName set below), not a LaunchAgent:
+     ctl01 is a jumphost, not a desk machine with a guaranteed logged-in GUI
+     session, and a LaunchAgent only runs while its user is logged in. Same
+     posture as roles/services/ai/omlx's daemon on ai01.
+
+     StartInterval, not KeepAlive: this is a periodic idempotent check, not
+     a long-running process — it should run, exit, and be launched again on
+     the next interval, not be restarted the instant it exits. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{ researchd_egress_macos_label }}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ researchd_root_dir }}/egress/apply-egress-rules.sh</string>
+    </array>
+    <key>UserName</key>
+    <string>{{ user }}</string>
+    <key>StartInterval</key>
+    <integer>{{ researchd_egress_recheck_interval }}</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{{ researchd_root_dir }}/egress/egress.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{ researchd_root_dir }}/egress/egress.err.log</string>
+</dict>
+</plist>

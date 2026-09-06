@@ -50,6 +50,8 @@
 #   maintenance (util01) — ops/maintenance installs the key
 #   wanwatch    (gw01)   — ops/wanwatch installs the key
 #   vaultsync   (cmp01)  — services/knowledge/vaultsync installs the key
+#                          (also reused as-is by workflow-agent-research —
+#                          same forced-command key on cmp01, no second key)
 
 - name: Read the restricted maintenance SSH key
   become: true
@@ -97,6 +99,7 @@
           if _n8n_maint_key.content is defined else [])
        + (['workflow-wan-watch.json'] if _n8n_wan_key.content is defined else [])
        + (['workflow-vault-ingest.json'] if _n8n_vault_key.content is defined else [])
+       + (['workflow-agent-research.json'] if _n8n_vault_key.content is defined else [])
        + (['workflow-telegram-bridge.json'] if _n8n_telegram_ok else []) }}
     _n8n_workflow_ids: >-
       {{ ['homelab-alerts-summary']
@@ -104,6 +107,7 @@
           if _n8n_maint_key.content is defined else [])
        + (['homelab-wan-watch'] if _n8n_wan_key.content is defined else [])
        + (['homelab-vault-ingest'] if _n8n_vault_key.content is defined else [])
+       + (['homelab-agent-research'] if _n8n_vault_key.content is defined else [])
        + (['homelab-telegram-bridge'] if _n8n_telegram_ok else []) }}
 
 - name: Import workflows into n8n

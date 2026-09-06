@@ -24,6 +24,28 @@ vaultmerge_sources:
   pikachu: work
   snorlax: kb
   psyduck: personal
+  # Not an Obsidian vault — the research agent's published output. It is a
+  # fourth *source of notes*, so it belongs here rather than being special-cased
+  # downstream. Its tree lives outside the vaultsync mirror; see
+  # vaultmerge_source_overrides below.
+  research: agent
+
+# Sources whose tree does NOT live under the vaultsync mirror.
+#
+# Every other source resolves to path.join(SRC, vault) inside the container,
+# where SRC is the vaultsync mirror. Pointing a generated-content source there
+# would place notes we write inside the tree `obsidian-headless` manages in
+# mirror-remote mode — mixing "mirror of Obsidian" with "written by us" under
+# one parent, which would eventually be reconciled away by the sync client.
+#
+# Values are paths INSIDE the container. The host path is mounted separately —
+# see vaultmerge_research_dir and docker-compose.yml.j2.
+vaultmerge_source_overrides:
+  research: "/research"
+
+# Host path on cmp01 where services/knowledge/researchpull unpacks the bundle
+# it fetches from researchd on ctl01. Mounted read-only into the merge.
+vaultmerge_research_dir: "{{ research_tree_dir }}"
 
 # --- Topic taxonomy -------------------------------------------------------
 # Derived from the vaults' own folders and frontmatter tags (2026-09-01), not
@@ -45,6 +67,10 @@ vaultmerge_path_topics:
   - { match: "snorlax/Topics", topic: "Engineering" }
   - { match: "snorlax/Sources", topic: "Sources" }
   - { match: "snorlax/Inbox", topic: "Inbox" }
+  # The agent's output is already topic-organised under its own slug
+  # directories, so the whole source maps to one top-level section and
+  # never interleaves with hand-written notes.
+  - { match: "research", topic: "Agent-Research" }
 
 # Fallback when no path rule matches: first frontmatter tag that appears here.
 vaultmerge_tag_topics:

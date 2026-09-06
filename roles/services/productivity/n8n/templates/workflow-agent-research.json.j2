@@ -1,0 +1,172 @@
+{
+  "id": "homelab-agent-research",
+  "name": "Homelab — agent research (researchd → wiki)",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": {{ n8n_research_poll_minutes }} }
+          ]
+        }
+      },
+      "id": "n-cron",
+      "name": "Poll interval",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-260, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "{{ n8n_research_api_url }}/api/jobs",
+        "options": {}
+      },
+      "id": "n-fetch",
+      "name": "Fetch job list",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-status",
+              "operator": { "type": "string", "operation": "equals" },
+              "leftValue": "={% raw %}{{ $json.status }}{% endraw %}",
+              "rightValue": "ready"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-filter",
+      "name": "Ready jobs",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=--research {% raw %}{{ $json.id }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-ssh",
+      "name": "Pull + wiki rebuild",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [400, 0],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "homelab-vault-ssh",
+          "name": "homelab vaultsync (cmp01)"
+        }
+      }
+    },
+    {
+      "parameters": { "jsCode": "// One SSH node run can carry MORE than one item -- the filter can pass\n// several jobs that were 'ready' in the same poll -- so every input item\n// must produce exactly one output item here. $input.first() would silently\n// drop every job after the first the moment two land in the same poll.\n// pairedItem is set explicitly so the downstream $('Ready jobs').item\n// lookups (in Mark published / Notify research failure) still resolve the\n// correct slug/id for each branch.\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const r = items[i].json;\n  const raw = (r.stdout || '').trim();\n  // Same RESULT-marker convention as vault-ingest.sh's --all branch (the\n  // --research branch reuses write_state), so parsing is identical. Scanning\n  // for the first '{' instead would break the moment the merge/index/wiki\n  // stages it runs printed a brace of their own.\n  const line = raw.split('\\n').reverse().find((l) => l.startsWith('RESULT '));\n  let st;\n  try {\n    st = JSON.parse(line.slice(7));\n  } catch (e) {\n    st = { ok: false, error: 'research ingest returned no parseable RESULT line', code: r.code, raw: raw.slice(-400) };\n  }\n  out.push({ json: st, pairedItem: i });\n}\nreturn out;" },
+      "id": "n-parse",
+      "name": "Parse result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-ok",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true },
+              "leftValue": "={% raw %}{{ $json.ok }}{% endraw %}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-ok",
+      "name": "Ingest ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [840, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ n8n_research_api_url }}/api/jobs/{% raw %}{{ $('Ready jobs').item.json.id }}{% endraw %}/published",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"wiki_url\": \"https://wiki.{{ base_domain }}/Agent-Research/{% raw %}{{ $('Ready jobs').item.json.slug }}{% endraw %}/{% raw %}{{ $('Ready jobs').item.json.slug }}{% endraw %}\"}",
+        "options": {}
+      },
+      "id": "n-publish",
+      "name": "Mark published",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, -80],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "=n8n FAILED: agent research {% raw %}{{ $('Ready jobs').item.json.slug }}{% endraw %}" },
+            { "name": "Priority", "value": "4" },
+            { "name": "Tags", "value": "n8n,books" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ JSON.stringify($json).slice(0, 1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-fail",
+      "name": "Notify research failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 160]
+    }
+  ],
+  "connections": {
+    "Poll interval": { "main": [[{ "node": "Fetch job list", "type": "main", "index": 0 }]] },
+    "Fetch job list": { "main": [[{ "node": "Ready jobs", "type": "main", "index": 0 }]] },
+    "Ready jobs": { "main": [[{ "node": "Pull + wiki rebuild", "type": "main", "index": 0 }]] },
+    "Pull + wiki rebuild": {
+      "main": [
+        [{ "node": "Parse result", "type": "main", "index": 0 }],
+        [{ "node": "Notify research failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse result": { "main": [[{ "node": "Ingest ok?", "type": "main", "index": 0 }]] },
+    "Ingest ok?": {
+      "main": [
+        [{ "node": "Mark published", "type": "main", "index": 0 }],
+        [{ "node": "Notify research failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark published": {
+      "main": [
+        [],
+        [{ "node": "Notify research failure", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

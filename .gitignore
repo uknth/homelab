@@ -1,1 +1,9 @@
 *.vscode
+
+# Python build artifacts from roles/services/ai/researchd/files/app.
+# The app source is deployed as a docker build context, so anything the
+# interpreter generates locally (running its tests, say) must never be
+# copied to a host or committed.
+__pycache__/
+*.py[cod]
+.pytest_cache/

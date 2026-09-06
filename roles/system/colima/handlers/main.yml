@@ -1,0 +1,14 @@
+---
+# Mirrors roles/services/ai/omlx/handlers/main.yml: a plain launchctl
+# bootout+bootstrap, fired only when the plist itself changes (label,
+# ProgramArguments, RunAtLoad/KeepAlive, env). This does NOT run when
+# colima.yaml changes — a *config* change is handled inline in
+# tasks/macos.yml via `colima restart`, because whether that's even safe to
+# run depends on whether an instance already exists (see the comments
+# there); a bare notify/handler can't express that condition.
+- name: Reload colima (launchd)
+  become: true
+  ansible.builtin.shell: |
+    launchctl bootout system {{ colima_macos_plist }} 2>/dev/null || true
+    launchctl bootstrap system {{ colima_macos_plist }}
+    launchctl enable system/{{ colima_macos_label }}

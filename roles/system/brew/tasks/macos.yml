@@ -1,0 +1,61 @@
+---
+# Trust the Homebrew prefix (and every installed tap) as a git safe.directory
+# for uknth, and prove it worked. Included when ansible_system == Darwin.
+#
+# Every task below runs `become_user: "{{ brew_user }}"` (uknth) rather than
+# root or `ansible` — see defaults/main.yml for why. `command`/`shell` tasks
+# here intentionally have no `check_mode` override: under --check they are
+# skipped rather than executed, and every fact they'd produce is consumed
+# through `| default(...)`, so a --check run degrades to "nothing to report"
+# instead of erroring — the same pattern roles/system/beszel_agent uses.
+
+- name: Read uknth's current global safe.directory entries
+  become: true
+  become_user: "{{ brew_user }}"
+  ansible.builtin.command: git config --global --get-all safe.directory
+  register: _brew_safe_dirs
+  changed_when: false
+  failed_when: false
+
+- name: Discover installed Homebrew tap directories
+  become: true
+  become_user: "{{ brew_user }}"
+  ansible.builtin.command: >-
+    find {{ brew_prefix }}/Library/Taps -mindepth 2 -maxdepth 2 -type d
+  register: _brew_taps
+  changed_when: false
+  failed_when: false
+
+# One --add per missing path rather than --replace-all: safe.directory is a
+# multi-value key, and --replace-all would silently drop any entry this role
+# didn't itself add. --get-all above is the idempotency check.
+- name: Trust the Homebrew prefix and its taps as safe.directory (uknth)
+  become: true
+  become_user: "{{ brew_user }}"
+  ansible.builtin.command: >-
+    git config --global --add safe.directory {{ item }}
+  loop: "{{ [brew_prefix] + (_brew_taps.stdout_lines | default([])) }}"
+  when: item not in (_brew_safe_dirs.stdout_lines | default([]))
+  changed_when: true
+
+- name: Verify brew works cleanly as uknth
+  # Full path, not bare `brew`: become_user runs a non-login shell, so PATH is
+  # sudo's minimal secure_path (no /opt/homebrew/bin) — confirmed on ai01,
+  # `sudo -u uknth which brew` resolves nothing without a login shell.
+  become: true
+  become_user: "{{ brew_user }}"
+  ansible.builtin.command: "{{ brew_prefix }}/bin/brew --version"
+  register: _brew_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Assert the "shallow or no git repository" warning is gone
+  ansible.builtin.assert:
+    that:
+      - "'shallow or no git repository' not in (_brew_version_check.stdout | default(''))"
+    fail_msg: >-
+      brew --version still reports a shallow/missing git repository for
+      {{ brew_user }} at {{ brew_prefix }} — safe.directory entries may not
+      have taken effect.
+    success_msg: "brew --version is clean for {{ brew_user }} at {{ brew_prefix }}."
+  when: _brew_version_check.stdout is defined

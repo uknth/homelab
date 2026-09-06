@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Managed by Ansible — services/ai/researchd
+#
+# Applies the researchd egress allowlist inside the Colima Linux VM's
+# DOCKER-USER iptables chain (docs/spec/research.md#4-its-egress-is-
+# allowlisted). Runs ON ctl01 itself, never inside the VM: every iptables
+# call below is wrapped in `colima ssh -- sudo`, which is the normal,
+# testable enforcement point for a Linux-VM-backed Docker runtime — see
+# tasks/egress.yml for why this can't be a community.general.iptables task
+# (that module runs iptables on the box Ansible connects to, i.e. macOS,
+# which has no iptables at all).
+#
+# PERSISTENCE. netfilter rules live in kernel memory only — nothing about
+# them is written to the VM's disk, so a rule added by hand here is gone the
+# moment the VM reboots, whether that's a full Colima VM recreation or just
+# `colima restart`. There is no "make it survive a reboot" step to add
+# because nothing here can survive one; the only correct model is
+# "reapply it after every boot, cheaply and idempotently, so a restart is
+# invisible instead of silently egress-open". Two things call this script
+# for exactly that reason:
+#   1. This role's own deploy task — so a fresh `ansible-playbook` run
+#      always leaves the rules correct, whether or not the VM has just
+#      restarted.
+#   2. A launchd agent (see templates/net.puhome.researchd-egress.plist.j2),
+#      polling every {{ researchd_egress_recheck_interval }}s — the
+#      mechanism for a restart that happens OUTSIDE of Ansible (a host
+#      reboot, `colima restart` run by hand at the console). Polling rather
+#      than hooking Colima's own lifecycle is a deliberate scope limit: this
+#      role does not own system/colima's provisioning, so it can't hook
+#      colima's own boot sequence without reaching into a role it isn't
+#      responsible for.
+#
+# IDEMPOTENCY. The chain's own rules are rebuilt from scratch every run
+# (flush, then re-append in the exact order below) rather than incrementally
+# patched — iptables has no "insert if absent, in this exact position"
+# primitive, and an incremental approach re-run against rules that already
+# exist would either duplicate them or require just as much bookkeeping as
+# a full rebuild while being harder to reason about. A flush+rebuild that
+# produces byte-identical output is, from Ansible's point of view (see
+# tasks/egress.yml's before/after diff), a no-op.
+set -euo pipefail
+
+# colima is an absolute path, but it SHELLS OUT to `limactl` via $PATH, so an
+# absolute COLIMA_BIN is not enough on its own. Ansible runs this over a
+# non-login /bin/sh that never sources .zprofile, and launchd gives an even
+# barer environment, so without these two exports every call dies with
+#   fatal: dependency check failed for VM: lima not found
+# HOME matters for the same reason: colima resolves ~/.colima from it, and a
+# wrong HOME finds no VM rather than the running one.
+export PATH="{{ researchd_brew_prefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export HOME="{{ researchd_colima_home }}"
+
+COLIMA_BIN="{{ researchd_colima_bin }}"
+COLIMA_PROFILE="{{ researchd_colima_profile }}"
+CHAIN="{{ researchd_egress_chain }}"
+
+remote() {
+  "${COLIMA_BIN}" ssh --profile "${COLIMA_PROFILE}" -- sudo "$@"
+}
+
+# Create the chain if it doesn't exist yet. `-N` fails harmlessly if it's
+# already there — that's the whole idempotency check; there's no "-N or
+# ignore" flag on iptables itself.
+remote iptables -t filter -N "${CHAIN}" 2>/dev/null || true
+
+# Make DOCKER-USER jump to our chain exactly once, at the very top. `-C`
+# (check) before `-I` (insert) is the standard idempotent iptables pattern —
+# inserting unconditionally on every run would duplicate the jump on every
+# `ansible-playbook` invocation.
+remote iptables -t filter -C DOCKER-USER -j "${CHAIN}" 2>/dev/null \
+  || remote iptables -t filter -I DOCKER-USER 1 -j "${CHAIN}"
+
+# --- Rebuild the chain's own rules --------------------------------------
+#
+# Order is security-critical, not cosmetic:
+#
+#   1. intra-project ACCEPT (researchd <-> searxng) MUST be evaluated first.
+#      Docker's own bridge networks live inside 172.16.0.0/12 — one of the
+#      ranges dropped in step 3 — so if that DROP were evaluated first,
+#      researchd<->searxng traffic (which crosses that same bridge) would be
+#      silently blackholed along with everything else in the range. The
+#      failure mode that produces is "search is broken" — not "the firewall
+#      is broken" — which is exactly the trap worth avoiding. Matched on the
+#      project's FIXED subnet ({{ researchd_network_subnet }}) as both
+#      source and destination, not the bridge interface name, because
+#      Docker does not guarantee an interface name stays constant across a
+#      `compose up` recreate — the subnet is fixed by
+#      researchd_network_subnet in defaults/main.yml precisely so this
+#      match is deterministic.
+#   2. omlx ACCEPT — the one permitted LAN destination — also has to
+#      precede step 3: {{ researchd_egress_lan_allow_ip }}/32 sits inside
+#      10.0.0.0/8.
+#   3. LAN / RFC1918 DROP — everything else on the LAN and in private space
+#      generally.
+#   4. Public HTTP(S) ACCEPT — what the pipeline actually needs to read the
+#      web.
+#
+# Anything not matched by one of these falls through to the chain's
+# (implicit) RETURN and back into DOCKER-USER's remaining rules / Docker's
+# own default forwarding chain, same as any other container on this host.
+remote iptables -t filter -F "${CHAIN}"
+
+# 0. RETURN TRAFFIC, and it has to come first.
+#
+# Without this the allowlist blocks itself. DOCKER-USER sees traffic in BOTH
+# directions, and a reply coming back from the public internet is addressed to
+# the container -- i.e. `-d 172.30.30.x`, which is inside the 172.16.0.0/12
+# range that step 3 drops. So every outbound connection completes its SYN and
+# then dies when the SYN/ACK is dropped on the way back: `docker exec ... 
+# connect_ex(('1.1.1.1', 443))` returned errno 11 with the ACCEPT for tcp/443
+# sitting right there in the chain, because the rule that failed was the DROP,
+# not the ACCEPT.
+#
+# Matching on conntrack state rather than on address is also what keeps the
+# policy honest: it permits replies to connections the container was already
+# allowed to make, and nothing else. An inbound connection *initiated* from
+# the LAN is state NEW and still falls through to the DROPs below.
+remote iptables -t filter -A "${CHAIN}" \
+  -m conntrack --ctstate ESTABLISHED,RELATED \
+  -j ACCEPT
+
+remote iptables -t filter -A "${CHAIN}" \
+  -s {{ researchd_network_subnet }} -d {{ researchd_network_subnet }} \
+  -j ACCEPT
+
+remote iptables -t filter -A "${CHAIN}" \
+  -d {{ researchd_egress_lan_allow_ip }}/32 -p tcp --dport {{ researchd_egress_lan_allow_port }} \
+  -j ACCEPT
+
+{% for net in researchd_egress_deny_networks %}
+remote iptables -t filter -A "${CHAIN}" -d {{ net }} -j DROP
+{% endfor %}
+
+{% for port in researchd_egress_public_ports %}
+remote iptables -t filter -A "${CHAIN}" -p tcp --dport {{ port }} -j ACCEPT
+{% endfor %}

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Managed by Ansible (roles/system/colima) — do not edit by hand.
+
+     RunAtLoad + KeepAlive:false, deliberately NOT KeepAlive:true. `colima
+     start` is a CLI wrapper that provisions/boots the VM and then EXITS —
+     the actual long-lived process is the vz/qemu hypervisor Colima hands
+     off to, which macOS supervises directly as an ordinary child process,
+     not through launchd. A KeepAlive:true LaunchDaemon here would watch
+     `colima start`'s own exit (success, every time it's done its job) and
+     read that as a crash, restart-looping `colima start` forever against
+     an already-running VM.
+
+     So this plist only guarantees "runs once at boot" — RunAtLoad is the
+     entire mechanism for "up at boot". "Restarts on failure" is handled
+     separately and more honestly: tasks/macos.yml runs its own idempotent
+     `colima status` / `colima start` reconciliation on every Ansible run,
+     which is the same posture as a systemd oneshot + a periodic check,
+     just without pretending launchd is supervising a resident process it
+     isn't. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{ colima_macos_label }}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ colima_bin }}</string>
+        <string>start</string>
+        <string>--profile</string>
+        <string>{{ colima_profile }}</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>{{ colima_home }}</string>
+        <key>PATH</key>
+        <string>{{ colima_brew_prefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>UserName</key>
+    <string>{{ colima_user }}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>{{ colima_log_dir }}/colima.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{ colima_log_dir }}/colima.err.log</string>
+</dict>
+</plist>

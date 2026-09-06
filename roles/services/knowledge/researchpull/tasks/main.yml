@@ -1,0 +1,37 @@
+---
+# Pulls researchd's published bundle into research_tree_dir. Runs before
+# vaultmerge in playbooks/hosts/cmp01.yml: vaultmerge mounts this directory
+# read-only as its fourth source, and expects it to already exist and be
+# owned by the media uid/gid by the time it deploys.
+
+- name: Create the researchpull dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ researchpull_root_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+
+# vaultmerge's own tasks also assert this directory (it bind-mounts it
+# read-only), but ownership matters here specifically: researchpull is the
+# thing that WRITES into it, running as {{ user }}, so it must own the
+# directory it swaps job trees in and out of. Asserted independently rather
+# than assumed, same reasoning as vaultmerge's own comment on this path.
+- name: Create the research tree dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ research_tree_dir }}"
+    state: directory
+    owner: "{{ researchpull_uid }}"
+    group: "{{ researchpull_gid }}"
+    mode: "0755"
+
+- name: Template the research-pull script
+  become: true
+  ansible.builtin.template:
+    src: research-pull.sh.j2
+    dest: "{{ researchpull_script }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"

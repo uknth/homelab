@@ -9,7 +9,8 @@
 #   - kavita       : books/comics reader
 #   - paperless    : document management (pending existing-data decision)
 #   - vaultsync    : Obsidian vault mirror (headless Obsidian Sync client)
-#   - vaultmerge   : merge the 3 vaults into one topic-organised tree
+#   - researchpull : pull the research agent's published bundle from ctl01
+#   - vaultmerge   : merge the 3 vaults + agent research into one topic tree
 #   - vaultindex   : embeddings + LLM summaries -> enrichment sidecar
 #   - quartz       : the wiki, built from the merged tree (wiki.puhome.net)
 #   - vaultask     : hybrid search over the merged tree (ask.puhome.net)
@@ -61,6 +62,13 @@
     # stage's output read-only.
     - role: services/knowledge/vaultsync
       tags: [vaultsync, knowledge, obsidian]
+
+    # Pulls researchd's published bundle (ctl01) into research_tree_dir before
+    # the merge runs, so a fresh job is present the first time vaultmerge sees
+    # it. n8n's polling workflow is the normal trigger; this role only makes
+    # the target of that pull exist and behave.
+    - role: services/knowledge/researchpull
+      tags: [researchpull, research, knowledge]
 
     - role: services/knowledge/vaultmerge
       tags: [vaultmerge, knowledge, wiki]

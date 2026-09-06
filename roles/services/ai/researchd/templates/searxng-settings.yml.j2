@@ -1,0 +1,50 @@
+# Managed by Ansible — services/ai/researchd
+#
+# `use_default_settings: true` layers this over SearXNG's own defaults
+# (engines, categories, etc.) rather than restating them — we only override
+# what researchd's use actually needs to differ from a normal human-facing
+# instance:
+#   - JSON output, so researchd's search stage can consume results directly
+#     (docs/spec/research.md, pipeline stage 3 "search").
+#   - No external assets/telemetry: this instance is never browsed by a
+#     person and has no published port at all (reached only as
+#     http://searxng:8080 on the project network), so favicons, the search
+#     autocompleter's external calls and the image proxy are all pure
+#     unwanted egress with nothing to show for it.
+use_default_settings: true
+
+general:
+  instance_name: "researchd-searxng"
+  # Never shown to a human, but keep it honest anyway.
+  donation_url: false
+  privacypolicy_url: false
+  contact_url: false
+
+search:
+  safe_search: 0
+  autocomplete: ""     # no external autocomplete provider — API-only use
+  default_lang: "en"
+  # html stays enabled (SearXNG's own healthcheck and error pages expect
+  # it); json is what researchd actually queries.
+  formats:
+    - html
+    - json
+
+server:
+  # Generated once and persisted on disk rather than a vault secret — this
+  # only protects SearXNG's own session cookie, which is meaningless here
+  # (no published port, no browser ever connects to it; the sole client is
+  # researchd over the project network). See tasks/main.yml for how it's
+  # generated.
+  secret_key: "{{ _searxng_secret_key }}"
+  # No public-facing rate limiter — the only caller is researchd, on a
+  # network nothing else can reach.
+  limiter: false
+  image_proxy: false
+  method: "GET"
+
+ui:
+  static_use_hash: true
+
+outgoing:
+  request_timeout: 10.0

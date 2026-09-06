@@ -1,0 +1,11 @@
+# Pinned, per repo convention (see docs/spec/research.md, "Implementation
+# notes"). Review before bumping -- this is a single-maintainer service,
+# there is no auto-update path and none is wanted.
+
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+httpx==0.27.2
+trafilatura==1.12.2
+pypdf==5.0.1
+pydantic==2.9.2
+PyYAML==6.0.2

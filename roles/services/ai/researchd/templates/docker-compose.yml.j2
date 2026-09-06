@@ -1,0 +1,90 @@
+# Managed by Ansible — services/ai/researchd
+#
+# Two services only (docs/spec/research.md#placement): researchd itself
+# (built from ./app, never pulled) and SearXNG beside it, reachable solely
+# as http://searxng:8080 on this project's own network. Neither the network
+# name nor its subnet are left to Docker to choose — see
+# researchd_network_subnet in defaults/main.yml for why the subnet has to be
+# fixed, and tasks/egress.yml for the iptables rules that depend on it.
+services:
+  researchd:
+    build:
+      context: {{ researchd_app_dir }}
+      dockerfile: Dockerfile
+    # Not pulled, so no registry image name is meaningful here — this just
+    # tags the local build so `docker images` and `docker compose ps` show
+    # something readable.
+    image: researchd:local
+    container_name: {{ researchd_container_name }}
+    hostname: researchd
+    restart: unless-stopped
+    env_file:
+      - researchd.env
+    ports:
+      # Binds inside the Colima VM; Colima forwards it to the Mac. See the
+      # long note on researchd_bind_address in defaults for why this is 0.0.0.0.
+      - "{{ researchd_bind_address }}:{{ researchd_port }}:{{ researchd_port }}"
+    volumes:
+      # The ONE volume this container gets: its own data directory. No host
+      # filesystem, no vault, no keys/ — see
+      # docs/spec/research.md#3-it-cannot-see-the-host-filesystem.
+      #
+      # A NAMED VOLUME, not a host bind mount, and that is a correctness fix
+      # as much as a security one. The host path reaches the Colima VM over
+      # sshfs, which performs every write as the SSH user (uid 502) no matter
+      # what the directory's apparent ownership is — so the container's uid
+      # 1000 could not create the SQLite database and the process crash-looped
+      # on `sqlite3.OperationalError: unable to open database file`. A named
+      # volume lives on the VM's own ext4 disk, so uid 1000 owns it outright
+      # and there is no permission translation at all.
+      #
+      # Nothing is lost by keeping this off the Mac: delivery is a PULL — the
+      # finished bundle is fetched from researchd's API by cmp01
+      # (docs/spec/research.md#2-it-holds-no-credentials-because-delivery-is-a-pull)
+      # — and the spec explicitly does not back up the job database.
+      - researchd_data:/data
+    depends_on:
+      searxng:
+        condition: service_started
+    networks:
+      default:
+
+  searxng:
+    image: {{ searxng_image }}
+    container_name: {{ searxng_container_name }}
+    hostname: searxng
+    restart: unless-stopped
+    environment:
+      - TZ={{ timezone }}
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    volumes:
+      # Read-write: SearXNG's entrypoint touches ownership/permissions in
+      # this directory on start even though settings.yml itself is ours.
+      - {{ researchd_searxng_dir }}:/etc/searxng
+    # Upstream's own hardening posture (searxng/searxng-docker) — the
+    # process needs to drop from root to its own user at startup and
+    # nothing else, so ALL capabilities minus exactly that are dropped.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    # No `ports:` at all — reached only as http://searxng:8080 over the
+    # project network. This is the entire reason researchd's LAN allowlist
+    # reduces to one address instead of two; see
+    # docs/spec/research.md#searxng-placement--ctl01-not-util01.
+    networks:
+      default:
+
+networks:
+  default:
+    name: {{ researchd_network_name }}
+    ipam:
+      config:
+        - subnet: {{ researchd_network_subnet }}
+
+# Named volume for researchd's SQLite db and generated tree. Lives inside the
+# Colima VM, deliberately — see the note on the researchd service above.
+volumes:
+  researchd_data:

@@ -8,6 +8,13 @@ restic_paths:
   - "{{ service_root }}/paperless/export"
   - "{{ service_root }}/jellyfin"
   - "{{ service_root }}/arr"
+  # The research agent's published tree. Every OTHER knowledge artefact on this
+  # host is deliberately excluded from restic because it is derived and rebuilds
+  # in minutes — the vault mirror, the merged tree, the index, the built site.
+  # This one is not derived: it has no upstream, the model that wrote it is
+  # non-deterministic, and its sources drift or vanish. This tree is the only
+  # copy in existence, so it is original data. See docs/spec/research.md.
+  - "{{ research_tree_dir }}"
 restic_pre_commands:
   - "docker exec -t paperless document_exporter /usr/src/paperless/export --delete"
 # Skip disposable/large-churn caches so the repo stays lean.

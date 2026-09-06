@@ -1,0 +1,202 @@
+---
+# services/ai/researchd — the commissioned-research pipeline, on ctl01.
+#
+# See docs/spec/research.md in full, especially "The security argument,
+# first" and "Ports and domains". Two things drive every choice in this
+# role that isn't obviously a Docker-Compose deployment:
+#
+#   1. This is the first container on ctl01 that reads the open internet,
+#      and ctl01 holds the Ansible vault password and keys/ansible_rsa.private
+#      — fleet-wide root. Its egress is therefore allowlisted at the
+#      DOCKER-USER chain inside the Colima VM (see tasks/egress.yml), not
+#      just documented.
+#   2. It runs as a docker-compose `build:` context, not a pulled image —
+#      files/app/ is the application source (owned by a different piece of
+#      work, landing concurrently; this role only assumes files/app/Dockerfile
+#      exists by the time it deploys).
+
+researchd_root_dir: "{{ service_root }}/researchd"
+researchd_compose_dir: "{{ researchd_root_dir }}/compose"
+researchd_app_dir: "{{ researchd_root_dir }}/app"
+researchd_data_dir: "{{ researchd_root_dir }}/data"
+
+# The uid/gid files/app/Dockerfile creates the `researchd` user with.
+# The data dir is chowned to these so the non-root app process can write
+# its SQLite db and generated tree. Keep in step with the Dockerfile.
+researchd_uid: 1000
+researchd_gid: 1000
+researchd_searxng_dir: "{{ researchd_root_dir }}/searxng"
+
+researchd_compose_project: "researchd"
+researchd_container_name: "researchd"
+searxng_container_name: "searxng"
+
+researchd_port: 8110
+
+# Publish ONLY on the LAN address, never 0.0.0.0 — see
+# docs/spec/research.md#ports-and-domains ("first published port on the
+# host"). Sourced from the inventory rather than hardcoded so this tracks
+# hosts/hosts.yml if ctl01's IP is ever renumbered.
+# 0.0.0.0, and it has to be — this is NOT the usual "never bind every
+# interface" slip.
+#
+# The container runs inside the Colima Linux VM, not on macOS. ctl01's LAN
+# address 10.0.2.4 belongs to the Mac; no interface inside the VM has it, so
+# publishing on it fails outright:
+#   failed to bind host port 10.0.2.4:8110/tcp: cannot assign requested address
+# The address the container binds is a VM-internal address, and Colima is what
+# forwards the port out to the Mac. So 0.0.0.0 here means "every interface of
+# a single-purpose sandbox VM", not "every interface of the host".
+#
+# Host-level exposure is therefore Colima's port forward, and the resulting
+# posture matches every other service in this fleet: reachable at
+# 10.0.2.4:8110 on the LAN, and gated by forward-auth at nginx
+# (research.puhome.net). See docs/spec/research.md, "Ports and domains".
+researchd_bind_address: "0.0.0.0"
+
+# --- LLM endpoint -----------------------------------------------------
+# "The LLM endpoint researchd talks to is http://10.0.2.9:8000/v1. Derive it
+# from the existing omlx vars rather than hardcoding the IP" — omlx_host is
+# "10.0.2.9,127.0.0.1" (LAN address explicit, then localhost; see
+# hosts/group_vars/all/vars.yml), so the LAN half is the first element.
+researchd_llm_host: "{{ omlx_host.split(',')[0] }}"
+researchd_llm_base_url: "http://{{ researchd_llm_host }}:{{ omlx_port }}/v1"
+
+# Must match the model id omlx serves under /v1/chat/completions, i.e. the
+# basename of omlx_model_repo (roles/services/ai/omlx/defaults/main.yml:
+# mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit) — omlx's own role defaults
+# aren't reachable from here (different play, different host), so this is
+# asserted independently and MUST be bumped by hand alongside that pin. Also
+# matches the default already coded in files/app/researchd/config.py.
+researchd_llm_model: "Qwen3-30B-A3B-Instruct-2507-4bit"
+
+# --- Depth dial ---------------------------------------------------------
+# One dial, 1-5, default 2 (docs/spec/research.md#depth). Mirrored here for
+# visibility against the table the app actually runs
+# (files/app/researchd/depth.py DEPTH_TABLE) — the app hardcodes its own
+# copy rather than reading it from the environment, so this default is
+# documentation/deployment-review only and is NOT templated into the env
+# file below. If the two ever need to move independently, the app's table
+# will need an env override added; not needed for this build.
+researchd_default_depth: 2
+researchd_depth_table:
+  - depth: 1
+    subtopics: 3
+    sources_per_subtopic: 3
+    recursion_levels: 0
+  - depth: 2
+    subtopics: 5
+    sources_per_subtopic: 5
+    recursion_levels: 0
+  - depth: 3
+    subtopics: 8
+    sources_per_subtopic: 6
+    recursion_levels: 0
+  - depth: 4
+    subtopics: 12
+    sources_per_subtopic: 8
+    recursion_levels: 1
+  - depth: 5
+    subtopics: 18
+    sources_per_subtopic: 10
+    recursion_levels: 2
+
+# --- SearXNG --------------------------------------------------------------
+# No published port, ever: it's reached only as http://searxng:8080 on the
+# project network (docs/spec/research.md#searxng-placement--ctl01-not-util01).
+#
+# Pinned by tag+digest, same posture as the rest of the fleet's version
+# pins (e.g. Kavita 0.8.2, Quartz v5.0.0) but stricter — a floating tag on
+# the one image in this project that isn't built from our own source is
+# exactly the kind of thing Diun would flag elsewhere, and this project has
+# no Diun watch because it isn't on Linux. Verified against Docker Hub's
+# registry API 2026-09-04; bump by hand.
+searxng_image_repo: "searxng/searxng"
+searxng_image_tag: "2026.9.3-a1144dda3"
+searxng_image_digest: "sha256:3602e6ddbeba037f5d800d1ed9d296a8b93c9f5b3cf9d05fa179d0e766dd59a1"
+searxng_image: "{{ searxng_image_repo }}:{{ searxng_image_tag }}@{{ searxng_image_digest }}"
+
+# --- Compose project network --------------------------------------------
+# FIXED subnet, not whatever Docker allocates — the egress allowlist in
+# tasks/egress.yml matches on this subnet to permit researchd<->searxng
+# traffic, and that match has to be deterministic across every `compose up`,
+# not just "whatever the bridge happened to get today". Chosen out of
+# Docker's default address-pool range but distinct from anything else this
+# fleet uses on 172.16/12 so a `docker network ls` collision is obvious if
+# one ever happens.
+researchd_network_name: "researchd"
+researchd_network_subnet: "172.30.30.0/24"
+
+# --- Egress allowlist (DOCKER-USER chain inside the Colima VM) -----------
+# See docs/spec/research.md#4-its-egress-is-allowlisted and tasks/egress.yml
+# for the full rule set and why the ordering is security-critical. Values
+# here are the DATA the script templates in; the ordering logic itself lives
+# in the template, not in a variable, because ordering is not something a
+# deployment should be able to accidentally vary.
+researchd_egress_chain: "RESEARCHD-EGRESS"
+
+# The only LAN destination researchd is ever allowed to reach. Derived from
+# the same omlx vars as the LLM base URL above, not hardcoded twice.
+researchd_egress_lan_allow_ip: "{{ researchd_llm_host }}"
+researchd_egress_lan_allow_port: "{{ omlx_port }}"
+
+# The rest of the LAN and RFC1918 space generally. 10.0.0.0/8 is this fleet's
+# actual LAN; 172.16.0.0/12 and 192.168.0.0/16 are dropped too even though
+# nothing here currently uses them, because they're private space a
+# compromised container could otherwise reach via VPN/NAT tricks, and the
+# 172.16.0.0/12 range specifically ALSO contains Docker's own bridge
+# networks — see the ordering note in tasks/egress.yml for why the
+# intra-project ACCEPT has to be evaluated first.
+researchd_egress_deny_networks:
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+  - "192.168.0.0/16"
+
+researchd_egress_public_ports:
+  - 80
+  - 443
+
+# How the rules get reapplied after a Colima VM restart (rules live in
+# kernel memory only; nothing about them is written to the VM's disk — see
+# tasks/egress.yml). A launchd agent on ctl01 re-runs the same idempotent
+# script on this interval so a restart triggered outside of Ansible
+# (`colima restart`, a host reboot, `colima start` run by hand) self-heals
+# within one interval instead of quietly running egress-open.
+researchd_egress_macos_label: "net.puhome.researchd-egress"
+# LaunchDaemons, not LaunchAgents: this has to run regardless of whether
+# `user` is logged into a GUI session (ctl01 is a jumphost), matching the
+# "system" domain used to bootstrap/kickstart it in tasks/egress.yml and
+# handlers/main.yml — same posture as omlx's daemon on ai01.
+researchd_egress_macos_plist: "/Library/LaunchDaemons/{{ researchd_egress_macos_label }}.plist"
+researchd_egress_recheck_interval: 300
+
+# Colima CLI location + profile — matches roles/system/colima/defaults, kept
+# as its own default rather than a hard cross-role reference so this role
+# doesn't implicitly require system/colima to have run in the same play
+# (same posture as omlx's colima_brew_user duplication of system/brew's).
+researchd_colima_bin: "{{ homebrew_prefix | default('/opt/homebrew') }}/bin/colima"
+researchd_colima_profile: "default"
+
+# Needed by templates/apply-egress-rules.sh.j2: colima shells out to limactl
+# via $PATH and resolves ~/.colima from $HOME, so both must be set explicitly
+# in a script run from Ansible's non-login shell and from launchd.
+researchd_brew_prefix: "{{ homebrew_prefix | default('/opt/homebrew') }}"
+researchd_colima_home: "/Users/{{ user }}"
+
+# Docker CLI location and the environment docker/compose need on macOS.
+# Homebrew's bin is not on the PATH Ansible gets (non-login /bin/sh), and the
+# docker CLI resolves its context from HOME — which must be the user that
+# started Colima, not root. Mirrors system/colima's colima_command_env.
+researchd_docker_bin: "{{ colima_docker_bin | default('/opt/homebrew/bin/docker') }}"
+#
+# docker_host must ALSO be explicit. Colima does not use /var/run/docker.sock
+# (that is Docker Desktop's path and does not exist here) — it puts its socket
+# in the home of the user that started the VM. community.docker ignores the
+# docker CLI's own context and falls back to /var/run/docker.sock, so without
+# this the module reports "failed to connect ... no such file or directory"
+# while `docker ps` in a login shell works perfectly.
+researchd_docker_host: "unix:///Users/{{ user }}/.colima/{{ colima_profile | default('default') }}/docker.sock"
+researchd_command_env:
+  PATH: "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  HOME: "/Users/{{ user }}"
+  DOCKER_HOST: "{{ researchd_docker_host }}"

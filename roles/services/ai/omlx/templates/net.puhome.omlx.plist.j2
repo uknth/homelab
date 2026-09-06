@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Managed by Ansible (roles/services/ai/omlx) — do not edit by hand.
+
+     NOT the formula's bundled plist (that one runs `omlx serve` with zero
+     arguments, i.e. every default: 127.0.0.1 bind, no auth, no memory
+     guard, no SSD cache — see docs/spec/research.md). This plist carries
+     the real flags.
+
+     The API key is passed as OMLX_API_KEY, not as the api key argv flag:
+     omlx reads either (cli.py: settings.auth.api_key falls back to the
+     OMLX_API_KEY env var), and an env var doesn't show up in a `ps` listing
+     the way an argv token would. Same posture as beszel_agent's KEY. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{ omlx_macos_label }}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ omlx_bin }}</string>
+        <string>serve</string>
+        <string>--host</string>
+        <string>{{ omlx_host }}</string>
+        <string>--port</string>
+        <string>{{ omlx_port }}</string>
+        <string>--model-dir</string>
+        <string>{{ omlx_model_dir }}</string>
+{#-
+   Memory ceiling. Prefer an EXPLICIT ceiling in GB over a named tier.
+
+   The named tiers are opaque, and both of the plausible ones were measured
+   wrong for this model on this box (2026-09-03, 24 GB ai01):
+
+     safe      static ceiling 16.00 GB — BELOW the model's 16.80 GB weights,
+               so the model never loaded at all (HTTP 507).
+     balanced  static ceiling 18.00 GB — the model loads (16.30 GB resident),
+               but the prefill guard caps at 90% of the ceiling = 16.20 GB,
+               which is below the resident weights, so every request is
+               rejected before it starts (HTTP 400 prefill_memory_exceeded).
+
+   A tier whose value you cannot read is not a control. omlx_memory_guard_gb
+   sets --memory-guard-gb instead, which is a number we choose and can
+   justify against this host's actual RAM. The tier below is the fallback.
+-#}
+{% if omlx_memory_guard_gb %}
+        <string>--memory-guard-gb</string>
+        <string>{{ omlx_memory_guard_gb }}</string>
+{% else %}
+        <string>--memory-guard</string>
+        <string>{{ omlx_memory_guard }}</string>
+{% endif %}
+        <string>--paged-ssd-cache-dir</string>
+        <string>{{ omlx_paged_ssd_cache_dir }}</string>
+        <string>--paged-ssd-cache-max-size</string>
+        <string>{{ omlx_paged_ssd_cache_max_size }}</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OMLX_API_KEY</key>
+        <string>{{ omlx_api_key }}</string>
+    </dict>
+    <key>UserName</key>
+    <string>{{ user }}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{{ omlx_root_dir }}/omlx.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{ omlx_root_dir }}/omlx.err.log</string>
+</dict>
+</plist>

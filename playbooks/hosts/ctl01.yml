@@ -2,6 +2,8 @@
 # ctl01 — Admin workstation / jumphost (Mac Mini M1, macOS)
 #
 # Managed:
+#   - Homebrew: make it usable by Ansible (uknth-owned prefix; hard
+#     prerequisite for the Colima installs below)
 #   - Colima: Docker-compatible container runtime (Linux VM) — required by dev/kind
 #   - Developer toolchain: Go, Node.js, kubectl, Helm, kind, AWS CLI
 #   - Ansible control node + primary SSH jumphost into the homelab
@@ -10,24 +12,52 @@
   hosts: ctl01
   become: false
   tags: [ctl01, admin, macos]
+
+  # Facts are gathered implicitly at play start, but that implicit step is
+  # filtered out by a --tags run, and system/colima branches on
+  # `ansible_system` to pick tasks/macos.yml. Without this, any tag-scoped
+  # run (`--tags colima`) dies on every task with "'ansible_system' is
+  # undefined" — see playbooks/hosts/ai01.yml for the same fix. An explicit
+  # setup tagged `always` runs in every case.
+  pre_tasks:
+    - name: Gather facts (runs even under a --tags invocation)
+      ansible.builtin.setup:
+      tags: always
+
   roles:
+    - role: system/brew
+      tags: [brew, packages, system]
+
     - role: system/colima
       tags: [colima, container-runtime, system]
 
-    - role: dev/go
-      tags: [go, dev]
+    # Research agent (Phase 10) — hard-depends on system/colima above for a
+    # working `docker`/`docker compose` and a running VM. See
+    # docs/spec/research.md for the full design.
+    - role: services/ai/researchd
+      tags: [researchd, research, ai]
 
-    - role: dev/node
-      tags: [node, dev]
-
-    - role: dev/kubectl
-      tags: [kubectl, k8s, dev]
-
-    - role: dev/helm
-      tags: [helm, k8s, dev]
-
-    - role: dev/kind
-      tags: [kind, k8s, dev]
-
-    - role: dev/awscli
-      tags: [awscli, aws, dev]
+    # Phase 8c (dev toolchain) is not yet built — none of the five roles
+    # below exist. system/colima was pulled forward as a Phase 10
+    # prerequisite (see docs/plan/roadmap.md, docs/spec/research.md); the
+    # dev/* roles were not. Restore these once Phase 8c actually builds
+    # them — do NOT re-enable without the role existing first, Ansible
+    # fails at parse time (not runtime) on a missing role.
+    #
+    # - role: dev/go
+    #   tags: [go, dev]
+    #
+    # - role: dev/node
+    #   tags: [node, dev]
+    #
+    # - role: dev/kubectl
+    #   tags: [kubectl, k8s, dev]
+    #
+    # - role: dev/helm
+    #   tags: [helm, k8s, dev]
+    #
+    # - role: dev/kind
+    #   tags: [kind, k8s, dev]
+    #
+    # - role: dev/awscli
+    #   tags: [awscli, aws, dev]

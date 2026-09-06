@@ -20,13 +20,25 @@ homebrew_packages:
 ntp_server: time.apple.com
 
 # Colima — Docker-compatible container runtime for macOS (Linux VM via Lima).
-# Applied only to hosts that need containers (ctl01, for dev/kind). Docker
-# Engine can't run natively on macOS; Colima provides the docker socket the
-# `docker` CLI and community.docker talk to. ai01 runs Ollama natively and does
-# not install this.
+# Applied only to hosts that need containers — ctl01 alone. Docker Engine
+# cannot run natively on macOS; Colima provides the docker socket the `docker`
+# CLI and community.docker talk to.
+#
+# Rewritten 2026-09-04. The previous block was written for `dev/kind` under
+# phase 8c, which is dropped, and it had three faults worth recording:
+#   - `colima_memory` / `colima_disk` do not exist. The role reads
+#     colima_memory_gb / colima_disk_gb, so both values were silently dead and
+#     the role's own defaults applied instead.
+#   - `colima_autostart` described using `brew services`. The role deliberately
+#     does not — it installs its own LaunchDaemon, same posture as omlx.
+#   - It claimed ai01 runs Ollama. ai01 runs omlx, and does not install Colima.
+#
+# The real consumer now is services/ai/researchd (researchd + SearXNG in one
+# compose project). ctl01 is a 16 GB / 8-core M1 Mac Mini whose day job is
+# being a jumphost and Ansible control node, so the VM takes half the cores and
+# a little over a third of the RAM and leaves the rest to macOS.
 colima_cpus: 4
-colima_memory: 8        # GiB
-colima_disk: 60         # GiB
+colima_memory_gb: 6
+colima_disk_gb: 60      # sparse image; 116 GB free on the host
 colima_vm_type: vz      # Apple Virtualization.framework on Apple Silicon
-colima_rosetta: true    # x86_64 emulation for amd64 images (e.g. kind node image)
-colima_autostart: true  # `brew services` so the VM comes up on login
+colima_rosetta: true    # x86_64 emulation for amd64-only images

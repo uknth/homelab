@@ -1,0 +1,8 @@
+---
+- name: Reload omlx (launchd)
+  become: true
+  ansible.builtin.shell: |
+    launchctl bootout system {{ omlx_macos_plist }} 2>/dev/null || true
+    launchctl bootstrap system {{ omlx_macos_plist }}
+    launchctl enable system/{{ omlx_macos_label }}
+    launchctl kickstart -k system/{{ omlx_macos_label }}

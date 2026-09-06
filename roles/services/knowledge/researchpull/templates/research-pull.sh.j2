@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Managed by Ansible — services/knowledge/researchpull. Runs on cmp01.
+#
+#   research-pull.sh <job_id>
+#
+# Fetches a `ready` job's bundle from researchd on ctl01 and unpacks it into
+# {{ research_tree_dir }}/<slug>/, replacing that directory in place. Called
+# locally by vault-ingest.sh's --research branch — never invoked over SSH
+# itself, so it takes a real argv, not SSH_ORIGINAL_COMMAND.
+#
+# --- Why this script is paranoid about the bundle ---------------------------
+# The tarball researchd serves is LLM-generated markdown, synthesised from
+# arbitrary web pages fetched over the open internet (see docs/spec/
+# research.md, "The security argument, first"). That makes it untrusted input
+# by the same standard as an anonymous file upload, even though it comes from
+# a service this fleet built: nothing sanitises a tar member's name or type on
+# the way out of researchd, and this is the one place that content reaches a
+# host holding the media library and (indirectly, via vaultmerge) the wiki.
+# Every check below exists because of that, not because researchd itself is
+# assumed malicious.
+set -uo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+API="{{ researchpull_api_url }}"
+TREE="{{ research_tree_dir }}"
+OWN_UID="{{ researchpull_uid }}"
+OWN_GID="{{ researchpull_gid }}"
+MAX_DOWNLOAD_BYTES={{ researchpull_max_download_bytes }}
+MAX_EXTRACTED_BYTES={{ researchpull_max_extracted_bytes }}
+
+die() {
+  echo "research-pull: $1" >&2
+  exit "${2:-1}"
+}
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/research-pull.XXXXXX")" || die "mktemp failed"
+# STAGING_PARENT is set in step 5, once $TREE is known to exist; the cleanup
+# function reads it at trap-fire time, not at definition time, so declaring
+# the trap once here (rather than redefining it later) is enough to cover
+# both temp dirs regardless of which step the script dies in.
+STAGING_PARENT=""
+cleanup() { rm -rf "$WORK" "${STAGING_PARENT:-}"; }
+trap cleanup EXIT
+
+# --- 1. validate the job id --------------------------------------------------
+# It becomes part of a URL below AND, via the slug read from the job detail,
+# a directory name. Reject anything that is not a short, boring token before
+# either use — this is the caller's job too (vault-ingest.sh validates its own
+# copy before calling this script), but this script must not trust its caller
+# either: it can be invoked directly, e.g. by hand while debugging.
+JOB_ID="${1:-}"
+[[ "$JOB_ID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || die "invalid job id: '${JOB_ID}'" 2
+
+# --- 2. read the job, refuse unless it is ready ------------------------------
+DETAIL_JSON="$WORK/detail.json"
+curl -fsS -m 20 "$API/api/jobs/$JOB_ID" -o "$DETAIL_JSON" \
+  || die "could not reach researchd for job $JOB_ID"
+
+STATUS="$(jq -r '.status // empty' "$DETAIL_JSON")"
+SLUG="$(jq -r '.slug // empty' "$DETAIL_JSON")"
+
+[ "$STATUS" = "ready" ] || die "job $JOB_ID is '${STATUS:-unknown}', not ready" 3
+
+# Same regex as the job id, and the same reasoning: researchd derives the slug
+# from a user-supplied topic string, and it is about to become a directory
+# name under $TREE. Treated as no more trustworthy than the tarball itself.
+[[ "$SLUG" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || die "invalid slug from researchd: '${SLUG}'" 2
+
+# --- 3. download the bundle, capped ------------------------------------------
+BUNDLE="$WORK/bundle.tar.gz"
+# --max-filesize aborts the transfer once the cap is exceeded rather than
+# buffering an unbounded response first.
+curl -fsS -m 300 --max-filesize "$MAX_DOWNLOAD_BYTES" \
+  "$API/api/jobs/$JOB_ID/bundle.tar.gz" -o "$BUNDLE" \
+  || die "bundle download failed, or exceeded ${MAX_DOWNLOAD_BYTES} bytes"
+
+# --- 4. list before extracting; reject anything hostile ----------------------
+# Handled as if the tarball came from an anonymous upload:
+#   - no absolute paths           (would write outside the extraction dir)
+#   - no ".." path components     (path traversal out of the extraction dir)
+#   - no symlinks or hardlinks    (could point extraction at an arbitrary
+#                                   target, or have it followed later by
+#                                   something that reads the unpacked tree)
+#   - no device/fifo/char-special entries
+# `tar -tvzf` prints the type flag as the first character of each line
+# (l=symlink, h=hardlink, c/b=device, p=fifo); only '-' (regular file) and 'd'
+# (directory) are accepted.
+LISTING="$WORK/listing.txt"
+tar -tvzf "$BUNDLE" >"$LISTING" 2>/dev/null || die "bundle is not a valid tar.gz" 4
+
+while IFS= read -r line; do
+  TYPE="${line:0:1}"
+  NAME="${line##* }"
+  case "$TYPE" in
+    -|d) : ;;
+    *) die "bundle contains a non-regular entry (type '${TYPE}'): ${NAME}" 4 ;;
+  esac
+  case "$NAME" in
+    /*) die "bundle contains an absolute path: ${NAME}" 4 ;;
+  esac
+  case "/${NAME}/" in
+    */../*) die "bundle contains a path-traversal component: ${NAME}" 4 ;;
+  esac
+done <"$LISTING"
+
+# Extracted-size cap: sum the sizes tar already listed rather than trusting
+# `du` after the fact, so an oversized archive is rejected before a single
+# byte of it is written to disk.
+TOTAL_SIZE="$(awk '{ sum += $3 } END { print sum + 0 }' "$LISTING")"
+[ "$TOTAL_SIZE" -le "$MAX_EXTRACTED_BYTES" ] \
+  || die "bundle unpacks to ${TOTAL_SIZE} bytes, over the ${MAX_EXTRACTED_BYTES} cap" 4
+
+# --- 5. extract to scratch, on the SAME filesystem as $TREE -----------------
+# Never straight into the live tree. Staged under $TREE itself (not /tmp) so
+# the final swap in step 6 is a same-filesystem rename — an atomic operation —
+# rather than a cross-filesystem copy that could leave a half-written
+# directory behind if it were interrupted.
+mkdir -p "$TREE"
+STAGING_PARENT="$(mktemp -d "$TREE/.researchpull-tmp.XXXXXX")" || die "mktemp under $TREE failed"
+
+# --no-same-owner --no-same-permissions: never honour uid/gid/mode recorded in
+# an untrusted archive. Ownership and mode are asserted explicitly below.
+tar -xzf "$BUNDLE" -C "$STAGING_PARENT" --no-same-owner --no-same-permissions \
+  || die "extraction failed" 4
+
+[ -d "$STAGING_PARENT/$SLUG" ] \
+  || die "bundle did not contain the expected top-level dir '${SLUG}'" 4
+
+chown -R "${OWN_UID}:${OWN_GID}" "$STAGING_PARENT/$SLUG"
+find "$STAGING_PARENT/$SLUG" -type d -exec chmod 0755 {} +
+find "$STAGING_PARENT/$SLUG" -type f -exec chmod 0644 {} +
+
+# --- 6. atomic swap into place -----------------------------------------------
+# Re-running an existing topic replaces its directory in place (per
+# docs/spec/research.md's "Web UI" section) — never a "-2" duplicate. The old
+# directory is moved aside rather than deleted first, so a failure between the
+# two renames below leaves the previous good copy recoverable, not gone.
+DEST="$TREE/$SLUG"
+OLD="$TREE/.researchpull-old.$$"
+if [ -e "$DEST" ]; then
+  mv "$DEST" "$OLD"
+fi
+mv "$STAGING_PARENT/$SLUG" "$DEST"
+rm -rf "$OLD" "$STAGING_PARENT"
+
+printf '{"ok":true,"slug":"%s","job_id":"%s"}\n' "$SLUG" "$JOB_ID"

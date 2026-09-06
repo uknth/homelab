@@ -1,0 +1,206 @@
+---
+# services/ai/researchd — researchd + searxng, one Colima compose project on
+# ctl01. See docs/spec/research.md for the design; defaults/main.yml for why
+# each value is what it is.
+#
+# Requires system/colima to have already run in this play (playbooks/hosts/
+# ctl01.yml orders it first) — `docker` and `docker compose` are assumed to
+# work for the `ansible` user against the Colima VM, per this role's brief.
+# This role does not install or start Colima itself.
+
+# check_mode: false — creating a directory is not destructive, and
+# researchd_searxng_dir specifically has to actually exist even under
+# --check: the SearXNG secret-key generation further down is itself forced
+# to run under check mode (same reasoning, see that task), and would fail
+# trying to write into a directory --check only pretended to create.
+- name: Create researchd dirs owned by the service user
+  become: true
+  check_mode: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: staff
+    mode: "0755"
+  loop:
+    - "{{ researchd_root_dir }}"
+    - "{{ researchd_compose_dir }}"
+    - "{{ researchd_searxng_dir }}"
+    - "{{ researchd_root_dir }}/egress"
+
+- name: Create the app dir (build context) owned by the service user
+  become: true
+  ansible.builtin.file:
+    path: "{{ researchd_app_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: staff
+    mode: "0755"
+
+# researchd's own volume — no other host path is ever mounted into this
+# container (docs/spec/research.md#3-it-cannot-see-the-host-filesystem).
+# Owned by the container's runtime uid, 0755 — the fleet's usual pattern
+# (cf. vaultmerge). This was briefly 0777 while the Dockerfile was still
+# being written and its runtime user was unknown; it is known now:
+# files/app/Dockerfile creates `researchd` as uid/gid 1000. A world-writable
+# directory on the host that holds fleet-root credentials is not something
+# to leave lying around for convenience, even for non-secret data.
+#
+# researchd_uid/gid must stay in step with the Dockerfile's useradd. If the
+# image's user changes, the app loses write access here and every job fails
+# at the write stage — which is loud, not silent, so the coupling is safe.
+- name: Create the researchd data dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ researchd_data_dir }}"
+    state: directory
+    owner: "{{ researchd_uid }}"
+    group: "{{ researchd_gid }}"
+    mode: "0755"
+
+# Copies files/app/ (the application source + Dockerfile — owned by a
+# different piece of work landing concurrently, not by this role) onto
+# ctl01 as the build context docker-compose.yml.j2 below points `build:` at.
+- name: Copy the researchd application source (build context)
+  become: true
+  ansible.builtin.copy:
+    src: app/
+    dest: "{{ researchd_app_dir }}/"
+    owner: "{{ user }}"
+    group: staff
+    # No explicit `mode:` — preserves whatever's checked in under files/app/
+    # (e.g. an executable entrypoint script), rather than flattening
+    # everything to 0644 and silently breaking it.
+  notify: Restart researchd
+
+# SearXNG's session-cookie secret. Generated once and persisted on disk
+# (NOT a vault secret — see the comment in searxng-settings.yml.j2 for why
+# that's the right call here) so re-running this role doesn't rotate it and
+# invalidate anything.
+#
+# Generated and read back ON THE REMOTE HOST, deliberately not via the
+# `password` lookup plugin: that lookup writes/reads its file on whatever
+# machine runs `ansible-playbook`, which is usually ctl01 itself in this
+# fleet — but is NOT guaranteed to be (e.g. a control node run from
+# elsewhere against ctl01), and a secret that lands on the wrong filesystem
+# is a hard failure, not a degraded one. Doing it as two remote tasks keeps
+# this role correct regardless of where it's invoked from.
+- name: Check whether a SearXNG secret key already exists
+  ansible.builtin.stat:
+    path: "{{ researchd_searxng_dir }}/.secret_key"
+  register: _searxng_secret_stat
+
+- name: Generate a SearXNG secret key
+  become: true
+  # Must run even under --check: ops/gitops_executor dry-runs the whole
+  # fleet, and without this file the SearXNG settings template below can't
+  # render at all. Safe under check mode regardless — creating a key that
+  # doesn't yet exist is not a destructive action, same posture as
+  # roles/services/documents/paperless's paperless-ai token generation.
+  check_mode: false
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    openssl rand -hex 32 > {{ researchd_searxng_dir }}/.secret_key
+  args:
+    creates: "{{ researchd_searxng_dir }}/.secret_key"
+  when: not _searxng_secret_stat.stat.exists
+
+- name: Fix ownership and mode on the SearXNG secret key
+  become: true
+  ansible.builtin.file:
+    path: "{{ researchd_searxng_dir }}/.secret_key"
+    owner: "{{ user }}"
+    group: staff
+    mode: "0600"
+
+- name: Read back the SearXNG secret key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ researchd_searxng_dir }}/.secret_key"
+  register: _searxng_secret_slurp
+  no_log: true
+
+- name: Set the SearXNG secret key fact
+  ansible.builtin.set_fact:
+    _searxng_secret_key: "{{ (_searxng_secret_slurp.content | b64decode).strip() }}"
+  no_log: true
+
+- name: Template the SearXNG settings
+  become: true
+  ansible.builtin.template:
+    src: searxng-settings.yml.j2
+    dest: "{{ researchd_searxng_dir }}/settings.yml"
+    owner: "{{ user }}"
+    group: staff
+    mode: "0644"
+  no_log: true
+  notify: Restart researchd
+
+- name: Template researchd compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ researchd_compose_dir }}/docker-compose.yml"
+    owner: "{{ user }}"
+    group: staff
+    mode: "0644"
+  notify: Restart researchd
+
+# Carries omlx_api_key in clear — see the header comment in the template
+# itself for why both mode 0600 and no_log: true are load-bearing here, not
+# stylistic (ops/gitops_executor's periodic `--check --diff` run).
+- name: Template the researchd env file
+  become: true
+  ansible.builtin.template:
+    src: researchd.env.j2
+    dest: "{{ researchd_compose_dir }}/researchd.env"
+    owner: "{{ user }}"
+    group: staff
+    mode: "0600"
+  no_log: true
+  notify: Restart researchd
+
+- name: Check whether researchd has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ researchd_compose_dir }}/docker-compose.yml"
+  register: _researchd_deployed
+
+# NOT `become: true`. Colima's docker context is set up for the user that
+# runs it (`ansible` — see roles/system/colima), and this play already
+# connects as that user (playbooks/hosts/ctl01.yml: become: false).
+# Becoming root here would either fail to find the Colima socket at all or
+# resolve to whatever /var/run/docker.sock root's own environment happens
+# to point at — neither of which is the Colima VM this role targets.
+#
+# `build: always` (not the module's `policy` default): researchd is built
+# from source, never pulled, so a plain `docker compose up` would only
+# rebuild when the image is entirely missing and would silently run a
+# stale build after an app source change otherwise. `ignore_build_events`
+# defaults to true, which is what keeps this idempotent — a rebuild that
+# doesn't change the resulting image no longer reports `changed=true`.
+# docker_cli is explicit, and must stay that way. Homebrew installs docker to
+# /opt/homebrew/bin, which is NOT on the PATH Ansible gets on macOS: the
+# connection runs a non-login /bin/sh that never sources .zprofile, so the
+# module's PATH lookup fails with "Cannot find docker CLI in path" even though
+# docker works fine in a real login shell. Same PATH class of problem that
+# roles/system/brew and system/colima's colima_command_env both document.
+- name: Deploy researchd + searxng
+  when: not ansible_check_mode or _researchd_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ researchd_compose_dir }}"
+    project_name: "{{ researchd_compose_project }}"
+    state: present
+    pull: missing
+    build: always
+    docker_cli: "{{ researchd_docker_bin }}"
+    docker_host: "{{ researchd_docker_host }}"
+  environment: "{{ researchd_command_env }}"
+
+- name: Apply and self-heal the researchd egress allowlist
+  ansible.builtin.import_tasks: egress.yml
+
+- name: Verify the researchd egress allowlist
+  ansible.builtin.import_tasks: verify.yml
+  tags: [researchd_verify]

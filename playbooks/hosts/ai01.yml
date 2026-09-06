@@ -2,16 +2,29 @@
 # ai01 — AI workloads node (Mac Mini M4 Pro, macOS)
 #
 # Services:
-#   - ollama  : local LLM inference engine
-#   - hermes  : local agent / automation
+#   - brew : make Homebrew usable by Ansible (uknth-owned prefix; hard
+#            prerequisite for the omlx tap install below)
+#   - omlx : resident MLX inference server (native, launchd — NOT Docker)
 
 - name: Deploy AI workloads on ai01
   hosts: ai01
   become: false
   tags: [ai01, ai, macos]
-  roles:
-    - role: services/ai/ollama
-      tags: [ollama, llm, ai]
 
-    - role: services/ai/hermes
-      tags: [hermes, agent, ai]
+  # Facts are gathered implicitly at play start, but that implicit step is
+  # filtered out by a --tags run, and both roles below branch on
+  # `ansible_system` to pick tasks/macos.yml. Without this, any tag-scoped
+  # run (`--tags omlx`) dies on every task with "'ansible_system' is
+  # undefined" — the same failure already documented for --tags
+  # beszel-agent. An explicit setup tagged `always` runs in every case.
+  pre_tasks:
+    - name: Gather facts (runs even under a --tags invocation)
+      ansible.builtin.setup:
+      tags: always
+
+  roles:
+    - role: system/brew
+      tags: [brew, packages, system]
+
+    - role: services/ai/omlx
+      tags: [omlx, llm, ai]

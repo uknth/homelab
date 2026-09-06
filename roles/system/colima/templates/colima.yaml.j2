@@ -1,0 +1,98 @@
+# Managed by Ansible (roles/system/colima) — do not edit by hand. A manual
+# `colima restart` (or `colima restart {{ colima_profile }}`) still reads
+# this exact file — that's the whole point of it being here rather than a
+# set of one-off `colima start` flags: this is Colima's own per-profile
+# config resolution (`~/.colima/<profile>/colima.yaml` — "existing profile
+# config" takes precedence over CLI flags and the built-in template, per
+# https://github.com/abiosoft/colima's own docs). Base structure below is
+# Colima v{{ colima_version }}'s own embedded default template
+# (embedded/defaults/colima.yaml) — every key that this role does not
+# deliberately override is left at that shipped default, not at whatever a
+# hand-trimmed file's Go zero-value would silently fall back to.
+
+cpu: {{ colima_cpus }}
+disk: {{ colima_disk_gb }}
+memory: {{ colima_memory_gb }}
+arch: host
+runtime: docker
+modelRunner: docker
+hostname: null
+
+kubernetes:
+  enabled: false
+  version: v1.35.0+k3s1
+  k3sArgs: [--disable=traefik]
+  port: 0
+
+autoActivate: true
+
+network:
+  address: false
+  mode: shared
+  interface: en0
+  preferredRoute: false
+  dns: []
+  dnsHosts:
+    host.docker.internal: host.lima.internal
+  hostAddresses: false
+  gatewayAddress: 192.168.5.2
+
+forwardAgent: false
+docker: {}
+
+vmType: {{ colima_vm_type }}
+portForwarder: ssh
+rosetta: {{ colima_rosetta | lower }}
+binfmt: true
+nestedVirtualization: false
+mountType: sshfs
+mountInotify: false
+cpuType: host
+provision: []
+sshConfig: true
+sshPort: 0
+
+# --- SECURITY: no host filesystem mounts -----------------------------------
+# ctl01 holds hosts/group_vars/all/vault.yml's decryption key
+# (~/.config/homelab/.vault_pass) and keys/ansible_rsa.private — fleet-wide
+# root. Colima's advertised way to turn its default $HOME mount off is
+# `mounts: []`, and that is EXACTLY BACKWARDS for this key:
+#
+#   config/config.go, func (c Config) MountsOrDefault():
+#     if c.Mounts != nil && len(c.Mounts) == 0 {
+#         return []Mount{ Location: util.HomeDir(), Writable: true }
+#     }
+#     // nil means no mounts, non-empty means user-specified mounts
+#     return c.Mounts
+#
+# (same fallback duplicated in environment/vm/lima/yaml.go). An EXPLICIT
+# empty list (`mounts: []`) is Colima's internal signal for "caller didn't
+# set this, apply the default" — which IS the $HOME mount, writable. Only an
+# absent/null key (Go nil slice) produces zero mounts. Verified 2026-09-04
+# against github.com/abiosoft/colima @ v{{ colima_version }}. The FAQ text
+# most people find (and the `mounts: []` comment in the file itself) does
+# not distinguish these two states — don't "fix" this back to `mounts: []`.
+#
+# This is exactly why tasks/macos.yml doesn't stop at writing this file: it
+# separately runs `colima ssh -- mount` against the live VM and asserts no
+# /Users path is present, every single run.
+{% if colima_mounts %}
+# NARROW, EXPLICIT mount list. A non-empty list is taken verbatim by Colima —
+# only these paths enter the VM, and the $HOME default never applies. Each
+# entry is a deliberate decision recorded in host_vars; the live assertion in
+# tasks/macos.yml still refuses any /Users path, so a mount that would expose
+# the vault password or keys/ansible_rsa.private fails the play rather than
+# silently succeeding.
+mounts:
+{% for m in colima_mounts %}
+  - location: {{ m.location }}
+    writable: {{ m.writable | default(false) | string | lower }}
+{% endfor %}
+{% else %}
+mounts: null
+{% endif %}
+
+diskImage: ""
+forceDiskImage: false
+rootDisk: 20
+env: {}

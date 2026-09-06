@@ -1,0 +1,97 @@
+---
+# system/colima — Docker-compatible container runtime for macOS, via Colima's
+# Linux VM (Lima + QEMU/vz). ctl01 only, as the hard prerequisite `dev/kind`
+# and `services/ai/researchd` need — see docs/spec/research.md#3-it-cannot-
+# see-the-host-filesystem for why this role exists and why it is written
+# this carefully.
+#
+# Role-internal identity facts only (version, formula names, plist path,
+# label, profile name). Deployment-specific overrides belong in group_vars,
+# same split as every other role here.
+
+# --- Binary -----------------------------------------------------------
+# Pinned against homebrew-core's `colima` formula, same detect-after-install
+# posture as omlx (see roles/services/ai/omlx/tasks/macos.yml) — ctl01's
+# local tap checkout may be as stale as ai01's was, so this can't be a bare
+# `state: present`/`creates:` check; it has to assert the version actually
+# installed.
+colima_version: "0.10.3"
+colima_formula: "colima"
+
+# Docker CLI + docker-compose plugin, both from homebrew-core. Unpinned
+# (state: present) — these are just clients that talk to whatever engine
+# Colima exposes; nothing here depends on an exact CLI build the way the
+# VM runtime itself does.
+colima_docker_formula: "docker"
+colima_docker_compose_formula: "docker-compose"
+
+# Brew-driven installs run as uknth (the prefix's real owner) via
+# become_user — never as root or `ansible`. Same posture as
+# roles/system/brew and roles/services/ai/omlx; this role has a hard
+# dependency on system/brew having already run against the host (see
+# playbooks/hosts/ctl01.yml), but keeps its own default so it doesn't
+# implicitly require the two roles to share a play.
+colima_brew_user: "uknth"
+colima_brew_prefix: "{{ homebrew_prefix | default('/opt/homebrew') }}"
+colima_bin: "{{ colima_brew_prefix }}/bin/colima"
+colima_docker_bin: "{{ colima_brew_prefix }}/bin/docker"
+
+# --- VM identity ------------------------------------------------------
+# Colima profile name. Deliberately the literal default profile ("default")
+# rather than a homelab-specific name: it's what a bare `colima start` /
+# `colima restart` typed by hand at the console resolves to, which matters
+# because the CRITICAL requirement below is that a by-hand restart must
+# still pick up our declarative config.
+colima_profile: "default"
+
+# The account the VM runs under — a launchd service in the system domain
+# with UserName set to this, exactly like omlx's daemon (see
+# roles/services/ai/omlx/templates/net.puhome.omlx.plist.j2). `user` is the
+# fleet-wide "ansible" account (hosts/group_vars/all/vars.yml); reusing it
+# here means colima's $HOME/.colima/{{ colima_profile }} lives under the
+# same account that already owns every other Ansible-managed state on this
+# box, not under uknth (who only owns the brew prefix).
+colima_user: "{{ user }}"
+colima_home: "/Users/{{ colima_user }}"
+
+# Every `colima ...` invocation below internally shells out to `limactl`
+# (its Lima VM backend), resolved via $PATH at runtime — not just the
+# absolute path to the colima binary itself. Ansible's non-interactive SSH
+# command execution does not source a login shell, so the default PATH is
+# just `/usr/bin:/bin:/usr/sbin:/sbin` (confirmed on ctl01 — no
+# /opt/homebrew/bin), which fails `colima start` with "limactl: executable
+# file not found in $PATH" even though colima_bin itself is an absolute
+# path. Applied via `environment:` on every colima/docker command task.
+colima_command_env:
+  HOME: "{{ colima_home }}"
+  PATH: "{{ colima_brew_prefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+# --- VM sizing ----------------------------------------------------------
+# ctl01 is an M1 Mac Mini, not a compute node — conservative on purpose so
+# Colima doesn't crowd out the rest of the box. Override per-deployment in
+# group_vars if a future workload needs more.
+colima_cpus: 2
+colima_memory_gb: 4
+colima_disk_gb: 60
+
+# vz (Apple's Virtualization.framework) over qemu: native on Apple Silicon,
+# and required for `rosetta` below. `rosetta` is on so amd64 images (e.g.
+# the kind node image dev/kind will need) still run under emulation.
+colima_vm_type: "vz"
+colima_rosetta: true
+
+# --- launchd ------------------------------------------------------------
+colima_macos_label: "net.puhome.colima"
+colima_macos_plist: "/Library/LaunchDaemons/{{ colima_macos_label }}.plist"
+colima_log_dir: "{{ colima_home }}/Library/Logs/colima"
+
+# Host paths mounted into the VM. EMPTY BY DEFAULT — an empty list here
+# renders `mounts: null`, i.e. no host filesystem inside the VM at all, which
+# is the safe default for a host holding fleet-root credentials.
+#
+# A host that genuinely needs one declares it narrowly in host_vars, e.g.
+#   colima_mounts:
+#     - { location: "/opt/homelab/researchd", writable: true }
+# Never add $HOME or any /Users path: the assertion in tasks/macos.yml will
+# fail the play, deliberately.
+colima_mounts: []

@@ -1,0 +1,8 @@
+---
+# Entry point. Colima is macOS only (ctl01 today) — Linux hosts run Docker
+# Engine natively via system/docker. Dispatches like every other system-style
+# role for consistency with the rest of roles/system/*.
+
+- name: Deploy Colima (macOS)
+  ansible.builtin.import_tasks: macos.yml
+  when: ansible_system == "Darwin"

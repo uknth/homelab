@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Managed by Ansible — services/knowledge/vaultsync. Runs on cmp01.
 #
-#   vault-ingest.sh --setup    link + configure each vault (one-time, after `ob login`)
-#   vault-ingest.sh --sync     pull every vault from Obsidian Sync
-#   vault-ingest.sh --all      sync, then reindex + rebuild the wiki if changed
-#   vault-ingest.sh --status   replay the last run as JSON
+#   vault-ingest.sh --setup             link + configure each vault (one-time, after `ob login`)
+#   vault-ingest.sh --sync              pull every vault from Obsidian Sync
+#   vault-ingest.sh --all               sync, then reindex + rebuild the wiki if changed
+#   vault-ingest.sh --research <job_id> pull one researchd job, then reindex + rebuild the wiki
+#   vault-ingest.sh --status            replay the last run as JSON
 #
 # n8n invokes this through a forced-command SSH key, so the requested arguments
 # arrive in SSH_ORIGINAL_COMMAND rather than as real argv. They are whitelisted
@@ -19,6 +20,7 @@ NTFY="{{ vaultsync_ntfy_url }}/{{ vaultsync_ntfy_topic }}"
 MERGE_SCRIPT="{{ vaultsync_merge_script }}"
 WIKI_SCRIPT="{{ vaultsync_wiki_script }}"
 INDEX_SCRIPT="{{ vaultsync_index_script }}"
+RESEARCH_SCRIPT="{{ vaultsync_research_script }}"
 
 VAULT_NAMES="{% for v in vaultsync_vaults %}{{ v.name }} {% endfor %}"
 
@@ -224,8 +226,68 @@ case "$MODE" in
     exit 0
     ;;
 
+  --research)
+    # $2 is validated here, not trusted from $SSH_ORIGINAL_COMMAND — same
+    # regex research-pull.sh itself re-checks before the id touches a URL.
+    JOB_ID="${2:-}"
+    if ! printf '%s' "$JOB_ID" | grep -qE '^[A-Za-z0-9_-]{1,64}$'; then
+      echo "refusing suspicious job id: $JOB_ID" >&2
+      exit 2
+    fi
+
+    take_lock || exit 0
+
+    if [ ! -x "$RESEARCH_SCRIPT" ]; then
+      write_state false false research "researchpull not installed"
+      notify "Agent research ingest FAILED" "researchpull is not installed on cmp01" 4
+      exit 1
+    fi
+
+    if ! PULL_OUT="$("$RESEARCH_SCRIPT" "$JOB_ID" 2>&1)"; then
+      # json_escape (below) only escapes backslashes and quotes, not newlines,
+      # so a multi-line PULL_OUT would otherwise write an invalid state.json.
+      write_state false false pull "researchpull failed for job ${JOB_ID}: $(printf '%s' "$PULL_OUT" | tail -c 400 | tr '\n' ' ')"
+      notify "Agent research ingest FAILED" "researchpull failed for job ${JOB_ID} on cmp01" 4
+      exit 1
+    fi
+
+    # No Obsidian sync in this path — the pull above is the only new content.
+    # Dissolve into the topic tree exactly as --all does downstream of its own
+    # sync: same MERGE_SCRIPT -> INDEX_SCRIPT -> WIKI_SCRIPT chain, same
+    # write_state/notify shape on failure.
+    if [ -x "$MERGE_SCRIPT" ]; then
+      if ! "$MERGE_SCRIPT"; then
+        write_state false true merge "vault merge failed"
+        notify "Agent research ingest FAILED" "merge failed on cmp01" 4
+        exit 1
+      fi
+    fi
+
+    if [ -x "$INDEX_SCRIPT" ]; then
+      if ! "$INDEX_SCRIPT"; then
+        write_state false true index "reindex failed"
+        notify "Agent research ingest FAILED" "reindex failed on cmp01" 4
+        exit 1
+      fi
+    fi
+
+    if [ -x "$WIKI_SCRIPT" ]; then
+      if ! "$WIKI_SCRIPT"; then
+        write_state false true wiki "quartz build failed"
+        notify "Agent research ingest FAILED" "quartz build failed on cmp01" 4
+        exit 1
+      fi
+    else
+      write_state true true wiki "research job ${JOB_ID} pulled — quartz not installed"
+      exit 0
+    fi
+
+    write_state true true done "research job ${JOB_ID} pulled + wiki rebuilt"
+    exit 0
+    ;;
+
   *)
-    echo "usage: vault-ingest.sh --setup|--sync|--all|--status" >&2
+    echo "usage: vault-ingest.sh --setup|--sync|--all|--research <job_id>|--status" >&2
     exit 2
     ;;
 esac

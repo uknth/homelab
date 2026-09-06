@@ -1,0 +1,18 @@
+---
+# system/brew — make Homebrew usable by Ansible on macOS hosts (ai01, ctl01).
+#
+# /opt/homebrew is owned uknth:admin and is NOT group-writable (drwxr-xr-x —
+# the group only gets r-x). Homebrew's own position is that one user owns the
+# prefix; `chmod -R g+w` over it is a well-known way to break a future
+# `brew update`. So this role never touches permissions on the prefix — every
+# brew-driven task (here and in any future brew-using role) instead runs AS
+# `uknth` via `become_user`, using the `ansible` user's existing NOPASSWD
+# sudo. That costs nothing and leaves the filesystem alone.
+#
+# The other half of the problem: `/opt/homebrew`'s git checkout, and each
+# tap's checkout under Library/Taps, were cloned shallow, so `brew --version`
+# reports "shallow or no git repository" until uknth's *global* git config
+# lists them as `safe.directory`. That's the actual fix this role applies —
+# see docs/spec/research.md#system-brew-is-the-other-blocker-verified-2026-09-03.
+brew_user: uknth
+brew_prefix: "{{ homebrew_prefix | default('/opt/homebrew') }}"

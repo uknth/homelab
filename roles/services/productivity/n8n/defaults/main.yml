@@ -36,6 +36,23 @@ n8n_wan_interval_minutes: 2
 n8n_vault_key_path: "{{ service_root }}/vaultsync/n8n_vault_ed25519"
 n8n_vault_interval_hours: 1
 
+# --- agent research trigger (ctl01 -> cmp01 -> wiki) ------------------------
+# n8n is the trigger, never the transformer, here too: researchd cannot reach
+# util01 or cmp01 (egress allowlist — see docs/spec/research.md), so a job
+# reaching `ready` has to be discovered by polling rather than pushed. This
+# workflow polls researchd's job list, drives cmp01's --research <job_id>
+# ingest over the SAME forced-command key/credential vault ingest already
+# uses (homelab-vault-ssh / n8n_vault_key_path — no separate key), and calls
+# back to researchd's own /published endpoint once the wiki rebuild succeeds.
+#
+# researchd runs on ctl01, a SEPARATE playbook from util01's — its role
+# defaults (roles/services/ai/researchd/defaults/main.yml) are never loaded
+# into this play, so the address is a literal fact of the deployment rather
+# than a cross-role lookup (same reasoning as researchpull_api_url). See
+# docs/spec/research.md#ports-and-domains.
+n8n_research_api_url: "http://{{ hostvars['ctl01'].ansible_host }}:8110"
+n8n_research_poll_minutes: 5
+
 # --- ntfy alert summary -----------------------------------------------------
 # ntfy answers history as NDJSON, which Homepage's customapi widget cannot
 # parse, so n8n aggregates it into one JSON object at /webhook/alerts-summary.

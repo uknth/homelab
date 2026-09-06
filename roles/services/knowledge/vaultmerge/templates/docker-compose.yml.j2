@@ -14,5 +14,9 @@ services:
       - {{ vaultmerge_root_dir }}/app:/app:ro
       # Read-only: the merge reads the vaults and must never write to them.
       - {{ vaultmerge_source_dir }}:/vaults:ro
+      # The research agent's published tree — a fourth source that does not
+      # live under the vaultsync mirror. Read-only for the same reason: the
+      # merge reads notes, it never writes back to where they came from.
+      - {{ vaultmerge_research_dir }}:/research:ro
       - {{ vaultmerge_out_dir }}:/merged
     entrypoint: ["sleep", "infinity"]

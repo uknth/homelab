@@ -1,0 +1,92 @@
+---
+# The egress allowlist itself — see defaults/main.yml for the rule data and
+# templates/apply-egress-rules.sh.j2 for the ordering rationale and the full
+# persistence story. Imported from tasks/main.yml.
+#
+# This can't be community.general.iptables: that module runs iptables on
+# whatever host Ansible connects to — macOS here, which doesn't have
+# iptables at all (it's pf-based). The enforcement point is inside the
+# Colima Linux VM, reached only via `colima ssh -- sudo iptables ...`, so
+# this has to be a script invocation, not a native module.
+
+- name: Template the egress rules script
+  become: true
+  ansible.builtin.template:
+    src: apply-egress-rules.sh.j2
+    dest: "{{ researchd_root_dir }}/egress/apply-egress-rules.sh"
+    owner: "{{ user }}"
+    group: staff
+    mode: "0750"
+
+# Idempotency for a shell script isn't automatic the way it is for a native
+# module, so this brackets the actual apply with a before/after capture of
+# the chain's own rules and lets THAT diff decide whether anything changed
+# — see the header comment in apply-egress-rules.sh.j2 for why a full
+# flush+rebuild is still the right design despite running every time.
+#
+# All four `command` tasks below are gated `not ansible_check_mode`: the
+# command module has no check-mode support, so under `--check` Ansible
+# skips them outright rather than running them (correct — a dry run must
+# not touch live firewall state) — but a skipped task's registered result
+# carries no `.rc`, and the failed_when checks below would then blow up
+# with "'dict object' has no attribute 'rc'" instead of just skipping
+# cleanly. Same bug, same fix, as
+# roles/services/ai/omlx/tasks/macos.yml's version re-query. This matters
+# here specifically because ops/gitops_executor runs `site.yml --check
+# --diff` on a timer.
+- name: Capture the researchd egress chain before applying
+  ansible.builtin.command: >-
+    {{ researchd_colima_bin }} ssh --profile {{ researchd_colima_profile }}
+    -- sudo iptables -S {{ researchd_egress_chain }}
+  register: _researchd_egress_before
+  changed_when: false
+  failed_when: false   # the chain doesn't exist yet on a first run
+  when: not ansible_check_mode
+
+  environment: "{{ researchd_command_env }}"
+- name: Apply the researchd egress allowlist inside the Colima VM
+  ansible.builtin.command: "{{ researchd_root_dir }}/egress/apply-egress-rules.sh"
+  register: _researchd_egress_apply
+  changed_when: false   # correctness is judged by the before/after diff below
+  when: not ansible_check_mode
+
+  environment: "{{ researchd_command_env }}"
+- name: Capture the researchd egress chain after applying
+  ansible.builtin.command: >-
+    {{ researchd_colima_bin }} ssh --profile {{ researchd_colima_profile }}
+    -- sudo iptables -S {{ researchd_egress_chain }}
+  register: _researchd_egress_after
+  changed_when: >-
+    (_researchd_egress_before.stdout | default('')) !=
+    (_researchd_egress_after.stdout | default(''))
+  failed_when: _researchd_egress_after.rc != 0
+  when: not ansible_check_mode
+
+  environment: "{{ researchd_command_env }}"
+- name: Assert the chain jumps from DOCKER-USER
+  ansible.builtin.command: >-
+    {{ researchd_colima_bin }} ssh --profile {{ researchd_colima_profile }}
+    -- sudo iptables -C DOCKER-USER -j {{ researchd_egress_chain }}
+  register: _researchd_egress_jump
+  changed_when: false
+  failed_when: _researchd_egress_jump.rc != 0
+  when: not ansible_check_mode
+
+# --- Persistence: reapply after a VM restart Ansible didn't cause ---------
+  environment: "{{ researchd_command_env }}"
+- name: Install the researchd egress self-heal launchd job
+  become: true
+  ansible.builtin.template:
+    src: net.puhome.researchd-egress.plist.j2
+    dest: "{{ researchd_egress_macos_plist }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: Reload researchd egress agent (launchd)
+
+- name: Ensure the researchd egress self-heal job is bootstrapped
+  become: true
+  ansible.builtin.shell: >-
+    launchctl print system/{{ researchd_egress_macos_label }} >/dev/null 2>&1
+    || launchctl bootstrap system {{ researchd_egress_macos_plist }}
+  changed_when: false

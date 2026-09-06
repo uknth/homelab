@@ -1,0 +1,16 @@
+---
+# ctl01 host vars
+
+# The ONE host path the Colima VM may see.
+#
+# Colima's default is a writable $HOME mount, which on this host would place
+# ~/.config/homelab/.vault_pass and keys/ansible_rsa.private — fleet root —
+# inside the VM every container runs in. That default is off (see
+# roles/system/colima); this replaces it with the single directory
+# services/ai/researchd actually needs: its SQLite database, its generated
+# markdown tree, and the SearXNG settings file.
+#
+# Nothing under /Users is mounted, and the role asserts that against the live
+# VM on every run. See docs/spec/research.md, containment property 3.
+colima_mounts:
+  - { location: "{{ service_root }}/researchd", writable: true }

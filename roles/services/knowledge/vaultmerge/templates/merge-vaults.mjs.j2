@@ -17,6 +17,8 @@ const SRC = process.argv[2] || "/vaults"
 const OUT = process.argv[3] || "/merged"
 
 const SOURCES = {{ vaultmerge_sources | to_json }}
+// Sources whose tree is mounted somewhere other than under SRC.
+const OVERRIDES = {{ vaultmerge_source_overrides | default({}) | to_json }}
 const PATH_TOPICS = {{ vaultmerge_path_topics | to_json }}
 const TAG_TOPICS = {{ vaultmerge_tag_topics | to_json }}
 const DEFAULT_TOPIC = {{ vaultmerge_default_topic | to_json }}
@@ -77,7 +79,7 @@ function topicFor(vault, rel, tags) {
 // --- pass 1: classify -----------------------------------------------------
 const notes = []
 for (const vault of Object.keys(SOURCES)) {
-  const vdir = path.join(SRC, vault)
+  const vdir = OVERRIDES[vault] ?? path.join(SRC, vault)
   if (!fs.existsSync(vdir)) continue
   for (const rel of walk(vdir)) {
     const isMd = rel.toLowerCase().endsWith(".md")

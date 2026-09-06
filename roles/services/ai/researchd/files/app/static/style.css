@@ -1,0 +1,108 @@
+/* researchd -- vanilla CSS, no framework, no CDN (egress is locked down
+   and any external asset would simply fail to load). */
+
+:root {
+  --bg: #faf8f8; --fg: #2b2b2b; --muted: #4e4e4e; --faint: #8a8a8a;
+  --line: #e5e5e5; --accent: #284b63; --card: #fff;
+  --ok: #2f7a3e; --warn: #b45309; --err: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618; --fg: #ebebec; --muted: #d4d4d4; --faint: #8f8f8f;
+    --line: #393639; --accent: #7b97aa; --card: #1e1e21;
+    --ok: #5fbf72; --warn: #d99a3f; --err: #e2685f;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 2.5rem 1.25rem 4rem; background: var(--bg); color: var(--fg);
+  font-family: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+main { max-width: 46rem; margin: 0 auto; }
+
+h1 { font-size: 1.35rem; margin: 0 0 .3rem; font-weight: 600; }
+.tagline { color: var(--faint); font-size: .85rem; margin: 0 0 1.5rem; }
+
+form.compose {
+  display: flex; gap: .5rem; margin-bottom: .4rem; flex-wrap: wrap;
+}
+form.compose input[type="text"] {
+  flex: 1 1 20rem; padding: .8rem 1rem; font-size: 1rem; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg);
+}
+form.compose input:focus, form.compose select:focus {
+  outline: 2px solid var(--accent); outline-offset: -1px;
+}
+form.compose select {
+  padding: .8rem .6rem; font-size: 1rem; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg);
+}
+form.compose button {
+  padding: .8rem 1.3rem; font-size: 1rem; font-weight: 600; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer;
+}
+form.compose button:disabled { opacity: .5; cursor: default; }
+
+.hint { color: var(--faint); font-size: .78rem; margin: 0 0 1.75rem; min-height: 1.2em; }
+.hint.err { color: var(--err); }
+
+ul.jobs { list-style: none; padding: 0; margin: 0; }
+
+li.job {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: .9rem 1.1rem; margin-bottom: .7rem; cursor: pointer;
+}
+
+.job-head { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+.job-topic { font-weight: 600; font-size: 1.02rem; flex: 1 1 auto; min-width: 0; }
+.job-depth {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint);
+  border: 1px solid var(--line); border-radius: 99px; padding: .1rem .55rem; white-space: nowrap;
+}
+.job-date { font-size: .72rem; color: var(--faint); white-space: nowrap; }
+
+.job-status { display: flex; align-items: center; gap: .5rem; margin-top: .45rem; font-size: .85rem; }
+.badge {
+  display: inline-flex; align-items: center; gap: .35rem; font-size: .8rem; color: var(--muted);
+}
+.dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.running { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+.dot.ok { background: var(--ok); }
+.dot.err { background: var(--err); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.counter { color: var(--faint); font-size: .8rem; }
+.job-link { margin-left: auto; font-size: .82rem; color: var(--accent); text-decoration: none; }
+.job-link:hover { text-decoration: underline; }
+.check { color: var(--ok); }
+
+.detail { margin-top: .8rem; padding-top: .7rem; border-top: 1px solid var(--line); display: none; }
+li.job.open .detail { display: block; }
+
+ol.timeline { list-style: none; padding: 0; margin: 0 0 .7rem; }
+ol.timeline li {
+  font-size: .82rem; color: var(--muted); padding: .15rem 0; display: flex; gap: .5rem;
+}
+ol.timeline li .stage-name { min-width: 7.5rem; text-transform: capitalize; }
+ol.timeline li.done { color: var(--ok); }
+ol.timeline li.active { color: var(--accent); font-weight: 600; }
+ol.timeline li.failed { color: var(--err); }
+
+.sources-list { font-size: .78rem; color: var(--faint); }
+.sources-list ul { list-style: none; margin: .3rem 0 0; padding: 0; max-height: 12rem; overflow-y: auto; }
+.sources-list li { padding: .12rem 0; overflow-wrap: anywhere; }
+.sources-list a { color: var(--accent); text-decoration: none; }
+.sources-list a:hover { text-decoration: underline; }
+
+.error-detail { color: var(--err); font-size: .82rem; margin-top: .5rem; }
+.rerun-btn {
+  margin-top: .6rem; font-size: .78rem; padding: .35rem .7rem; border-radius: 6px;
+  border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer;
+}
+
+.empty { color: var(--faint); font-size: .9rem; padding: 1.5rem 0; text-align: center; }
+
+footer { margin-top: 2.5rem; font-size: .78rem; color: var(--faint); }

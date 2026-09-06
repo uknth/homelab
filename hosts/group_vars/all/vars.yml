@@ -59,6 +59,81 @@ authentik_oidc_userinfo_url: "{{ authentik_url }}/application/o/userinfo/"
 # `linux`) now that macOS hosts run agents too. Empty until the hub exists.
 beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"
 
+# --- services/ai/omlx (ai01) -----------------------------------------------
+# Resident MLX inference server — the one model the fleet's budget allows (24
+# GB unified memory on ai01 fits exactly one). Serves research synthesis now,
+# vault Q&A later. See
+# docs/spec/research.md#inference--ai01-runs-omlx-and-only-omlx. The binary
+# version and model identity are pinned in the role's own defaults
+# (roles/services/ai/omlx/defaults/main.yml) instead of here — those are
+# facts about the role, not this deployment.
+omlx_host: "10.0.2.9,127.0.0.1"   # LAN address explicit — never 0.0.0.0, see research.md
+omlx_port: 8000
+omlx_api_key: "{{ vault_omlx_api_key }}"
+
+# Memory ceiling for the inference server. We set an EXPLICIT ceiling in GB
+# rather than one of omlx's named tiers, because the tiers are opaque and both
+# plausible ones were measured wrong for this model on this box (2026-09-03):
+#
+#   safe      static ceiling 16.00 GB — below the model's 16.80 GB of weights,
+#             so it never loaded at all (HTTP 507).
+#   balanced  static ceiling 18.00 GB — the model loads (16.30 GB resident),
+#             but omlx's prefill guard caps at 90% of the ceiling = 16.20 GB,
+#             which is BELOW the resident weights, so every request was
+#             rejected before it started (HTTP 400 prefill_memory_exceeded).
+#
+# The arithmetic for 21 GB on a 24 GB host:
+#   prefill cap = 90% x 21.00 = 18.90 GB
+#   minus the 16.30 GB the loaded weights already occupy
+#   = ~2.6 GB left for KV cache and prefill transients, which at ~98 KB/token
+#     (48 layers, 4 KV heads x 128, fp16) is roughly a 26k-token prompt before
+#     the paged SSD cache has to take over. Comfortably more than the research
+#     agent's per-source summarisation prompts need.
+# That leaves 3 GB for macOS. It is a ceiling, not a reservation — omlx only
+# ever commits what it actually uses — and it stays under this host's 22.0 GB
+# iogpu GPU-allocation cap.
+#
+# If a genuinely long-context job starts getting rejected, raise this
+# deliberately; that is the entire point of using a number instead of a tier.
+omlx_memory_guard_gb: 21
+
+# Fallback only — ignored whenever omlx_memory_guard_gb above is set. Kept so
+# the role still works on a host where we have not sized a ceiling by hand.
+omlx_memory_guard: "balanced"
+
+# macOS caps how much unified memory Metal may wire, and that cap — not
+# omlx_memory_guard_gb above — is the real ceiling. Left at its default (0,
+# i.e. ~75% of RAM = 17.76 GB on this 24 GB box) it sits barely above the
+# model's 16.36 GB resident size, so omlx rejected prompts as small as 1,056
+# tokens: "predicted peak would exceed prefill safety cap 16.9GB (95% of
+# metal_cap ceiling 17.8GB)". Raising omlx_memory_guard_gb alone does nothing,
+# because omlx clamps its own ceiling to metal_cap.
+#
+# 20 GB of 24 GB, leaving 4 GB for macOS. This is the usual working value for
+# LLM inference on a 24 GB Apple Silicon box; going much higher starves the OS
+# rather than helping, since the weights are already resident.
+omlx_iogpu_wired_limit_mb: 20480
+
+# SSD-backed paged KV cache — the actual relief valve for the budget above.
+# 40 GB, NOT the tool's 100 GB default: ai01 has ~149 GB free, and a cache
+# allowed to reach 100 GB could take the boot volume to ~99 % full, which on
+# macOS degrades the whole machine (and the 189 GB Photos library on the same
+# volume is still growing). 40 GB is already enormous for KV pages, and it is
+# a cache — it evicts rather than failing when it hits the ceiling.
+omlx_paged_ssd_cache_max_size: "40GB"
+
+omlx_root_dir: "{{ service_root }}/omlx"
+omlx_model_dir: "{{ omlx_root_dir }}/models"
+omlx_paged_ssd_cache_dir: "{{ omlx_root_dir }}/ssd-cache"
+
+# --- Research agent output tree (cmp01) -------------------------------------
+# Where services/knowledge/researchpull unpacks the bundle it fetches from
+# researchd on ctl01. Lives here rather than in a role's defaults because THREE
+# roles read it: vaultmerge (mounts it as a fourth source), researchpull
+# (writes it) and ops/restic (backs it up) — same reasoning as wanwatch_links
+# below. A role default would be out of scope in the other two roles.
+research_tree_dir: "{{ service_root }}/research/tree"
+
 # Backup verification: restic pings this Uptime Kuma push monitor on success, so
 # a missed nightly backup surfaces as a red 'Backups' tile. Token is the push
 # monitor created by services/monitoring/uptime_kuma_config.
