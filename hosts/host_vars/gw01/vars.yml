@@ -21,6 +21,7 @@ nginx_sites:
   - { name: ntfy,       upstream: "http://10.0.2.8:8091", sso: false }
   # n8n — own auth + receives webhooks (phase 7 GitOps); not forward-authed.
   - { name: n8n,        upstream: "http://10.0.2.8:5678", sso: false }
+  - { name: git,        upstream: "http://10.0.2.8:8102", sso: false }   # Gitea — own auth; forward-auth breaks git-over-HTTPS and the API
 
   # Compute / media (cmp01) — native clients, so own auth (not forward-auth)
   - { name: video,      upstream: "http://10.0.2.5:8096", sso: false }   # Jellyfin

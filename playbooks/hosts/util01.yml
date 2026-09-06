@@ -11,6 +11,7 @@
 #   - portainer   : Docker management UI              docker.puhome.net
 #   - dozzle      : live container logs               logs.puhome.net
 #   - n8n         : workflow automation / GitOps      n8n.puhome.net
+#   - gitea       : local Git hosting                 git.puhome.net
 
 - name: Deploy utility services on util01
   hosts: util01
@@ -56,3 +57,6 @@
 
     - role: services/productivity/syncthing
       tags: [syncthing, sync, backup-source]
+
+    - role: services/development/gitea
+      tags: [gitea, git, development]

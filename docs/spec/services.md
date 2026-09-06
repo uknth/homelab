@@ -83,6 +83,7 @@ helper is already PIA-shaped).
 | Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
 | n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7). Owns three workflows (2 maintenance + dual-WAN watch), defined as JSON in the role and imported via the n8n CLI |
 | Syncthing | `services/productivity/syncthing` | `sync.puhome.net` | 🟢 built + live | standalone file sync; GUI behind forward-auth; data under `/opt/homelab/syncthing/data` (Restic-backed) |
+| Gitea | `services/development/gitea` | `git.puhome.net` | 🟢 built | single-user Git host, local development; SQLite; registration disabled; own auth (`sso: false` — forward-auth breaks git-over-HTTPS/API); pinned `gitea/gitea:1.27.3`; ports 8102 (HTTP) + 2222 (SSH) |
 
 ## `ai01` — AI workloads
 

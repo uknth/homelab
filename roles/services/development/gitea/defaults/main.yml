@@ -1,0 +1,80 @@
+---
+# services/development/gitea — a single-user Git host on util01, for local
+# development. This is the first `services/development/*` role in the fleet;
+# it gets its own category rather than being wedged into productivity or
+# knowledge because "hosts my own repos" is a distinct concern from either.
+
+gitea_root_dir: "{{ service_root }}/gitea"
+gitea_compose_dir: "{{ gitea_root_dir }}/compose"
+gitea_data_dir: "{{ gitea_root_dir }}/data"
+
+# The uid/gid the gitea/gitea image's entrypoint creates its `git` user with
+# (USER_UID/USER_GID, both default to 1000 upstream and are not overridden
+# below). The data dir is chowned to these so the container's own user owns
+# its repos/db/config outright, rather than needing a chown-on-start step —
+# same reasoning as researchd_uid/gid in services/ai/researchd, and the
+# n8n uid 1000 fix in services/productivity/n8n.
+gitea_uid: 1000
+gitea_gid: 1000
+
+gitea_compose_project: "gitea"
+gitea_container_name: "gitea"
+
+# Both free in this fleet — checked against every `*_port` default across
+# roles/ before picking them (see the task's verification step).
+gitea_http_port: 8102
+gitea_ssh_port: 2222
+
+# --- Image ------------------------------------------------------------------
+# Pinned by tag+digest, same posture as searxng_image in
+# roles/services/ai/researchd/defaults/main.yml — a floating tag is exactly
+# what Diun would flag elsewhere in this fleet, and pinning removes the
+# question entirely. The digest is the multi-arch manifest-LIST digest (docker
+# resolves the right platform-specific manifest under it automatically, same
+# as researchd_llama_image), not a per-platform manifest digest.
+#
+# Verified against Docker Hub's registry API 2026-09-06: `gitea/gitea:1.27.3`
+# (latest stable release; pushed 2026-08-29) resolves to this manifest list,
+# which was fetched directly and confirmed to include BOTH linux/amd64 (util01
+# is a Debian Mini PC, not arm64) and linux/arm64. Bump by hand.
+gitea_image_repo: "gitea/gitea"
+gitea_image_tag: "1.27.3"
+gitea_image_digest: "sha256:87a67ee09d3ae0d1df5fda5dcda3e2a1f9236a45b0a59025d6e00e46adc43bef"
+gitea_image: "{{ gitea_image_repo }}:{{ gitea_image_tag }}@{{ gitea_image_digest }}"
+
+# --- Database -----------------------------------------------------------
+# SQLite, not a Postgres sidecar. This is a single-user instance for a
+# handful of personal repos — Postgres's own container, volume, and backup
+# surface would be pure overhead for a workload SQLite handles fine at this
+# scale (Gitea's own docs recommend SQLite specifically for "small,
+# single-user or few-user" instances). Revisit only if this ever grows
+# multi-user or repo count gets large enough for SQLite's single-writer
+# lock to become a real bottleneck.
+gitea_db_type: "sqlite3"
+
+# --- Registration / access -----------------------------------------------
+# Single-user instance, own login: registration is OFF and anonymous
+# browsing is OFF, so nginx can leave this `sso: false` (see
+# hosts/host_vars/gw01/vars.yml) without opening the door to anyone but the
+# admin account created below.
+gitea_disable_registration: true
+gitea_require_signin_view: true
+
+# --- Admin account --------------------------------------------------------
+# Username only — email and password are handled separately below.
+gitea_admin_username: "uknth"
+# Fleet convention for an admin contact address: the same var certbot's ACME
+# registration and Authentik's bootstrap use (roles/services/auth/authentik/
+# defaults/main.yml), not a new one.
+gitea_admin_email: "{{ vault_certbot_email | default('admin@' + base_domain) }}"
+
+# Password is GENERATED ON THE HOST, not stored in the vault — see the
+# tasks/main.yml comment block for the full reasoning (same pattern as
+# researchd's SearXNG secret key). Kept at 0600, under the compose dir
+# rather than inside gitea_data_dir so it is never accidentally swept up by
+# anything that treats the data dir as "the container's own business".
+gitea_admin_password_file: "{{ gitea_compose_dir }}/.admin_password"
+
+# --- URLs -----------------------------------------------------------------
+gitea_domain: "git.{{ base_domain }}"
+gitea_root_url: "https://{{ gitea_domain }}/"

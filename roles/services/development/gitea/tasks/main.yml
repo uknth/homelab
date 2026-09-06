@@ -1,0 +1,153 @@
+---
+# services/development/gitea — single-user Git host on util01. See
+# defaults/main.yml for why each value is what it is.
+
+- name: Create gitea dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ gitea_root_dir }}"
+    - "{{ gitea_compose_dir }}"
+    # NOT gitea_data_dir — the task below owns it, as the CONTAINER's uid
+    # rather than `user`. Creating it here too made the two tasks fight: this
+    # one chowned it back to `user` on every run, that one chowned it to the
+    # git uid again, and both reported `changed` forever.
+
+# Owned by the container's own uid/gid (see gitea_uid/gid in defaults) so the
+# `git` user the image runs as owns its repos/db/config outright, rather than
+# needing the entrypoint to chown a host-owned tree on every start.
+- name: Create the gitea data dir owned by the container's git user
+  become: true
+  ansible.builtin.file:
+    path: "{{ gitea_data_dir }}"
+    state: directory
+    owner: "{{ gitea_uid }}"
+    group: "{{ gitea_gid }}"
+    mode: "0755"
+
+# The admin account's password. Generated once and persisted on disk (NOT a
+# vault secret — this role must not require editing hosts/group_vars/all/
+# vault.yml, which is encrypted) so re-running the role doesn't rotate it out
+# from under the one person who uses this instance.
+#
+# Generated and read back ON THE REMOTE HOST, deliberately not via the
+# `password` lookup plugin: that lookup writes/reads its file on whatever
+# machine runs `ansible-playbook`, not necessarily util01 — same reasoning as
+# the SearXNG secret key in roles/services/ai/researchd/tasks/main.yml, copied
+# here directly.
+- name: Check whether a Gitea admin password already exists
+  ansible.builtin.stat:
+    path: "{{ gitea_admin_password_file }}"
+  register: _gitea_password_stat
+
+- name: Generate a Gitea admin password
+  become: true
+  # Safe under --check: creating a not-yet-existing secret is not destructive
+  # (same posture as the SearXNG key task this mirrors), and the compose/env
+  # rendering below needs the file to actually exist even during a dry run.
+  check_mode: false
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    openssl rand -hex 24 > {{ gitea_admin_password_file }}
+  args:
+    creates: "{{ gitea_admin_password_file }}"
+  when: not _gitea_password_stat.stat.exists
+
+- name: Fix ownership and mode on the Gitea admin password
+  become: true
+  ansible.builtin.file:
+    path: "{{ gitea_admin_password_file }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+
+- name: Read back the Gitea admin password
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ gitea_admin_password_file }}"
+  register: _gitea_password_slurp
+  no_log: true
+
+- name: Set the Gitea admin password fact
+  ansible.builtin.set_fact:
+    _gitea_admin_password: "{{ (_gitea_password_slurp.content | b64decode).strip() }}"
+  no_log: true
+
+- name: Template gitea compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ gitea_compose_dir }}/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart gitea
+
+# Carries no secrets itself (the admin password is set out-of-band via the
+# CLI task below, never through the environment) but templated the same way
+# as every other compose env file in this fleet for consistency.
+- name: Template the gitea env file
+  become: true
+  ansible.builtin.template:
+    src: gitea.env.j2
+    dest: "{{ gitea_compose_dir }}/gitea.env"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0640"
+  notify: Restart gitea
+
+- name: Deploy gitea
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_compose_dir }}"
+    project_name: "{{ gitea_compose_project }}"
+    state: present
+    pull: missing
+
+# Gitea writes app.ini and creates its SQLite schema on first boot, a few
+# seconds AFTER the container reports running. `gitea admin user create`
+# against a database whose tables do not exist yet fails on a missing table —
+# a race that shows up only on a first deploy and looks like a config error.
+# Wait for the HTTP port to answer instead of assuming the container being up
+# means Gitea is ready.
+- name: Wait for Gitea to finish initialising
+  become: true
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ gitea_http_port }}"
+    timeout: 120
+    delay: 2
+
+# Idempotent admin bootstrap: `gitea admin user create` exits non-zero with
+# "user already exists" once the account is there, and that must not fail the
+# play on every subsequent run — so the failure is inspected rather than
+# trusted to changed_when/failed_when defaults.
+#
+# no_log: true on the whole task, not just this one field, because the
+# password is a literal argv element here (openssl-generated hex, so no shell
+# metacharacters to worry about, but still not something to leave in a log).
+- name: Create the Gitea admin user (idempotent — already-exists is not a failure)
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -u git {{ gitea_container_name }}
+      gitea admin user create
+      --username {{ gitea_admin_username }}
+      --password {{ _gitea_admin_password }}
+      --email {{ gitea_admin_email }}
+      --admin
+      --must-change-password=false
+  register: _gitea_admin_create
+  changed_when: >-
+    _gitea_admin_create.rc == 0
+    and 'already exists' not in (_gitea_admin_create.stdout + _gitea_admin_create.stderr)
+  failed_when: >-
+    _gitea_admin_create.rc != 0
+    and 'already exists' not in (_gitea_admin_create.stdout + _gitea_admin_create.stderr)
+  no_log: true

@@ -1,0 +1,23 @@
+# Managed by Ansible — services/development/gitea
+#
+# Single service, SQLite backend (see gitea_db_type in defaults/main.yml) —
+# no Postgres sidecar, no separate volume for a database that lives as one
+# file under {{ gitea_data_dir }}.
+services:
+  gitea:
+    image: {{ gitea_image }}
+    container_name: {{ gitea_container_name }}
+    hostname: gitea
+    restart: unless-stopped
+    env_file:
+      - gitea.env
+    ports:
+      - "{{ gitea_http_port }}:3000"
+      - "{{ gitea_ssh_port }}:22"
+    volumes:
+      - {{ gitea_data_dir }}:/data
+      # Host clock, read-only — matches the image's documented compose
+      # example so container-side timestamps (commit dates shown in the UI,
+      # log lines) agree with the rest of the fleet.
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
