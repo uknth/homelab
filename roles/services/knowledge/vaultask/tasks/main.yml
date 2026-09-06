@@ -47,6 +47,20 @@
     mode: "0644"
   notify: Restart vaultask
 
+# Carries omlx_api_key in clear — see the header comment in the template
+# itself for why both mode 0600 and no_log: true are load-bearing here, not
+# stylistic (ops/gitops_executor's periodic `--check --diff` run).
+- name: Template the vaultask env file
+  become: true
+  ansible.builtin.template:
+    src: vaultask.env.j2
+    dest: "{{ vaultask_root_dir }}/compose/vaultask.env"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart vaultask
+
 - name: Check whether vaultask has been deployed before
   become: true
   ansible.builtin.stat:

@@ -2,7 +2,12 @@
 //
 // Search over the merged wiki. Hybrid: SQLite FTS5 (BM25) for lexical matches,
 // cosine over note embeddings for semantic ones, fused with Reciprocal Rank
-// Fusion. No LLM — this returns notes, not answers.
+// Fusion.
+//
+// Also answers questions, grounded in that same retrieval: /api/ask runs the
+// retrieval below, hands the top notes to an LLM as the only source it is
+// allowed to answer from, and streams the reply back with citations. /api/
+// search stays pure retrieval, unchanged — no LLM involved on that path.
 import fs from "fs"
 import path from "path"
 import http from "http"
@@ -13,8 +18,30 @@ const DATA = "/data"
 const PORT = {{ vaultask_port }}
 const N_RESULTS = {{ vaultask_results }}
 const RRF_K = {{ vaultask_rrf_k }}
+// Cosine below which retrieval is treated as having found nothing relevant.
+// Measured against this corpus rather than guessed: genuinely on-topic queries
+// score 0.82-0.86, deliberate nonsense 0.54-0.60. bge-small never returns
+// anything near zero for unrelated text, so "did we get results" is useless as
+// a relevance test — the index always returns its 20 best, however bad.
+const GROUND_MIN = {{ vaultask_ground_threshold }}
 const WIKI = {{ vaultask_wiki_base | to_json }}
 const EMBED = "http://{{ vaultask_embed_host }}:{{ vaultask_embed_port }}"
+
+// omlx on ai01: always resident, unlike vaultindex-llm on cmp01 which sits
+// behind an `ondemand` compose profile (started/stopped per use) and would
+// otherwise compete with Jellyfin for cmp01's A4000 every time someone asked
+// a question. Reached over the `default` bridge network, NOT the `ai`
+// network also joined below — that one has no route off the host.
+const LLM_BASE_URL = {{ vaultask_llm_base_url | to_json }}
+const LLM_MODEL = {{ vaultask_llm_model | to_json }}
+// Never baked into this file (world-readable, 0644): it comes in only
+// through the container's environment, from a 0600 env file templated with
+// no_log: true. See templates/vaultask.env.j2.
+const LLM_API_KEY = process.env.VAULTASK_LLM_API_KEY || ""
+
+const ANSWER_NOTES = {{ vaultask_answer_notes }}
+const NOTE_CHARS = {{ vaultask_note_chars }}
+const HISTORY_TURNS = {{ vaultask_history_turns }}
 
 // ---------------------------------------------------------------- index ----
 let db = null
@@ -169,7 +196,9 @@ function fuse(lex, sem) {
 const slug = (rel) =>
   rel.replace(/\.md$/i, "").split("/").map((s) => encodeURIComponent(s.replace(/ /g, "-"))).join("/")
 
-async function search(q) {
+// The fused ranking, shared by /api/search and the ask-side retrieval below,
+// so the two never drift into ranking notes differently for the same query.
+async function retrieve(q) {
   maybeRebuild()
   const lex = lexical(q)
   let sem = []
@@ -181,11 +210,20 @@ async function search(q) {
     semError = e.message
   }
   const snips = new Map(lex.map((r) => [r.rel, r.snip]))
+  // Best raw cosine, kept alongside the fused ranking because RRF throws the
+  // scores away — it fuses RANKS. Rank alone cannot answer "is the top hit
+  // actually about this?", which is exactly what the ask path has to decide.
+  const topCosine = sem.length ? sem[0].score : null
+  return { fused: fuse(lex, sem), snips, semError, topCosine }
+}
+
+async function search(q) {
+  const { fused, snips, semError } = await retrieve(q)
   return {
     query: q,
     degraded: semError,
     total: meta.size,
-    results: fuse(lex, sem)
+    results: fused
       .slice(0, N_RESULTS)
       .map((r) => {
         const m = meta.get(r.rel) || {}
@@ -198,6 +236,148 @@ async function search(q) {
           snippet: snips.get(r.rel) || "",
         }
       }),
+  }
+}
+
+// --------------------------------------------------------------- routing ---
+// Deterministic and explainable on purpose: which of "search" (return notes)
+// or "ask" (generate a grounded answer) a query gets is a regex away, and
+// spending an LLM call to decide that would be slower for no better an
+// answer. Explicit `mode` from the client always wins over the heuristic.
+const ASK_WORDS = new Set([
+  "what", "why", "how", "when", "where", "who", "which",
+  "is", "are", "do", "does", "can", "should",
+  "explain", "summarise", "summarize", "compare", "tell",
+])
+
+function decideMode(query, explicit) {
+  if (explicit === "search" || explicit === "ask") return explicit
+  const q = (query || "").trim()
+  if (!q) return "search"
+  if (q.endsWith("?")) return "ask"
+  const words = q.split(/\s+/).filter(Boolean)
+  const first = (words[0] || "").toLowerCase().replace(/[^a-z]/g, "")
+  if (ASK_WORDS.has(first)) return "ask"
+  if (words.length >= 6) return "ask"
+  return "search"
+}
+
+// ------------------------------------------------------------- grounding ---
+// Same `rel` path the merge tree uses, so this reads exactly the file the
+// index was built from — no separate copy of note text to keep in sync.
+function readNoteText(rel) {
+  try {
+    const raw = fs.readFileSync(path.join(MERGED, rel), "utf8")
+    const { body } = stripFm(raw)
+    return body.trim().slice(0, NOTE_CHARS)
+  } catch {
+    return ""
+  }
+}
+
+// Top ANSWER_NOTES of the same fused ranking /api/search uses, with the full
+// (truncated) note body attached for the prompt. An empty array here is what
+// tells the caller retrieval found nothing — the signal `grounded` is built on.
+async function retrieveForAsk(q) {
+  const { fused, snips, topCosine } = await retrieve(q)
+  // No semantic signal at all (embedder down, or enrichment has not run) ->
+  // ground anyway. Answering from the notes we do have, with citations a
+  // reader can check, beats free-associating from model memory.
+  const grounded = topCosine === null ? fused.length > 0 : topCosine >= GROUND_MIN
+  const notes = fused.slice(0, ANSWER_NOTES).map((r, i) => {
+    const m = meta.get(r.rel) || {}
+    return {
+      n: i + 1,
+      title: m.title,
+      url: `${WIKI}/${slug(r.rel)}`,
+      snippet: snips.get(r.rel) || "",
+      text: readNoteText(r.rel),
+    }
+  })
+  return { notes, grounded, topCosine }
+}
+
+const GROUNDED_SYSTEM =
+  "You are the assistant for a personal home wiki. Answer the user's " +
+  "question using ONLY the numbered notes provided below — do not draw on " +
+  "outside knowledge. Cite every claim with the matching bracketed marker, " +
+  "e.g. [1], [2]. If the notes do not contain the answer, say so plainly " +
+  "rather than filling the gap yourself."
+
+const UNGROUNDED_SYSTEM =
+  "Wiki retrieval found nothing useful for this question, so there are no " +
+  "notes to ground an answer in. Answer from your own general knowledge, " +
+  "but you MUST make clear, plainly and near the start of your reply, that " +
+  "this answer is NOT sourced from the wiki — a generated answer must never " +
+  "read as though it came from the notes."
+
+// Last HISTORY_TURNS entries only, and only the shape a chat message needs —
+// the client's `history` is untrusted input, not something to pass through.
+function trimHistory(history) {
+  if (!Array.isArray(history)) return []
+  return history
+    .filter((h) => h && (h.role === "user" || h.role === "assistant") && typeof h.content === "string")
+    .slice(-HISTORY_TURNS)
+    .map((h) => ({ role: h.role, content: h.content }))
+}
+
+function buildAskMessages(query, notes, history) {
+  if (notes.length === 0) {
+    return [
+      { role: "system", content: UNGROUNDED_SYSTEM },
+      ...history,
+      { role: "user", content: query },
+    ]
+  }
+  const notesBlock = notes.map((n) => `[${n.n}] ${n.title} (${n.url})\n${n.text}`).join("\n\n")
+  const user = `Numbered notes:\n\n${notesBlock}\n\nQuestion: ${query}`
+  return [
+    { role: "system", content: GROUNDED_SYSTEM },
+    ...history,
+    { role: "user", content: user },
+  ]
+}
+
+// Streams omlx's chat/completions, forwarding each token delta to `onToken`
+// as it arrives — a chat window that blocks for the full 20s+ generation
+// would be a bad chat window. No SDK: this is a stdlib fetch reading an SSE
+// body by hand, same dependency-free posture as the rest of this file.
+async function streamAnswer(messages, onToken) {
+  const r = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${LLM_API_KEY}`,
+    },
+    body: JSON.stringify({ model: LLM_MODEL, messages, stream: true, temperature: 0.2 }),
+  })
+  if (!r.ok || !r.body) {
+    const detail = await r.text().catch(() => "")
+    throw new Error(`omlx ${r.status}: ${detail.slice(0, 300)}`)
+  }
+  const reader = r.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ""
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let idx
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, idx).trim()
+      buf = buf.slice(idx + 2)
+      if (!line.startsWith("data:")) continue
+      const data = line.slice(5).trim()
+      if (data === "[DONE]") return
+      let obj
+      try {
+        obj = JSON.parse(data)
+      } catch {
+        continue // a partial/malformed frame is skipped, not fatal to the stream
+      }
+      const delta = obj?.choices?.[0]?.delta?.content
+      if (delta) onToken(delta)
+    }
   }
 }
 
@@ -221,6 +401,79 @@ http
         res.writeHead(500, { "content-type": "application/json" })
         return res.end(JSON.stringify({ error: e.message }))
       }
+    }
+    if (u.pathname === "/api/ask" && req.method === "POST") {
+      let raw = ""
+      req.on("data", (c) => (raw += c))
+      req.on("end", async () => {
+        let payload
+        try {
+          payload = JSON.parse(raw || "{}")
+        } catch {
+          payload = {}
+        }
+        const query = (payload.query || "").trim()
+        if (!query) {
+          res.writeHead(400, { "content-type": "application/json" })
+          return res.end(JSON.stringify({ error: "missing query" }))
+        }
+        const mode = decideMode(query, payload.mode)
+
+        res.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+        })
+        const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`)
+
+        // "search" here is the same fused ranking /api/search returns — this
+        // endpoint is a superset of it, not a different retrieval, so a query
+        // the heuristic reads as a lookup still gets the rich result list
+        // rather than a worse, LLM-shaped view of the same notes.
+        if (mode === "search") {
+          try {
+            const out = await search(query)
+            send({ type: "mode", mode: "search" })
+            send({
+              type: "sources",
+              sources: out.results.map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: r.snippet })),
+            })
+            send({ type: "done" })
+          } catch (e) {
+            send({ type: "error", error: e.message })
+          }
+          return res.end()
+        }
+
+        // mode === "ask"
+        try {
+          const { notes, grounded, topCosine } = await retrieveForAsk(query)
+          send({ type: "mode", mode: "ask", grounded })
+          // Sources are still sent when ungrounded — they are what retrieval
+          // actually returned, and showing them lets a reader see for
+          // themselves that nothing matched, rather than being told so.
+          send({
+            type: "sources",
+            sources: notes.map((n) => ({ n: n.n, title: n.title, url: n.url, snippet: n.snippet })),
+          })
+          console.log(`ask: grounded=${grounded} topCosine=${topCosine === null ? "n/a" : topCosine.toFixed(3)} q=${JSON.stringify(query.slice(0, 80))}`)
+          // Ungrounded answers get NO notes in the prompt. Passing irrelevant
+          // ones alongside "answer from general knowledge" is the worst of
+          // both: the model tries to reconcile them and cites pages that do
+          // not support what it said.
+          const messages = buildAskMessages(query, grounded ? notes : [], trimHistory(payload.history))
+          await streamAnswer(messages, (text) => send({ type: "token", text }))
+          send({ type: "done" })
+        } catch (e) {
+          // Down LLM (or a malformed reply) ends the stream with an error
+          // event, not an HTTP 500 — the response is already 200 and
+          // text/event-stream by this point, and search on this same query
+          // is unaffected: it never depends on omlx at all.
+          send({ type: "error", error: e.message })
+        }
+        res.end()
+      })
+      return
     }
     if (u.pathname === "/healthz") {
       res.writeHead(200, { "content-type": "application/json" })

@@ -13,6 +13,12 @@ services:
     environment:
       - TZ={{ timezone }}
       - NODE_NO_WARNINGS=1
+    # The omlx API key lives ONLY here, never inline under `environment:`
+    # above — that block lands verbatim in `docker inspect`, an env_file
+    # does not. Same posture as researchd's compose (roles/services/ai/
+    # researchd/templates/docker-compose.yml.j2).
+    env_file:
+      - vaultask.env
     volumes:
       - {{ vaultask_root_dir }}/app:/app:ro
       # Both read-only: this service is a reader of other stages' output.

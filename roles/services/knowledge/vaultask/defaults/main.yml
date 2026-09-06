@@ -33,3 +33,33 @@ vaultask_embed_port: "{{ vaultindex_embed_port | default(8082) }}"
 vaultask_results: 20            # results returned per query
 vaultask_rrf_k: 60              # standard RRF damping constant
 vaultask_wiki_base: "https://wiki.{{ base_domain }}"
+
+# --- Ask: grounded question-answering over the same retrieval -------------
+# omlx on ai01, not vaultindex-llm's summary model on cmp01: omlx is always
+# resident, whereas vaultindex-llm sits behind an `ondemand` compose profile
+# (started and stopped per use) and would otherwise compete with Jellyfin
+# for cmp01's A4000 GPU every time someone asked a question.
+#
+# Derived from the omlx vars rather than hardcoded, same pattern as
+# roles/services/ai/researchd/defaults/main.yml's researchd_llm_base_url —
+# omlx_host is "10.0.2.9,127.0.0.1" (LAN address explicit, then localhost;
+# see hosts/group_vars/all/vars.yml), so the LAN half is the first element.
+vaultask_llm_host: "{{ omlx_host.split(',')[0] }}"
+vaultask_llm_base_url: "http://{{ vaultask_llm_host }}:{{ omlx_port }}/v1"
+vaultask_llm_model: "Qwen3-30B-A3B-Instruct-2507-4bit"
+
+vaultask_answer_notes: 6         # top-N retrieved notes fed to the LLM as grounding
+vaultask_note_chars: 4000        # per-note truncation, keeps the prompt inside omlx's KV budget
+vaultask_history_turns: 6      # conversation entries kept; retrieval still runs on the current query only
+
+# Cosine below which the ask path treats retrieval as having found nothing
+# relevant and answers from general knowledge instead, clearly labelled.
+#
+# MEASURED, not guessed. Against this corpus (583 notes, bge-small): on-topic
+# questions score 0.82-0.86 at the top hit, deliberate nonsense 0.54-0.60.
+# 0.70 sits in the gap. The naive test — "did retrieval return anything" —
+# is useless here: RRF over 583 notes always returns its 20 best however
+# irrelevant, so every query looked grounded and the general-knowledge path
+# was dead code. Re-measure if the embedding model ever changes; the absolute
+# scale is a property of the model, not of the wiki.
+vaultask_ground_threshold: 0.70

@@ -40,27 +40,58 @@
   .tags { margin-top:.4rem; font-size:.72rem; color:var(--faint); }
   footer { margin-top:2rem; font-size:.78rem; color:var(--faint); }
   footer a { color:var(--accent); }
+
+  /* ---- chat (ask) ---- */
+  #chat { display:flex; flex-direction:column; gap:.9rem; margin-bottom:1rem; }
+  .msg { border-radius:10px; padding:.8rem 1rem; }
+  .msg.user { background:transparent; border:1px solid var(--line); color:var(--fg); }
+  .msg.assistant { background:var(--card); border:1px solid var(--line); }
+  .msg .label { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em;
+                color:var(--faint); margin-bottom:.35rem; }
+  .answer { line-height:1.6; white-space:pre-wrap; }
+  .badge { display:inline-block; font-size:.68rem; font-weight:600; letter-spacing:.02em;
+           border-radius:99px; padding:.15rem .6rem; margin-bottom:.5rem; }
+  .badge.wiki { background:rgba(40,75,99,.14); color:var(--accent); }
+  .badge.general { background:rgba(180,83,9,.14); color:#b45309; }
+  .cites { margin-top:.7rem; padding-top:.6rem; border-top:1px solid var(--line);
+           font-size:.82rem; }
+  .cites ol { margin:.3rem 0 0; padding-left:1.2rem; }
+  .cites a { color:var(--accent); text-decoration:none; }
+  .cites a:hover { text-decoration:underline; }
+  .switch { font-size:.78rem; color:var(--faint); margin-top:.4rem; }
+  .switch a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .switch a:hover { text-decoration:underline; }
+  .cursor { display:inline-block; width:.5em; }
 </style>
 </head>
 <body>
 <main>
   <h1><a href="/">Ask</a> <span style="color:var(--faint);font-weight:400">· homelab wiki</span></h1>
   <form id="f">
-    <input id="q" name="q" placeholder="Search across work, knowledge base and personal notes…"
+    <input id="q" name="q" placeholder="Search, or ask a question, across work, knowledge base and personal notes…"
            autocomplete="off" autofocus>
-    <button type="submit">Search</button>
+    <button type="submit">Go</button>
   </form>
   <div class="status" id="s"></div>
+  <div id="chat"></div>
   <ul id="r"></ul>
   <footer>
-    Keyword + meaning, fused. Results link into <a href="{{ vaultask_wiki_base }}">the wiki</a>.
+    Keyword + meaning, fused, and questions answered from it. Results link into
+    <a href="{{ vaultask_wiki_base }}">the wiki</a>.
   </footer>
 </main>
 <script>
 const f=document.getElementById('f'), q=document.getElementById('q'),
-      s=document.getElementById('s'), r=document.getElementById('r');
+      s=document.getElementById('s'), r=document.getElementById('r'),
+      chat=document.getElementById('chat');
 const esc=t=>(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+// Conversation kept client-side only (nothing persists across a reload);
+// the server independently caps how much of it a prompt actually uses
+// (vaultask_history_turns) — see server.mjs's trimHistory.
+let chatHistory = [];
+
+// ---- pure search: unchanged data path (/api/search), unchanged rendering ----
 async function run(term){
   if(!term) return;
   s.textContent='Searching…'; r.innerHTML='';
@@ -85,10 +116,132 @@ async function run(term){
       </li>`).join('');
   }catch(e){ s.textContent='Error: '+e.message; }
 }
-f.addEventListener('submit',e=>{e.preventDefault();run(q.value.trim());});
+
+// ---- ask: streamed chat over /api/ask, SSE parsed by hand (no deps) ----
+function addUserBubble(term){
+  const el=document.createElement('div');
+  el.className='msg user';
+  el.innerHTML=`<div class="label">You</div>${esc(term)}`;
+  chat.appendChild(el);
+  return el;
+}
+
+function addAssistantBubble(){
+  const el=document.createElement('div');
+  el.className='msg assistant';
+  el.innerHTML=`<div class="badge-slot"></div><div class="answer"></div><div class="cites-slot"></div><div class="switch-slot"></div>`;
+  chat.appendChild(el);
+  return el;
+}
+
+function renderBadge(el, grounded){
+  el.querySelector('.badge-slot').innerHTML = grounded
+    ? `<span class="badge wiki">answered from the wiki</span>`
+    : `<span class="badge general">answered from general knowledge — not from your notes</span>`;
+}
+
+function renderCites(el, sources){
+  const slot = el.querySelector('.cites-slot');
+  if(!sources || !sources.length){ slot.innerHTML=''; return; }
+  slot.innerHTML = `<div class="cites">Sources<ol>${sources.map(src=>
+    `<li><a href="${esc(src.url)}" target="_blank" rel="noopener">[${src.n}] ${esc(src.title)}</a></li>`
+  ).join('')}</ol></div>`;
+}
+
+function renderSwitch(el, term, mode){
+  el.querySelector('.switch-slot').innerHTML = `<div class="switch">` +
+    (mode==='ask' ? `<a data-mode="search">Search instead</a>` : `<a data-mode="ask">Ask instead</a>`) +
+    `</div>`;
+  el.querySelector('.switch-slot a').addEventListener('click', ()=>ask(term, el.querySelector('.switch-slot a').dataset.mode));
+}
+
+async function ask(term, forceMode){
+  if(!term) return;
+  history.replaceState(null,'', '?q='+encodeURIComponent(term));
+  s.textContent = forceMode==='search' ? 'Searching…' : (forceMode==='ask' ? 'Asking…' : 'Thinking…');
+  r.innerHTML='';
+  let res;
+  try{
+    res = await fetch('/api/ask', {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({ query: term, mode: forceMode, history: chatHistory }),
+    });
+  }catch(e){ s.textContent='Error: '+e.message; return; }
+  if(!res.ok || !res.body){ s.textContent='Error: '+res.status; return; }
+
+  const reader=res.body.getReader(), decoder=new TextDecoder();
+  let buf='', bubble=null, answerText='', sawSearch=false;
+  const cursor=()=>bubble && (bubble.querySelector('.answer').innerHTML = esc(answerText)+'<span class="cursor">▌</span>');
+
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += decoder.decode(value, {stream:true});
+    let idx;
+    while((idx = buf.indexOf('\n\n')) >= 0){
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx+2);
+      if(!line.startsWith('data:')) continue;
+      let evt; try{ evt = JSON.parse(line.slice(5).trim()); }catch{ continue; }
+
+      if(evt.type === 'mode' && evt.mode === 'search'){
+        // The heuristic (or an explicit override) decided this is a lookup,
+        // not a question — fall back to the existing rich search rendering
+        // instead of a plainer citations list for the same notes.
+        sawSearch = true;
+        s.textContent='';
+        // Awaited so the switch link is appended AFTER run() finishes
+        // setting s.innerHTML from the search results — otherwise the
+        // later innerHTML assignment would silently wipe it out.
+        await run(term);
+        renderSwitchAfterSearch(term);
+        return;
+      }
+      if(evt.type === 'mode' && evt.mode === 'ask'){
+        s.textContent='';
+        addUserBubble(term);
+        bubble = addAssistantBubble();
+        renderBadge(bubble, evt.grounded);
+      }
+      if(evt.type === 'sources' && bubble){
+        renderCites(bubble, evt.sources);
+      }
+      if(evt.type === 'token'){
+        answerText += evt.text;
+        cursor();
+      }
+      if(evt.type === 'done'){
+        if(bubble) bubble.querySelector('.answer').textContent = answerText;
+        if(!sawSearch){
+          chatHistory.push({role:'user', content: term});
+          chatHistory.push({role:'assistant', content: answerText});
+          if(bubble) renderSwitch(bubble, term, 'ask');
+        }
+      }
+      if(evt.type === 'error'){
+        s.textContent = 'Error: '+evt.error;
+      }
+    }
+  }
+}
+
+// Offered after a plain search result, so a keyword-shaped query that was
+// really a question can still get a grounded answer without retyping it.
+// Appended under the status line, not into #chat — a fallback to search
+// produced no chat turn, so there is nothing there to attach it to.
+function renderSwitchAfterSearch(term){
+  const el=document.createElement('span');
+  el.className='switch';
+  el.innerHTML=` · <a>Ask instead</a>`;
+  el.querySelector('a').addEventListener('click', ()=>ask(term, 'ask'));
+  s.appendChild(el);
+}
+
+f.addEventListener('submit', e=>{ e.preventDefault(); ask(q.value.trim()); });
 // Support ?q= so the dashboard search box can link straight here.
 const initial=new URLSearchParams(location.search).get('q');
-if(initial){ q.value=initial; run(initial); }
+if(initial){ q.value=initial; ask(initial); }
 </script>
 </body>
 </html>
