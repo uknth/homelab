@@ -47,10 +47,14 @@
 
 - name: Generate an Open WebUI secret key
   become: true
-  # Safe under --check: creating a not-yet-existing secret is not
-  # destructive (same posture as the SearXNG key task this mirrors), and the
-  # env file rendered below needs it to exist even during a dry run.
-  check_mode: false
+  # NOT check_mode: false, though it was until PR #2. The idea had been that
+  # generating a not-yet-existing secret is harmless during a dry run and
+  # lets the env file below render. It does not survive first contact: on a
+  # host that has never run this role the compose dir above is itself a
+  # check-mode no-op, so the redirect lands in a directory that does not
+  # exist and the task dies with "No such file or directory". A dry run also
+  # has no business writing to the target at all. Skipped under --check
+  # instead, with the fact below falling back to a placeholder.
   ansible.builtin.shell: |
     set -euo pipefail
     umask 077
@@ -61,8 +65,11 @@
     # this on first deploy; pinned here before it can happen again.
     executable: /bin/bash
     creates: "{{ openwebui_compose_dir }}/.webui_secret_key"
-  when: not _openwebui_secret_stat.stat.exists
+  when: not _openwebui_secret_stat.stat.exists and not ansible_check_mode
 
+# These two only have a file to work on when one already existed or we just
+# made one — i.e. every real run, and every dry run except the first-ever
+# deploy. Same guard idiom as the compose task at the end of this file.
 - name: Fix ownership and mode on the Open WebUI secret key
   become: true
   ansible.builtin.file:
@@ -70,6 +77,7 @@
     owner: "{{ user }}"
     group: "{{ user }}"
     mode: "0600"
+  when: _openwebui_secret_stat.stat.exists or not ansible_check_mode
 
 - name: Read back the Open WebUI secret key
   become: true
@@ -77,10 +85,18 @@
     src: "{{ openwebui_compose_dir }}/.webui_secret_key"
   register: _openwebui_secret_slurp
   no_log: true
+  when: _openwebui_secret_stat.stat.exists or not ansible_check_mode
 
+# The placeholder is reachable ONLY on a --check run against a host with no
+# secret yet, where the slurp above was skipped. It exists so the env file
+# can still render and the dry run can report the rest of its diff; it is
+# never written on a real run, because the generate task always precedes it.
 - name: Set the Open WebUI secret key fact
   ansible.builtin.set_fact:
-    _openwebui_secret_key: "{{ (_openwebui_secret_slurp.content | b64decode).strip() }}"
+    _openwebui_secret_key: >-
+      {{ (_openwebui_secret_slurp.content | b64decode).strip()
+         if _openwebui_secret_slurp.content is defined
+         else 'DRY-RUN-PLACEHOLDER-NEVER-WRITTEN' }}
   no_log: true
 
 # LiteLLM's master key: Open WebUI's only credential onto the proxy, and the
@@ -95,17 +111,22 @@
 
 - name: Generate a LiteLLM master key
   become: true
-  # Safe under --check, same reasoning as the Open WebUI secret key task
-  # above — the env file rendered below needs it to exist even during a
-  # dry run.
-  check_mode: false
+  # Skipped under --check for the same reason as the Open WebUI secret key
+  # task above; see the long comment there.
   ansible.builtin.shell: |
     set -euo pipefail
     umask 077
     openssl rand -hex 32 > {{ openwebui_litellm_master_key_file }}
   args:
+    # bash explicitly: `set -o pipefail` is a bashism and cmp01's /bin/sh is
+    # dash, which rejects it with "Illegal option -o pipefail". The task
+    # above pins this and this one did not — the inconsistency was the bug,
+    # and because the key file has never existed on cmp01 the `when` below
+    # was true, so PR #1's deploy ran straight into it. Third time this
+    # bashism has bitten (gitea, then openwebui's other task, now this).
+    executable: /bin/bash
     creates: "{{ openwebui_litellm_master_key_file }}"
-  when: not _openwebui_litellm_key_stat.stat.exists
+  when: not _openwebui_litellm_key_stat.stat.exists and not ansible_check_mode
 
 - name: Fix ownership and mode on the LiteLLM master key
   become: true
@@ -114,6 +135,7 @@
     owner: "{{ user }}"
     group: "{{ user }}"
     mode: "0600"
+  when: _openwebui_litellm_key_stat.stat.exists or not ansible_check_mode
 
 - name: Read back the LiteLLM master key
   become: true
@@ -121,10 +143,14 @@
     src: "{{ openwebui_litellm_master_key_file }}"
   register: _openwebui_litellm_key_slurp
   no_log: true
+  when: _openwebui_litellm_key_stat.stat.exists or not ansible_check_mode
 
 - name: Set the LiteLLM master key fact
   ansible.builtin.set_fact:
-    _openwebui_litellm_master_key: "{{ (_openwebui_litellm_key_slurp.content | b64decode).strip() }}"
+    _openwebui_litellm_master_key: >-
+      {{ (_openwebui_litellm_key_slurp.content | b64decode).strip()
+         if _openwebui_litellm_key_slurp.content is defined
+         else 'DRY-RUN-PLACEHOLDER-NEVER-WRITTEN' }}
   no_log: true
 
 - name: Template openwebui compose
