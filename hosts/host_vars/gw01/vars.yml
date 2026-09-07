@@ -21,7 +21,11 @@ nginx_sites:
   - { name: ntfy,       upstream: "http://10.0.2.8:8091", sso: false }
   # n8n — own auth + receives webhooks (phase 7 GitOps); not forward-authed.
   - { name: n8n,        upstream: "http://10.0.2.8:5678", sso: false }
-  - { name: git,        upstream: "http://10.0.2.8:8102", sso: false }   # Gitea — own auth; forward-auth breaks git-over-HTTPS and the API
+  - { name: git,        upstream: "http://10.0.2.5:8102", sso: false }   # Gitea — own auth; forward-auth breaks git-over-HTTPS and the API
+  # ssh.git exists only to carry Gitea's SSH listener (see blocky's
+  # blocky_extra_mappings). Anyone reaching it over HTTP has typed the wrong
+  # thing; bounce them to the web UI rather than a connection error.
+  - { name: ssh.git,    redirect_to: "https://git.puhome.net", sso: false }
 
   # Compute / media (cmp01) — native clients, so own auth (not forward-auth)
   - { name: video,      upstream: "http://10.0.2.5:8096", sso: false }   # Jellyfin

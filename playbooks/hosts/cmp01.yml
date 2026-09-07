@@ -2,8 +2,10 @@
 # cmp01 — Compute node with GPU (Custom PC, Debian)
 #
 # Storage first (NFS mount), then GPU runtime, then services.
-#   - nfs_mounts   : /mnt/media/data from nas01
+#   - nfs_mounts   : /mnt/media/data and /mnt/gitea from nas01
 #   - nvidia_docker: register NVIDIA runtime with Docker (Jellyfin NVENC)
+#   - gitea        : local Git hosting (moved from util01, 2026-09; see       git.puhome.net
+#                    roles/services/development/gitea/defaults/main.yml)
 #   - arr          : sonarr/radarr/lidarr/bazarr/prowlarr/qbittorrent (VPN=qbit only)
 #   - jellyfin     : media server (NVENC) + jellyseerr
 #   - kavita       : books/comics reader
@@ -28,6 +30,15 @@
 
     - role: system/nvidia_docker
       tags: [nvidia, gpu]
+
+    # Moved from util01 (2026-09): util01's disk is not redundant and Gitea
+    # holds the fleet's one irreplaceable dataset; Gitea Actions will also
+    # need compute util01 doesn't have. Must come after system/nfs_mounts —
+    # its repos/LFS volume is the NFS mount above, which has to exist before
+    # the container starts. See roles/services/development/gitea/defaults/
+    # main.yml for the storage split (SQLite local, repos on NFS).
+    - role: services/development/gitea
+      tags: [gitea, git, development]
 
     - role: services/media/arr
       tags: [arr, media, downloader]

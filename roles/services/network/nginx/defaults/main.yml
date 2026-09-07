@@ -13,7 +13,14 @@ nginx_authentik_port: 9000
 
 # Per-service vhosts. Each: name (subdomain), upstream (proxy_pass target),
 # sso (require Authentik login). Populated as services come online.
+# A vhost may instead carry redirect_to (a full URL) in place of upstream —
+# it then emits a bare `return 301 <redirect_to>$request_uri;` with no proxy
+# block, no forward-auth, and no upstream. Use this for names that exist to
+# carry something other than HTTP (e.g. an SSH-only alias) so a browser that
+# lands there gets bounced somewhere useful instead of a connection error.
+# upstream and redirect_to are mutually exclusive — exactly one is required.
 # Example:
-#   - { name: dash,   upstream: "http://10.0.2.8:14031", sso: true }
-#   - { name: sonarr, upstream: "http://10.0.2.5:8989",  sso: true }
+#   - { name: dash,    upstream: "http://10.0.2.8:14031", sso: true }
+#   - { name: sonarr,  upstream: "http://10.0.2.5:8989",  sso: true }
+#   - { name: ssh.git, redirect_to: "https://git.puhome.net", sso: false }
 nginx_sites: []

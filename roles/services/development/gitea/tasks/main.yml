@@ -1,5 +1,5 @@
 ---
-# services/development/gitea — single-user Git host on util01. See
+# services/development/gitea — single-user Git host on cmp01. See
 # defaults/main.yml for why each value is what it is.
 
 - name: Create gitea dirs
@@ -48,7 +48,7 @@
 #
 # Generated and read back ON THE REMOTE HOST, deliberately not via the
 # `password` lookup plugin: that lookup writes/reads its file on whatever
-# machine runs `ansible-playbook`, not necessarily util01 — same reasoning as
+# machine runs `ansible-playbook`, not necessarily cmp01 — same reasoning as
 # the SearXNG secret key in roles/services/ai/researchd/tasks/main.yml, copied
 # here directly.
 - name: Check whether a Gitea admin password already exists

@@ -7,6 +7,12 @@ certbot_cloudflare_token: "{{ vault_cloudflare_dns_token | default('') }}"
 certbot_domains:
   - "{{ base_domain }}"
   - "*.{{ base_domain }}"
+  # A wildcard SAN matches exactly ONE label, so *.puhome.net does NOT cover
+  # ssh.git.puhome.net (two labels deep, a redirect-only vhost — see nginx's
+  # nginx_sites). Add the second-level wildcard explicitly or that name gets
+  # a certificate name-mismatch. Do not remove this as "redundant" with the
+  # line above; it isn't, per the one-label rule.
+  - "*.git.{{ base_domain }}"
 certbot_cert_name: "{{ base_domain }}"
 certbot_credentials_path: /etc/letsencrypt/cloudflare.ini
 # Reload nginx after a successful renewal.

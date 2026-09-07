@@ -15,6 +15,9 @@ server {
     ssl_certificate_key {{ nginx_cert_dir }}/privkey.pem;
     include /etc/nginx/snippets/ssl-params.conf;
 
+{% if item.redirect_to is defined %}
+    return 301 {{ item.redirect_to }}$request_uri;
+{% else %}
 {% if item.sso | default(false) %}
     include /etc/nginx/snippets/authentik-forward-auth.conf;
 {% endif %}
@@ -36,4 +39,5 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
+{% endif %}
 }

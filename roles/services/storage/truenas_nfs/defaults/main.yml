@@ -16,3 +16,20 @@ truenas_nfs_exports:
     ro: false
     enabled: true
     comment: "media handoff — managed by Ansible (v3)"
+
+  # Gitea's repositories. On RAIDZ2 rather than cmp01's local disk because this
+  # is the one artefact on the fleet with no upstream to re-pull from; the
+  # SQLite database deliberately stays LOCAL to cmp01, since NFS implements
+  # POSIX locking incompletely and the failure mode is silent corruption
+  # (see roles/services/development/gitea/defaults/main.yml).
+  #
+  # PREREQUISITE: the dataset `data-pool/gitea` must exist before this share
+  # can be created. This role manages export DEFINITIONS only, never datasets —
+  # the same boundary every other export here sits behind. Create it once in
+  # the TrueNAS UI (Datasets -> data-pool -> Add Dataset -> "gitea"), then this
+  # becomes ordinary IaC.
+  - path: "{{ gitea_nfs_export }}"         # /mnt/data-pool/gitea
+    hosts: ["{{ hostvars['cmp01'].ansible_host }}"]   # restrict to cmp01
+    ro: false
+    enabled: true
+    comment: "gitea repositories — managed by Ansible (v3)"

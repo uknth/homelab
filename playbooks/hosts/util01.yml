@@ -11,7 +11,10 @@
 #   - portainer   : Docker management UI              docker.puhome.net
 #   - dozzle      : live container logs               logs.puhome.net
 #   - n8n         : workflow automation / GitOps      n8n.puhome.net
-#   - gitea       : local Git hosting                 git.puhome.net
+#
+# Local Git hosting moved off this host (2026-09) — util01's disk is not
+# redundant, and that role held the fleet's one irreplaceable dataset. Its
+# new home explains why in its own defaults.
 
 - name: Deploy utility services on util01
   hosts: util01
@@ -57,6 +60,3 @@
 
     - role: services/productivity/syncthing
       tags: [syncthing, sync, backup-source]
-
-    - role: services/development/gitea
-      tags: [gitea, git, development]

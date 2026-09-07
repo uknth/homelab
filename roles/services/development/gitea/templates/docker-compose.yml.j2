@@ -2,7 +2,9 @@
 #
 # Single service, SQLite backend (see gitea_db_type in defaults/main.yml) —
 # no Postgres sidecar, no separate volume for a database that lives as one
-# file under {{ gitea_data_dir }}.
+# file under {{ gitea_data_dir }}. Repositories/LFS DO get their own volume
+# (NFS, mounted separately below) — see the storage-split comment in
+# defaults/main.yml.
 services:
   gitea:
     image: {{ gitea_image }}
@@ -15,7 +17,13 @@ services:
       - "{{ gitea_http_port }}:3000"
       - "{{ gitea_ssh_port }}:22"
     volumes:
+      # /data: app.ini, the SQLite db, sessions — LOCAL disk. See the storage
+      # split comment in defaults/main.yml before "fixing" this.
       - {{ gitea_data_dir }}:/data
+      # {{ gitea_repo_root_path }}: repositories + LFS objects — NFS from
+      # nas01. Same comment applies in reverse: this one belongs off local
+      # disk, not on it.
+      - {{ gitea_repos_dir }}:{{ gitea_repo_root_path }}
       # Host clock, read-only — matches the image's documented compose
       # example so container-side timestamps (commit dates shown in the UI,
       # log lines) agree with the rest of the fleet.

@@ -15,6 +15,22 @@ restic_paths:
   # non-deterministic, and its sources drift or vanish. This tree is the only
   # copy in existence, so it is original data. See docs/spec/research.md.
   - "{{ research_tree_dir }}"
+  # Gitea's local data dir — app.ini, the SQLite db, sessions. Not derived:
+  # this is the only copy of every user, issue, and PR review on the fleet's
+  # one Git host. Losing it loses that metadata outright, not just a
+  # rebuildable index, which is why it's backed up even though it lives
+  # right next to (and is deliberately kept off) the NFS mount below — see
+  # the storage-split comment in roles/services/development/gitea/defaults/
+  # main.yml for why the two halves are split at all.
+  - "{{ gitea_data_dir }}"
+  # Gitea's repositories + LFS objects, on the NFS mount from nas01. Unlike
+  # the bulk media on that same NAS (excluded above — re-downloadable, and
+  # TrueNAS's RAIDZ2 already covers drive failure), these repos are original:
+  # some have no upstream remote, so this is their only copy anywhere.
+  # RAIDZ2 protects against a failed disk, not against an accidental
+  # `rm -rf`, a bad `git gc`, or ransomware — restic is the fleet's
+  # independent, versioned copy against exactly those.
+  - "{{ gitea_repos_dir }}"
 restic_pre_commands:
   - "docker exec -t paperless document_exporter /usr/src/paperless/export --delete"
 # Skip disposable/large-churn caches so the repo stays lean.

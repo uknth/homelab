@@ -13,6 +13,21 @@ nfs_mounts:
     export: "{{ scratch_nfs_export }}"
     path: "{{ scratch_incomplete_dir }}"
     opts: "rw,vers=4.2,hard,noatime,_netdev"
+  # Gitea repositories + LFS objects (see roles/services/development/gitea/
+  # defaults/main.yml for why these live on NFS and the SQLite db does not).
+  #
+  # *** THIS EXPORT DOES NOT EXIST YET AND ANSIBLE CANNOT CREATE IT. ***
+  # Create it BY HAND on the TrueNAS appliance before deploying gitea:
+  #   dataset/export path : /mnt/data-pool/gitea   (matches gitea_nfs_export)
+  #   owner uid:gid        : 1000:1000              (matches gitea_uid/gitea_gid)
+  # Follows the same per-service export convention already on this NAS
+  # (/mnt/data-pool/paperless, /mnt/data-pool/syncthing). Deploying gitea
+  # against a missing export fails the mount task below — that failure is
+  # this comment's whole point, so it is obvious rather than mysterious.
+  - server: "{{ media_nfs_server }}"
+    export: "{{ gitea_nfs_export }}"
+    path: "{{ gitea_repos_dir }}"
+    opts: "rw,vers=4.2,hard,noatime,_netdev"
 
 nfs_mount_owner: "{{ media_uid }}"
 nfs_mount_group: "{{ media_gid }}"

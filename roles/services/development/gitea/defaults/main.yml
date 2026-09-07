@@ -1,19 +1,66 @@
 ---
-# services/development/gitea — a single-user Git host on util01, for local
+# services/development/gitea — a single-user Git host on cmp01, for local
 # development. This is the first `services/development/*` role in the fleet;
 # it gets its own category rather than being wedged into productivity or
 # knowledge because "hosts my own repos" is a distinct concern from either.
+#
+# Moved here from util01 (2026-09) for two reasons:
+#   1. util01's disk is not redundant. Gitea holds the one thing on this
+#      fleet that cannot be regenerated — repos with no upstream mirror, plus
+#      the users/issues/PRs metadata — and it does not belong on a single
+#      disk with no protection against drive failure.
+#   2. Gitea Actions (CI runners) will need real compute that util01 does not
+#      have. cmp01 is the fleet's compute node (8c/16t, 32 GB, A4000) — moving
+#      now avoids a second migration once Actions is turned on.
+# See the storage-split comments below for how this changes where each part
+# of Gitea's data lives.
 
 gitea_root_dir: "{{ service_root }}/gitea"
 gitea_compose_dir: "{{ gitea_root_dir }}/compose"
+
+# --- Storage split: SQLite on LOCAL disk, repos+LFS on NFS -------------------
+# The split is deliberate, not incidental, and each half must stay on its own
+# side of it:
+#
+# - gitea_data_dir (app.ini, the SQLite db, sessions) stays on cmp01's LOCAL
+#   disk, exactly as it was on util01. SQLite depends on POSIX advisory file
+#   locking to serialize writes safely, and NFS implements POSIX locking
+#   incompletely — semantics vary by server/client and caching can mask a
+#   conflict entirely. The failure mode is NOT an error you'd notice; it is a
+#   silently corrupt database. Do not "tidy" this onto the NFS mount below —
+#   that is exactly the mistake this split exists to prevent.
+# - gitea_repos_dir (git repositories + LFS objects) goes on NFS from nas01
+#   (TrueNAS, 10.0.2.6, RAIDZ2). Gitea touches these as plain files via
+#   git/git-lfs, which have no locking requirement NFS can't meet, and they
+#   are also the bulk of the storage growth (code + binary LFS blobs) — which
+#   is the redundancy this data actually needs, since util01's local disk
+#   (and cmp01's, for that matter) has none.
+#
+# See roles/system/nfs_mounts/defaults/main.yml for the mount itself — the
+# TrueNAS export it depends on does NOT exist yet and must be created by
+# hand — and hosts/host_vars/cmp01/vars.yml for why BOTH halves are also in
+# restic (this split is about corruption risk and storage growth, not about
+# which half is worth backing up).
 gitea_data_dir: "{{ gitea_root_dir }}/data"
+
+# gitea_nfs_export / gitea_repos_dir are deliberately NOT defined here. They
+# live in hosts/group_vars/all/vars.yml because nas01's play (which defines the
+# export) never loads this role, and a role default would be undefined there.
+
+# Container-side paths. /data (gitea_data_dir) is local; /repos is the NFS
+# mount, kept as a distinct top-level path inside the container specifically
+# so the two are never confusable in an env file or a shell on the box.
+gitea_repo_root_path: "/repos"
+gitea_lfs_path: "{{ gitea_repo_root_path }}/lfs"
 
 # The uid/gid the gitea/gitea image's entrypoint creates its `git` user with
 # (USER_UID/USER_GID, both default to 1000 upstream and are not overridden
-# below). The data dir is chowned to these so the container's own user owns
-# its repos/db/config outright, rather than needing a chown-on-start step —
+# below). The local data dir is chowned to these so the container's own user
+# owns its db/config outright, rather than needing a chown-on-start step —
 # same reasoning as researchd_uid/gid in services/ai/researchd, and the
-# n8n uid 1000 fix in services/productivity/n8n.
+# n8n uid 1000 fix in services/productivity/n8n. The NFS export must be
+# created with this same uid/gid as owner (see nfs_mounts role) so the
+# container can write repos/LFS to it without a maproot.
 gitea_uid: 1000
 gitea_gid: 1000
 
@@ -43,8 +90,8 @@ gitea_ssh_domain: "git.host.{{ base_domain }}"
 #
 # Verified against Docker Hub's registry API 2026-09-06: `gitea/gitea:1.27.3`
 # (latest stable release; pushed 2026-08-29) resolves to this manifest list,
-# which was fetched directly and confirmed to include BOTH linux/amd64 (util01
-# is a Debian Mini PC, not arm64) and linux/arm64. Bump by hand.
+# which was fetched directly and confirmed to include BOTH linux/amd64 (cmp01
+# is a Debian PC, not arm64) and linux/arm64. Bump by hand.
 gitea_image_repo: "gitea/gitea"
 gitea_image_tag: "1.27.3"
 gitea_image_digest: "sha256:87a67ee09d3ae0d1df5fda5dcda3e2a1f9236a45b0a59025d6e00e46adc43bef"

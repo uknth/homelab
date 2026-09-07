@@ -31,6 +31,18 @@ data_dir: "{{ service_root }}/data"
 # and atomic moves work). Mounted at media_data_dir. See docs/spec/storage.md.
 media_nfs_server: "{{ hostvars['nas01'].ansible_host }}"   # 10.0.2.6
 media_nfs_export: "/mnt/data-pool/media/data"              # existing TrueNAS NFS export
+
+# Gitea's repositories, on the same TrueNAS. These live in group_vars rather
+# than in the gitea role's defaults because TWO separate plays need them and
+# role defaults do not cross plays: cmp01 mounts the export (system/nfs_mounts)
+# and nas01 DEFINES it (services/storage/truenas_nfs). A role default would be
+# undefined in nas01's play, which never loads the gitea role at all.
+#
+# The dataset itself must be created by hand on TrueNAS before either works —
+# that role manages export definitions, never datasets. Owner uid:gid 1000:1000
+# to match Gitea's container user.
+gitea_nfs_export: "/mnt/data-pool/gitea"
+gitea_repos_dir: "/mnt/gitea"                              # mount point on cmp01
 media_root: "/mnt/media"
 media_data_dir: "{{ media_root }}/data"                    # local mount point == the export
 

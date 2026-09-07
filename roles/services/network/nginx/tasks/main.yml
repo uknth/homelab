@@ -39,6 +39,18 @@
     mode: "0644"
   notify: Reload nginx
 
+- name: Validate nginx_sites entries are unambiguous (upstream xor redirect_to)
+  ansible.builtin.assert:
+    that:
+      - (item.upstream is defined) != (item.redirect_to is defined)
+    fail_msg: >-
+      nginx_sites entry "{{ item.name }}" must set exactly one of
+      upstream or redirect_to, not both and not neither.
+    quiet: true
+  loop: "{{ nginx_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 - name: Template per-service vhosts
   become: true
   ansible.builtin.template:
