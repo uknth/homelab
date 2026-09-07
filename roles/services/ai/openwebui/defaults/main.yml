@@ -101,29 +101,84 @@ openwebui_enable_signup: false
 # vaultindex/vaultask var is referenced anywhere in this role; that is the
 # actual guarantee, not just the embedding engine choice above.
 
-# --- Anthropic (Claude) as a second model choice --------------------------
-# Registered as an OpenAI-compatible connection; Open WebUI detects the
-# Anthropic endpoint and translates. The key is vault_anthropic_api_key.
-#
-# This is the ONLY place in the fleet where a third party sees conversation
-# content, and it is why ask.* and search.* are separate services: search.*
-# holds the wiki (Secrets/, Finances/) and never leaves the LAN, while this
-# host holds no wiki data at all. Do not add wiki retrieval here.
-openwebui_anthropic_base_url: "https://api.anthropic.com/v1"
-
-# The model every new chat starts on: the local one. Matches the id omlx serves
-# (see researchd_llm_model — same pin, asserted independently because omlx's
-# role defaults are not reachable from this play).
+# The model every new chat starts on: the local one, addressed by the alias
+# LiteLLM gives it below (openwebui_litellm_local_alias), not this raw omlx
+# id directly — Open WebUI no longer dials omlx itself (see the LiteLLM
+# section). Matches the id omlx serves (see researchd_llm_model — same pin,
+# asserted independently because omlx's role defaults are not reachable
+# from this play).
 openwebui_default_model: "Qwen3-30B-A3B-Instruct-2507-4bit"
 
-# Which Anthropic models are acceptable as a fallback. Sonnet and Haiku only —
-# Opus is 5x Haiku's output price, and this endpoint is unauthenticated, so a
-# per-token bill is exposed to anyone on the LAN.
+# --- LiteLLM: the enforcement point between Open WebUI and every provider --
+# ask.puhome.net has NO LOGIN (WEBUI_AUTH=false, sso: false on the vhost — a
+# deliberate, standing choice; see openwebui.env.j2) and it can reach
+# Anthropic, which is metered per token. Two things follow, and this proxy
+# is how both are solved:
 #
-# NOT ENFORCED BY THIS FILE. It is the allowlist to type into Settings -> Admin
-# -> Connections -> Model IDs (Filter); the env-var equivalent is broken
-# upstream (open-webui/open-webui#19017). Recorded here so the intended cap is
-# in git even though the mechanism is not.
-openwebui_anthropic_allowed_models:
-  - "claude-sonnet-5"      # $3 / $15 per Mtok
-  - "claude-haiku-4-5"     # $1 / $5  per Mtok — the cheap fallback
+#   1. Model restriction must be ENFORCED, not configured. Open WebUI's own
+#      per-connection model allowlist (OPENAI_API_CONFIGS, Settings -> Admin
+#      -> Connections -> Model IDs Filter) is broken upstream — the variable
+#      is parsed into an empty dict and ignored (open-webui/open-webui#19017)
+#      — so without this proxy the picker lists every Anthropic model the key
+#      can reach, Opus included. LiteLLM's model_list below only DEFINES the
+#      permitted models; a model that was never defined cannot be dialed,
+#      whatever the picker or a stray API call tries. See the comment in
+#      litellm-config.yaml.j2 for where that enforcement actually lives.
+#   2. Open WebUI holds no provider keys any more. It is the unauthenticated
+#      surface; the omlx key and vault_anthropic_api_key now live ONLY in
+#      litellm.env, and openwebui.env.j2 carries a single LiteLLM master key
+#      instead.
+#
+# Runs as a second service in THIS SAME compose project (docker-compose.yml.j2)
+# — it exists solely to serve Open WebUI, exactly as searxng exists solely to
+# serve researchd (roles/services/ai/researchd) — not as its own role.
+openwebui_litellm_container_name: "litellm"
+
+# No published port, ever: reached only as http://litellm:4000 on the
+# project's own (implicit) network, same posture as searxng.
+openwebui_litellm_port: 4000
+
+# --- Image ----------------------------------------------------------------
+# Pinned by tag+digest, same posture as openwebui_image above. The digest is
+# the multi-arch manifest-LIST digest (docker resolves the right
+# platform-specific manifest under it automatically, same as gitea_image).
+#
+# Verified directly against ghcr.io's registry API (anonymous token +
+# `GET /v2/berriai/litellm/manifests/v1.100.0`) on 2026-09-08: v1.100.0 is
+# upstream's latest STABLE release (github.com/BerriAI/litellm/releases —
+# v1.101.0-rc.1 exists but is a release candidate, not "latest"; published
+# 2026-09-06). The index was fetched and confirmed to list BOTH linux/amd64
+# (cmp01 is an x86 PC, not arm) and linux/arm64. Bump by hand.
+openwebui_litellm_image_repo: "ghcr.io/berriai/litellm"
+openwebui_litellm_image_tag: "v1.100.0"
+openwebui_litellm_image_digest: "sha256:c8756e7b9a61fe45df2ccb5b781d388c3b2f3a21ef9e4956630caef20f9f03aa"
+openwebui_litellm_image: "{{ openwebui_litellm_image_repo }}:{{ openwebui_litellm_image_tag }}@{{ openwebui_litellm_image_digest }}"
+
+# The user-facing model_name LiteLLM gives the omlx backend, and what
+# openwebui_default_model above now actually resolves to. Openwebui's
+# DEFAULT_MODELS (openwebui.env.j2) must be THIS, not the raw omlx model id
+# — LiteLLM is the only thing that still knows that id (litellm-config.yaml.j2).
+openwebui_litellm_local_alias: "qwen"
+
+# The exact two Anthropic model_name entries LiteLLM exposes — Sonnet and
+# Haiku only. Opus is 5x Haiku's output price, and this endpoint is
+# unauthenticated, so a per-token bill is exposed to anyone on the LAN. Kept
+# as two scalars rather than a list because litellm-config.yaml.j2 needs to
+# reference each individually (Anthropic model_list entries, and the
+# fallback ordering below, which is NOT the same order).
+#
+# THIS IS NOW ENFORCED, unlike the old openwebui_anthropic_allowed_models
+# note it replaces: LiteLLM's model_list (litellm-config.yaml.j2) defines
+# exactly these two Anthropic models and no others, so Opus is not a setting
+# someone could leave unset or undo — it is simply absent from what the
+# proxy can route to.
+openwebui_litellm_sonnet_model: "claude-sonnet-5"      # $3 / $15 per Mtok
+openwebui_litellm_haiku_model: "claude-haiku-4-5"      # $1 / $5  per Mtok — the cheap fallback
+
+# The master key file, generated on the remote host and read back the same
+# way as the Open WebUI secret key above and Gitea's admin password
+# (roles/services/development/gitea/tasks/main.yml) — never stored in the
+# vault. This is Open WebUI's ONLY credential onto LiteLLM (OPENAI_API_KEY
+# in openwebui.env.j2) and LiteLLM's own auth secret
+# (general_settings.master_key in litellm-config.yaml.j2).
+openwebui_litellm_master_key_file: "{{ openwebui_compose_dir }}/.litellm_master_key"
