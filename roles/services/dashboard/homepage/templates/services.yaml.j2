@@ -56,10 +56,20 @@
         href: https://wiki.{{ base_domain }}
         icon: mdi-book-open-page-variant
         description: Merged Obsidian vaults
+    - Search:
+        href: https://search.{{ base_domain }}
+        icon: mdi-text-search
+        description: Search the wiki, or ask it a question
+
+- Assistant:
+    # Deliberately NOT inside Knowledge above. That group is wiki-backed and
+    # local-only; this one has no wiki data at all and may later be pointed at
+    # a third-party model. Two groups because they are two trust domains, not
+    # because they look different.
     - Ask:
         href: https://ask.{{ base_domain }}
-        icon: mdi-text-search
-        description: Hybrid search over the wiki
+        icon: mdi-chat-processing-outline
+        description: General questions — not wiki-aware
 
 - Development:
     - Gitea:

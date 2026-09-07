@@ -1,0 +1,124 @@
+---
+# services/ai/openwebui — general chat on cmp01. See defaults/main.yml for
+# the privacy boundary this role must not cross (no wiki, no vaultask).
+
+- name: Create openwebui dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ openwebui_root_dir }}"
+    - "{{ openwebui_compose_dir }}"
+
+# Root-owned, not chowned to a container uid — see the note on
+# openwebui_image in defaults/main.yml for why there is no uid to chown to
+# here (unlike gitea_data_dir/vaultask's app dir): the published image runs
+# as root (UID=0/GID=0 baked in at build time), so its own root user owns
+# whatever it writes here without any help from this task.
+- name: Create the openwebui data dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ openwebui_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# WEBUI_SECRET_KEY signs Open WebUI's session cookies. Left unset, the
+# container's own start.sh generates one and writes it to
+# /app/backend/.webui_secret_key — NOT under /app/backend/data (checked
+# against backend/start.sh at the pinned tag: it cd's to the script's own
+# directory first), which is the ONE path this role bind-mounts. That file
+# would therefore NOT survive a container recreate, silently invalidating
+# every session on every redeploy. Generating and persisting our own here,
+# the same way as the SearXNG secret key in roles/services/ai/researchd/
+# tasks/main.yml and the Gitea admin password in roles/services/development/
+# gitea/tasks/main.yml, avoids that entirely — WEBUI_SECRET_KEY set in the
+# environment is used as-is and start.sh's own generate-and-store branch
+# never runs.
+- name: Check whether an Open WebUI secret key already exists
+  ansible.builtin.stat:
+    path: "{{ openwebui_compose_dir }}/.webui_secret_key"
+  register: _openwebui_secret_stat
+
+- name: Generate an Open WebUI secret key
+  become: true
+  # Safe under --check: creating a not-yet-existing secret is not
+  # destructive (same posture as the SearXNG key task this mirrors), and the
+  # env file rendered below needs it to exist even during a dry run.
+  check_mode: false
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    openssl rand -hex 32 > {{ openwebui_compose_dir }}/.webui_secret_key
+  args:
+    creates: "{{ openwebui_compose_dir }}/.webui_secret_key"
+  when: not _openwebui_secret_stat.stat.exists
+
+- name: Fix ownership and mode on the Open WebUI secret key
+  become: true
+  ansible.builtin.file:
+    path: "{{ openwebui_compose_dir }}/.webui_secret_key"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+
+- name: Read back the Open WebUI secret key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ openwebui_compose_dir }}/.webui_secret_key"
+  register: _openwebui_secret_slurp
+  no_log: true
+
+- name: Set the Open WebUI secret key fact
+  ansible.builtin.set_fact:
+    _openwebui_secret_key: "{{ (_openwebui_secret_slurp.content | b64decode).strip() }}"
+  no_log: true
+
+- name: Template openwebui compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ openwebui_compose_dir }}/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart openwebui
+
+# Carries omlx_api_key AND the secret key above in clear — this file MUST
+# stay mode 0600 and this task MUST stay no_log: true. ops/gitops_executor
+# runs `site.yml --check --diff` on a timer and writes the output to a log
+# file, so a diffed secret would otherwise be persisted there. Same pattern,
+# same reason, as roles/services/knowledge/vaultask/templates/
+# vaultask.env.j2. This is also why the key is templated into an env_file
+# and never inlined under `environment:` in the compose template below —
+# that block lands verbatim in `docker inspect`, an env_file does not.
+- name: Template the openwebui env file
+  become: true
+  ansible.builtin.template:
+    src: openwebui.env.j2
+    dest: "{{ openwebui_compose_dir }}/openwebui.env"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart openwebui
+
+- name: Check whether openwebui has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ openwebui_compose_dir }}/docker-compose.yml"
+  register: _openwebui_deployed
+
+- name: Deploy openwebui
+  become: true
+  when: not ansible_check_mode or _openwebui_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ openwebui_compose_dir }}"
+    project_name: "{{ openwebui_compose_project }}"
+    state: present
+    pull: missing

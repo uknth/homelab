@@ -17,7 +17,10 @@
 #   - vaultmerge   : merge the 3 vaults + agent research into one topic tree
 #   - vaultindex   : embeddings + LLM summaries -> enrichment sidecar
 #   - quartz       : the wiki, built from the merged tree (wiki.puhome.net)
-#   - vaultask     : hybrid search over the merged tree (ask.puhome.net)
+#   - vaultask     : hybrid search over the merged tree (ask.puhome.net — being
+#                    repointed to search.puhome.net by concurrent work; not
+#                    touched by this role)
+#   - openwebui    : general LLM chat, no wiki data (ask.puhome.net)
 #
 # Out of scope for v3 (user directive): Immich (photos), Vaultwarden (passwords).
 
@@ -102,6 +105,13 @@
 
     - role: services/knowledge/vaultask
       tags: [vaultask, knowledge, search]
+
+    # General LLM chat, at ask.puhome.net. Deliberately NOT in the knowledge
+    # pipeline block above — it shares only the omlx backend with vaultask,
+    # nothing else. See roles/services/ai/openwebui/defaults/main.yml for the
+    # privacy boundary this split holds.
+    - role: services/ai/openwebui
+      tags: [openwebui, ai, chat]
 
     # Image-update notifier. Diun's docker provider watches a single endpoint,
     # so one instance runs per docker_hosts member (same shape as the beszel /

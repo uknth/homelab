@@ -1,0 +1,29 @@
+# Managed by Ansible — services/ai/openwebui
+#
+# Single service, no wiki mount, no vaultask/vaultindex network — see
+# defaults/main.yml's boundary comment before adding either.
+services:
+  openwebui:
+    image: {{ openwebui_image }}
+    container_name: {{ openwebui_container_name }}
+    hostname: openwebui
+    restart: unless-stopped
+    # The omlx API key and the session secret live ONLY here, never inline
+    # under `environment:` — that block lands verbatim in `docker inspect`,
+    # an env_file does not. Same posture as vaultask's compose
+    # (roles/services/knowledge/vaultask/templates/docker-compose.yml.j2).
+    env_file:
+      - openwebui.env
+    ports:
+      - "{{ openwebui_port }}:8080"   # gw01 nginx -> forward-auth
+    volumes:
+      # SQLite db, uploaded-chat-file cache, the local sentence-transformers
+      # embedding model this image ships for that feature (see the RAG note
+      # in defaults/main.yml) — all of it, one bind mount, root-owned (see
+      # the note on openwebui_data_dir in tasks/main.yml for why there is no
+      # uid chown here).
+      - {{ openwebui_data_dir }}:/app/backend/data
+      # Host clock, read-only — matches gitea_ssh_redirect's own compose and
+      # keeps container-side timestamps in step with the rest of the fleet.
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro

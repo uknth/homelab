@@ -1,0 +1,102 @@
+---
+# services/ai/openwebui — general-purpose LLM chat on cmp01, at
+# ask.puhome.net... no: at ASK is vaultask (see below). This is the OTHER
+# half of a split, so the boundary matters more than the usual role intro.
+#
+# --- The privacy boundary this split exists to hold ------------------------
+# One fleet, two "ask something" services, and they must never touch:
+#
+#   - search.puhome.net (services/knowledge/vaultask, existing) is the WIKI
+#     search/ask surface. It has retrieval over the merged Obsidian vaults,
+#     which include Secrets/ and Finances/ — and it talks ONLY to the local
+#     model on ai01 (omlx), never to a third party. That is the whole reason
+#     it is allowed to hold that content at all.
+#   - ask.puhome.net (THIS role) is general chat. It has NO wiki data, no
+#     retrieval over the wiki, and no connection to vaultask — it does not
+#     mount the merge/index output, does not know vaultindex's embedding
+#     server exists, and shares nothing with that role but the LLM backend.
+#     It may later gain a third-party provider (Anthropic) alongside omlx,
+#     which is PRECISELY why it must never hold wiki content: the day a
+#     request can leave the LAN, anything this container has ever touched is
+#     a document that could leave with it. Keep it clean now rather than
+#     needing to audit it later.
+#
+# Do not wire vaultindex, vaultmerge, or vaultask into this role. Open WebUI's
+# own document/RAG features are addressed below (RAG section) — leave them
+# on their local, non-wiki default; do not point them at the wiki's index.
+
+openwebui_root_dir: "{{ service_root }}/openwebui"
+openwebui_compose_dir: "{{ openwebui_root_dir }}/compose"
+openwebui_data_dir: "{{ openwebui_root_dir }}/data"
+
+openwebui_compose_project: "openwebui"
+openwebui_container_name: "openwebui"
+
+# Verified free against every `*_port` default across roles/ (see the task's
+# verification step) — the next one free after vaultask's 8100/quartz's
+# 8101/gitea's 8102/tickets' 8103.
+openwebui_port: 8104
+
+# --- Image --------------------------------------------------------------
+# Pinned by tag+digest, same posture as gitea_image (roles/services/
+# development/gitea/defaults/main.yml) and searxng_image (roles/services/ai/
+# researchd/defaults/main.yml) — a floating tag is exactly what Diun would
+# flag elsewhere in this fleet.
+#
+# Verified against ghcr.io's registry API directly (anonymous token +
+# `GET /v2/open-webui/open-webui/manifests/0.11.3`) on 2026-09-08:
+# `0.11.3` is upstream's latest tagged release (github.com/open-webui/
+# open-webui releases, published 2026-08-31) and resolves to this
+# manifest-LIST digest (Docker-Content-Digest header on that request — the
+# multi-arch index, not a per-platform manifest, same posture as
+# gitea_image_digest). The index was fetched and confirmed to list BOTH
+# linux/amd64 (cmp01 is an x86 PC, not arm) and linux/arm64. Bump by hand.
+openwebui_image_repo: "ghcr.io/open-webui/open-webui"
+openwebui_image_tag: "0.11.3"
+openwebui_image_digest: "sha256:41daa0cf2561a5d4c8d1ff31ee2a98d93ab4d3ac2605cac69366ff6a3374a933"
+openwebui_image: "{{ openwebui_image_repo }}:{{ openwebui_image_tag }}@{{ openwebui_image_digest }}"
+
+# The published image is built with `--build-arg UID=0 --build-arg GID=0`
+# (upstream's default — checked its Dockerfile at the same tag: `ARG UID=0`,
+# `ARG GID=0`, `USER $UID:$GID`), i.e. it runs as root, unlike gitea/vaultask
+# where the image bakes in a real non-root uid to chown ahead of time.
+# There is no non-root uid to match here, so openwebui_data_dir below is
+# simply root-owned and the container writes into it as itself — do not
+# "fix" this into a uid chown the way gitea_uid/vaultask_uid do; there is no
+# matching uid to chown to.
+
+# --- LLM backend: omlx on ai01, OpenAI-compatible, and ONLY omlx ------------
+# Derived from the existing omlx vars exactly like researchd_llm_base_url
+# (roles/services/ai/researchd/defaults/main.yml) and vaultask_llm_base_url
+# (roles/services/knowledge/vaultask/defaults/main.yml) — omlx_host is
+# "10.0.2.9,127.0.0.1" (LAN address explicit, then localhost; see
+# hosts/group_vars/all/vars.yml), so the LAN half is the first element. Do
+# not hardcode the IP a fourth time.
+openwebui_llm_host: "{{ omlx_host.split(',')[0] }}"
+openwebui_llm_base_url: "http://{{ openwebui_llm_host }}:{{ omlx_port }}/v1"
+
+# --- Registration -----------------------------------------------------------
+# ENABLE_SIGNUP=false (openwebui.env.j2) so this can never become an open
+# registration endpoint on the LAN. Verified against the app's own source
+# (backend/open_webui/routers/auths.py at this tag) that this does NOT lock
+# the instance out on first boot: the very first account (no users yet in
+# the db) is exempted from the ENABLE_SIGNUP check specifically so the
+# initial admin can still be created; every signup after that first one is
+# refused. Create that first (admin) account once, by hand, right after
+# first deploy — this role does not automate it, the same way gitea's admin
+# bootstrap is a deliberate exception rather than the norm here (gitea has a
+# CLI to script it; Open WebUI's first-run signup does not).
+openwebui_enable_signup: false
+
+# --- RAG / document ingestion: deliberately left on its LOCAL default ------
+# Open WebUI ships a generic "attach a file to this chat" feature that is
+# UNRELATED to the wiki boundary above — a user pasting a PDF into a chat
+# here never touches vaultindex, vaultmerge, or anything wiki-shaped. Its
+# embedding engine (RAG_EMBEDDING_ENGINE) defaults to '' — bundled, local
+# sentence-transformers, no external call at all — and is NOT overridden
+# here to "openai", which would otherwise point it at omlx via
+# RAG_OPENAI_API_BASE_URL (that var's own default, checked in config.py at
+# this tag, is OPENAI_API_BASE_URL — i.e. omlx — precisely so a config
+# left blank does not silently start calling out anywhere). No
+# vaultindex/vaultask var is referenced anywhere in this role; that is the
+# actual guarantee, not just the embedding engine choice above.
