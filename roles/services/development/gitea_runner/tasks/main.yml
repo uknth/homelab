@@ -1,0 +1,102 @@
+---
+# services/development/gitea_runner — Actions runner for cmp01's Gitea. See
+# defaults/main.yml for why each value is what it is, and in particular for
+# why this role MUST run after services/development/gitea in the same play.
+
+- name: Create gitea runner dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ gitea_runner_root_dir }}"
+    - "{{ gitea_runner_compose_dir }}"
+    - "{{ gitea_runner_data_dir }}"
+
+# --- Registration token, obtained from Gitea's own admin API ---------------
+# Authenticated with the SAME admin account services/development/gitea
+# already bootstraps — see the "Registering against Gitea" comment in
+# defaults/main.yml. That role must have already run in this play for
+# gitea_admin_password_file to exist; fail with a clear message rather than
+# a confusing 401 further down if it hasn't.
+# Already registered? Then no token is needed at all. act_runner's entrypoint
+# only registers when .runner is absent, so generating a fresh token on every
+# run would be both pointless and permanently `changed`.
+- name: Check whether the runner has already registered
+  become: true
+  ansible.builtin.stat:
+    path: "{{ gitea_runner_data_dir }}/.runner"
+  register: _gitea_runner_registered
+
+# Minted with Gitea's own CLI inside the container, NOT via the REST API.
+#
+# The API needs the admin account's password, and that password is a BOOTSTRAP
+# value the user is expected to change in the UI — at which point the file on
+# disk is stale and every API call 401s. That is not hypothetical: it is
+# exactly how this task failed the first time it ran. The CLI authenticates by
+# running as the gitea user against its own database, so it cannot drift out
+# of step with a password change.
+- name: Generate an Actions runner registration token
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -u git {{ gitea_container_name }}
+      gitea actions generate-runner-token
+  register: _gitea_runner_token
+  changed_when: false
+  no_log: true
+  when: not _gitea_runner_registered.stat.exists
+
+- name: Write the registration token
+  become: true
+  ansible.builtin.copy:
+    content: "{{ _gitea_runner_token.stdout | trim }}"
+    dest: "{{ gitea_runner_registration_token_file }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+  when: not _gitea_runner_registered.stat.exists
+
+- name: Template the runner config
+  become: true
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ gitea_runner_data_dir }}/config.yaml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart gitea runner
+
+- name: Template gitea runner compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ gitea_runner_compose_dir }}/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart gitea runner
+
+- name: Deploy gitea runner
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_runner_compose_dir }}"
+    project_name: "{{ gitea_runner_compose_project }}"
+    state: present
+    pull: missing
+
+# Registration itself happens INSIDE the container on first start (scripts/
+# run.sh checks /data/.runner and skips it thereafter — see
+# gitea_runner_data_dir in defaults/main.yml for why that file survives a
+# redeploy). Confirm it actually happened rather than assuming the container
+# being up means registration succeeded — the same failure mode
+# services/development/gitea's own Gitea-readiness wait exists to catch.
+- name: Wait for the runner to register (first deploy only; .runner already exists after)
+  become: true
+  ansible.builtin.wait_for:
+    path: "{{ gitea_runner_data_dir }}/.runner"
+    timeout: 60

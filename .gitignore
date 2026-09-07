@@ -7,3 +7,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# ansible-lint / ansible-galaxy local cache, created when CI tooling runs
+# against the repo. Never a build input.
+.ansible/

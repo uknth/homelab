@@ -1,0 +1,29 @@
+# Managed by Ansible — services/development/gitea_runner
+#
+# Only the settings that differ from act_runner's own defaults are set here;
+# everything else is left at upstream's default (see gitea/runner's
+# config.example.yaml for the full list). Labels are NOT set here even
+# though act_runner supports it in this file — they are passed as
+# GITEA_RUNNER_LABELS in docker-compose.yml.j2 instead, because that is what
+# the image's own entrypoint (scripts/run.sh) actually forwards to both
+# `register` and `daemon`. Setting them in both places would just be two
+# sources of truth for the same list.
+
+log:
+  level: info
+
+runner:
+  file: .runner
+  capacity: {{ gitea_runner_capacity }}
+
+container:
+  # Bind-mounted at gitea_runner_docker_socket (docker-compose.yml.j2) —
+  # see that var's comment in defaults/main.yml for what trusting a
+  # workflow with this actually means. Left unset here (auto-detect) would
+  # find the same socket; set explicitly so this file is the one place that
+  # documents which daemon job containers run against.
+  docker_host: "unix://{{ gitea_runner_docker_socket }}"
+  # Only re-pull an already-present job image when it isn't pinned by
+  # digest — the two labels above are tags, not digests, so this keeps them
+  # from going stale silently.
+  force_pull: true

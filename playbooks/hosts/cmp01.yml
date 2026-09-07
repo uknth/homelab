@@ -6,6 +6,8 @@
 #   - nvidia_docker: register NVIDIA runtime with Docker (Jellyfin NVENC)
 #   - gitea        : local Git hosting (moved from util01, 2026-09; see       git.puhome.net
 #                    roles/services/development/gitea/defaults/main.yml)
+#   - gitea_runner : Gitea Actions runner, no fleet credentials (see
+#                    roles/services/development/gitea_runner/defaults/main.yml)
 #   - arr          : sonarr/radarr/lidarr/bazarr/prowlarr/qbittorrent (VPN=qbit only)
 #   - jellyfin     : media server (NVENC) + jellyseerr
 #   - kavita       : books/comics reader
@@ -39,6 +41,14 @@
     # main.yml for the storage split (SQLite local, repos on NFS).
     - role: services/development/gitea
       tags: [gitea, git, development]
+
+    # Gitea Actions runner. Must come after services/development/gitea — it
+    # registers against Gitea's own admin API using the admin credentials
+    # that role generates, and needs Gitea already answering before it can.
+    # See roles/services/development/gitea_runner/defaults/main.yml for the
+    # "no fleet credentials" boundary this role exists to hold.
+    - role: services/development/gitea_runner
+      tags: [gitea-runner, gitea, ci, development]
 
     - role: services/media/arr
       tags: [arr, media, downloader]

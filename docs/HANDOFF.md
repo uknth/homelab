@@ -1,4 +1,4 @@
-# Session Handoff — Context Dump (updated 2026-08-31)
+# Session Handoff — Context Dump (updated 2026-09-07)
 
 Single pick-up point for a fresh session. Everything below reflects `master` at
 tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
@@ -128,6 +128,27 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
 - **Jellyfin SSO admin** mapping not codified (a rebuild resets `uknth` to non-admin) — see
   [`spec/auth.md`](spec/auth.md).
 - **GitOps auto-apply** still off (dry-run). Enable when confident.
+- **nzbget log grows without bound** (cmp01). `WriteLog=append` with no rotation —
+  `/opt/homelab/arr/nzbget/nzbget.log` reached **315 MB** by 2026-09-07, and nzbget
+  warns about it on every start. `RotateLog=3` is already set but is **inert** while
+  `WriteLog=append`. Fix: set `WriteLog=rotate` (bump `RotateLog` to 7 while there),
+  then delete the stale `nzbget.log` — switching to rotate starts new dated files and
+  leaves the old one behind.
+- **nzbget download tuning left at defaults** (cmp01). `ArticleCache=0` and
+  `WriteBuffer=0`; nzbget warns both on every start (disk fragmentation, and a system
+  write buffer that is "often too small and inefficient"). cmp01 has 62 GB RAM with
+  ~53 GB available, so it can afford `ArticleCache=700` (MB) and `WriteBuffer=1024` (KB).
+  Relevant because `DirectWrite=yes`, which is where the article cache pays off most.
+
+  **Both of the above are one job.** `nzbget.conf` is not templated — it is edited live
+  in the UI — so the durable fix is to extend the existing drift-enforcement block in
+  `roles/services/media/arr/tasks/download_config.yml:41`, which already does
+  stop → `lineinfile` → start for `InterDir`/`DestDir`/creds. Add `WriteLog`, `RotateLog`,
+  `ArticleCache` and `WriteBuffer` to both `_nzb_desired` (line 33) and the
+  "Set nzbget keys" loop (line 48), backed by new `arr_nzbget_*` defaults.
+  **Deferred 2026-09-07 at the user's request: that block stops the container, and a
+  download was in progress. Run it when the nzbget queue is idle.** All four keys are
+  read at startup, so there is no reload-free path.
 
 ## Session 2026-08-31 — Beszel: ai01 outage, fleet agent upgrade, nas02 online
 
@@ -396,3 +417,28 @@ Result: **6/7 systems up** (gw01, cmp01, util01, ai01, ctl01, nas01).
 - **cmp01 reboot** pending for `linux-image-6.1.0-52` — not urgent.
 - **`buildx_buildkit_mybuilder0`** runs on cmp01 but is declared nowhere — a leftover
   buildx builder. Harmless; remove with `docker buildx rm mybuilder` when convenient.
+
+## Session 2026-09-07 — nzbget "cannot add .nzb" triage (no server fault)
+
+Reported as: uploading a `.nzb` through the web UI hangs. **nzbget and the proxy were
+both fine — it was Safari.** The same upload succeeded in Firefox.
+
+- **The append request never left the browser.** While the upload sat "stuck", nginx on
+  gw01 logged only the UI's 1s polling GETs and no `POST /jsonrpc`. Confirmed it was not
+  merely in flight and therefore unlogged (nginx logs on completion): no established
+  nginx → `10.0.2.5:6789` connection, `/var/lib/nginx/body/` empty, browser sockets idle
+  at Recv-Q/Send-Q 0. Earlier `POST /jsonrpc → 499` entries are the aborted attempts —
+  499 is nginx's "client closed request".
+- **Server-side add path verified working**: posting a minimal `.nzb` straight to the
+  API on cmp01 returned an NZBID and queued the collection correctly; test entry deleted.
+- **Ruled out**: container health (up, v26.3-ls262), disk (`/scratch` 459G, `/data` 13T
+  free), news servers (both active), path ownership (`abc`/1001), auth
+  (`ControlUsername=uknth`; no restricted/add accounts shadowing it), and any proxy body
+  limit — `client_max_body_size` is `1024m` in `/etc/nginx/nginx.conf:21`, and a 2 MB
+  probe POST got the same 302 as a 10 KB one.
+- Triage did surface the two nzbget config issues now listed under
+  [Open items / TODO](#open-items--todo-carry-forward).
+
+**If this recurs: check the browser first.** Reproduce in a second browser before
+touching the stack.
+

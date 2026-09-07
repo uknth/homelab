@@ -33,9 +33,9 @@
   roles:
     - role: system/ansible_user
       tags:
-          - ansible-user
-          - init
-          - bootstrap
+        - ansible-user
+        - init
+        - bootstrap
 
   post_tasks:
     - name: Verify ansible user exists

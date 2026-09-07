@@ -1,0 +1,14 @@
+---
+# Permissive on purpose — see .gitea/workflows/ci.yml for why. This repo is a
+# large, pre-existing codebase (see AGENTS.md); `min` is ansible-lint's
+# smallest profile (only what ansible-lint needs to run at all), chosen
+# deliberately so CI gives a real green/red signal today instead of a wall
+# of pre-existing findings. Tighten the profile (basic -> moderate -> ...)
+# as a follow-up, not as part of standing this up.
+profile: min
+
+exclude_paths:
+  # Retired v2 roles/playbooks, reference only — predates this repo's own
+  # conventions and is not touched by ongoing work (see AGENTS.md, "do not
+  # restore without going through docs/plan/migration.md first").
+  - archive/

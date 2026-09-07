@@ -58,6 +58,7 @@ names.
 | Paperless-ngx | `services/documents/paperless` | `docs.puhome.net` | 🟢 built + live | migrated (182 docs) to local disk; postgres:17 glibc; tika/gotenberg; **Authentik OIDC login** (tier-1) + API tokens |
 | paperless-ai | part of `services/documents/paperless` | `docs-ai.puhome.net` | 🟢 built + live | LLM auto-tagging + RAG chat. **Opt-in**: only touches documents tagged `ai-process`. SSO-gated (holds a Paperless superuser token). Upstream unmaintained — excluded from auto-upgrades |
 | llama.cpp (`llama-server`) | part of `services/documents/paperless` | — (no published port) | 🟢 built + live | Gemma 3 4B Q4_K_M on the A4000 (~3.3 GB VRAM). On an `internal: true` network — no LAN route, no internet |
+| Gitea Actions runner | `services/development/gitea_runner` | — (no published port) | 🟢 built | `act_runner`, paired 1:1 with Gitea; runs after it in `playbooks/hosts/cmp01.yml`. **No fleet credentials** (no vault password, no ansible SSH key, no `/opt/homelab` mounts beyond its own state) — the one thing it holds is the Docker socket, which is a privilege boundary (can start containers on cmp01) not a sandbox. Registers via Gitea's own admin API using the admin account the `gitea` role bootstraps. Pinned `gitea/act_runner:0.6.1` |
 
 **Out of scope for v3 (user directive):** Immich (photos), Vaultwarden (passwords). Removed
 from `playbooks/hosts/cmp01.yml`.

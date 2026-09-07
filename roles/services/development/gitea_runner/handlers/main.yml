@@ -1,0 +1,7 @@
+---
+- name: Restart gitea runner
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_runner_compose_dir }}"
+    project_name: "{{ gitea_runner_compose_project }}"
+    state: restarted

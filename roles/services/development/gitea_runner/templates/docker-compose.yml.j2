@@ -1,0 +1,40 @@
+# Managed by Ansible — services/development/gitea_runner
+#
+# Single service. See defaults/main.yml for why this is its own compose
+# project rather than a service inside services/development/gitea's stack
+# (short version: keeping it separate is what makes "no fleet credentials,
+# no bind mounts beyond its own state" an easy thing to audit — nothing here
+# shares a volume or network with anything that DOES hold fleet secrets).
+services:
+  runner:
+    image: {{ gitea_runner_image }}
+    container_name: {{ gitea_runner_container_name }}
+    hostname: {{ gitea_runner_name }}
+    restart: unless-stopped
+    environment:
+      - GITEA_INSTANCE_URL={{ gitea_runner_instance_url }}
+      # File, not a plain value — scripts/run.sh reads the token from this
+      # path and then unsets both env vars before starting the long-running
+      # daemon process, so the token is never visible in `docker inspect` or
+      # a process's own environment past the one-shot registration.
+      - GITEA_RUNNER_REGISTRATION_TOKEN_FILE=/run/secrets/registration_token
+      - GITEA_RUNNER_NAME={{ gitea_runner_name }}
+      # Comma-separated — see gitea_runner_labels in defaults/main.yml for
+      # why these live here and not in config.yaml.
+      - GITEA_RUNNER_LABELS={{ gitea_runner_labels | join(',') }}
+      - CONFIG_FILE=/data/config.yaml
+      - TZ={{ timezone }}
+    volumes:
+      # The runner's own state ONLY (registration result, actions/cache,
+      # config.yaml templated below) — see gitea_runner_data_dir in
+      # defaults/main.yml. This is the one bind mount this role uses beyond
+      # the socket below; nothing else from /opt/homelab is reachable here.
+      - {{ gitea_runner_data_dir }}:/data
+      - {{ gitea_runner_registration_token_file }}:/run/secrets/registration_token:ro
+      # PRIVILEGE BOUNDARY — read gitea_runner_docker_socket's comment in
+      # defaults/main.yml before touching this line. This is what lets a
+      # workflow start containers on cmp01; it is not, and cannot be made,
+      # a sandbox by itself.
+      - {{ gitea_runner_docker_socket }}:/var/run/docker.sock
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro

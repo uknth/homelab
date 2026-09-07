@@ -1,0 +1,115 @@
+---
+# CI for the homelab repo, run on cmp01's Gitea Actions runner (see
+# roles/services/development/gitea_runner). Every job here is a static
+# check against the checked-out repo — nothing reads a vault password, an
+# SSH key, or touches a real host. That is a hard requirement of the runner
+# this executes on, not a style choice: see the "NO FLEET CREDENTIALS"
+# block at the top of roles/services/development/gitea_runner/defaults/
+# main.yml. Do not add a step here that needs one.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  # .yamllint at the repo root relaxes exactly two things this repo does
+  # deliberately (long WHY comments, column-aligned flow mappings in
+  # hosts/host_vars/{gw01,ctl01}/vars.yml) and excludes archive/ (retired
+  # v2, not held to current conventions) — see that file's own comments.
+  yamllint:
+    runs-on: ubuntu-latest
+    container: python:3.12-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        run: pip install --quiet yamllint
+      - name: yamllint
+        run: yamllint -c .yamllint .
+
+  # .ansible-lint pins profile: min (ansible-lint's smallest — only what it
+  # needs to run at all) and excludes archive/ for the same reason as
+  # yamllint above. Verified 2026-09-07 against this repo at min: 0
+  # failures with the full `ansible` package installed (not just
+  # ansible-lint's own ansible-core dependency) — its internal syntax-check
+  # phase fails to resolve ansible.posix.* modules otherwise, even though
+  # this repo's own requirements.yml never lists ansible.posix. Tighten
+  # the profile as a deliberate follow-up, not as part of standing this up.
+  ansible-lint:
+    runs-on: ubuntu-latest
+    container: python:3.12-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ansible + ansible-lint
+        run: pip install --quiet ansible ansible-lint
+      - name: ansible-lint
+        run: ansible-lint
+
+  syntax-check:
+    runs-on: ubuntu-latest
+    container: python:3.12-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ansible
+        # The full `ansible` package, not just `ansible-core` — it bundles
+        # every community collection this repo's roles use
+        # (community.docker, community.general, ansible.posix, ...), so
+        # --syntax-check below can resolve every module FQCN with no
+        # separate `ansible-galaxy collection install` step. Confirmed by
+        # inspecting this package's own site-packages/ansible_collections/
+        # on 2026-09-07 (community.docker and ansible.posix are both in
+        # there); requirements.yml's external galaxy roles are unused by
+        # anything under playbooks/hosts/ today, so they are not needed
+        # here either.
+        run: pip install --quiet ansible
+      - name: Fake a vault password file
+        # ansible.cfg sets vault_password_file to
+        # ~/.config/homelab/.vault_pass, which does not exist on this
+        # runner and never should — see the "NO FLEET CREDENTIALS" comment
+        # at the top of this file; the real vault password least of all.
+        # --syntax-check never actually decrypts
+        # hosts/group_vars/all/vault.yml (verified locally: even a
+        # deliberately wrong password here still passes), but Ansible
+        # refuses to start at all unless --vault-password-file points at
+        # SOME existing, non-empty, readable file — an empty file (or
+        # /dev/null) is rejected too, with "Invalid vault password".
+        run: echo "unused-ci-placeholder" > /tmp/fake-vault-pass
+      - name: Syntax-check every playbook under playbooks/hosts/
+        run: |
+          set -euo pipefail
+          for playbook in playbooks/hosts/*.yml; do
+            echo "::group::${playbook}"
+            ansible-playbook "${playbook}" --syntax-check \
+              --vault-password-file=/tmp/fake-vault-pass
+            echo "::endgroup::"
+          done
+
+  # roles/services/ai/researchd's two Python components, each pytest run as
+  # its own step so a failure names exactly which suite broke. Both need
+  # Python 3.12 specifically (not whatever `ubuntu-latest` would default
+  # to) — this job's container: pins it the same way for both, matching
+  # both components' own Dockerfiles (FROM python:3.12-slim): 3.14 breaks
+  # pydantic-core builds here, and separately masks gpt-researcher's own
+  # upstream annotation-ordering bug (see files/engines/gptr/Dockerfile's
+  # "UPSTREAM BUG" comment) instead of hitting it — testing on 3.14 would
+  # pass locally and then fail the moment the real 3.12 image is built.
+  python-tests:
+    runs-on: ubuntu-latest
+    container: python:3.12-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install researchd/app dependencies
+        run: pip install --quiet -r roles/services/ai/researchd/files/app/requirements.txt pytest
+      - name: Test researchd/app
+        run: pytest roles/services/ai/researchd/files/app
+      - name: Install researchd/engines/gptr dependencies
+        # gptr's own tests import researchd.models directly (see
+        # files/engines/gptr/tests/conftest.py) — app/requirements.txt is
+        # already installed by the step above; this adds gptr's own on top.
+        # gpt-researcher itself is never really imported (conftest.py stubs
+        # it in sys.modules before collection), so installing it here is
+        # for parity with the real build, not a test dependency.
+        run: pip install --quiet -r roles/services/ai/researchd/files/engines/gptr/requirements.txt
+      - name: Test researchd/engines/gptr
+        run: pytest roles/services/ai/researchd/files/engines/gptr

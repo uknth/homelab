@@ -1,0 +1,31 @@
+---
+# Permissive on purpose, mirroring .ansible-lint's own posture — see
+# .gitea/workflows/ci.yml for the "why" of this whole CI setup. This is
+# meant to give a signal that runs green today on a large pre-existing
+# codebase, not to enforce house style retroactively; tighten deliberately
+# later.
+extends: default
+
+# archive/ is retired v2 roles/playbooks, kept only as a reference (see
+# AGENTS.md — "do not restore without going through docs/plan/migration.md
+# first"). It predates this repo's own conventions and is not touched by
+# ongoing work, so it is excluded rather than cleaned up wholesale.
+ignore: |
+  archive/
+
+rules:
+  # This repo's comments are prose, by design (see AGENTS.md and every
+  # role's defaults/main.yml) — a WHY-heavy comment routinely runs well
+  # past 80 columns. Extending it rather than dropping the rule keeps
+  # runaway lines (accidental unwrapped JSON, a pasted stack trace) visible
+  # while not flagging deliberate long comments.
+  line-length:
+    max: 200
+    level: warning
+  # hosts/host_vars/{gw01,ctl01}/vars.yml deliberately column-align flow
+  # mappings ({ name: auth,       upstream: "..." }) so a long list of
+  # nginx vhosts / apps reads as a table — see the comment at the top of
+  # nginx_sites in hosts/host_vars/gw01/vars.yml. That is extra whitespace
+  # by yamllint's default rules, not a mistake.
+  braces: disable
+  commas: disable

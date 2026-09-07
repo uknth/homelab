@@ -1,0 +1,132 @@
+---
+# services/development/gitea_runner — a Gitea Actions runner (`act_runner`) on
+# cmp01, paired 1:1 with services/development/gitea. Must run AFTER that role
+# in the same play (playbooks/hosts/cmp01.yml) — it reads back the admin
+# credentials that role generates (gitea_admin_password_file, see the
+# "Registering against Gitea" block below) and needs Gitea already answering
+# on gitea_http_port to register against it.
+#
+# --- NO FLEET CREDENTIALS. THIS IS THE WHOLE POINT OF THIS ROLE. -----------
+# A Gitea Actions workflow is attacker-controlled the moment it comes from a
+# pull request, even on a single-user instance — a PR (or a compromised
+# dependency pulled in by a workflow step) runs arbitrary code inside the
+# runner container. This role therefore gives the runner container NOTHING
+# that reaches past cmp01 itself:
+#   - no ansible-vault password
+#   - no keys/ansible_rsa.private (or any other fleet SSH key)
+#   - no bind mount of /opt/homelab, other than this role's own
+#     gitea_runner_data_dir (its own state — registration, cache, logs)
+#   - no credential for any OTHER service in the fleet
+# The only thing it is trusted with is the Gitea registration token below,
+# which is scoped to "can register as a runner" and nothing else, and the
+# Docker socket (see gitea_runner_docker_socket below — read that comment
+# before assuming this means "sandboxed").
+#
+# CI jobs that need to reach the fleet (deploy, config drift checks, ...) are
+# NOT this role's concern and must not be bolted on here — see docs/spec/
+# services.md before inventing one.
+
+gitea_runner_root_dir: "{{ service_root }}/gitea-runner"
+gitea_runner_compose_dir: "{{ gitea_runner_root_dir }}/compose"
+# The runner's OWN state only: .runner (registration result), the built-in
+# actions/cache blobs, and per-job log copies (see templates/config.yaml.j2).
+# Nothing from the rest of /opt/homelab is mounted alongside it — see the
+# credentials block above.
+gitea_runner_data_dir: "{{ gitea_runner_root_dir }}/data"
+
+gitea_runner_compose_project: "gitea-runner"
+gitea_runner_container_name: "gitea-runner"
+# Shown in Gitea's runner list and used as the daemon's identity. cmp01 only
+# ever runs one of these, so the hostname is unambiguous and self-explanatory
+# in the UI (no need to invent a separate name scheme).
+gitea_runner_name: "cmp01"
+
+# --- Image --------------------------------------------------------------
+# Pinned by tag+digest, same posture as gitea_image in
+# roles/services/development/gitea/defaults/main.yml and searxng_image in
+# roles/services/ai/researchd/defaults/main.yml. The digest is the
+# manifest-LIST digest (docker resolves the right per-platform manifest under
+# it automatically), confirmed to include linux/amd64 (cmp01 is a Debian PC,
+# not arm) by fetching Docker Hub's registry API for this manifest list
+# directly on 2026-09-07, alongside linux/arm64.
+#
+# The UNSUFFIXED tag ("basic" build stage upstream), deliberately not
+# `-dind` or `-dind-rootless`: this runner does not need its own embedded
+# Docker daemon, because it talks to cmp01's real one over the socket mount
+# below (gitea_runner_docker_socket) — running a second, nested dockerd here
+# would be pure overhead and a second thing to keep patched. The plain image
+# also runs as root with no docker daemon baked in, which is exactly the
+# shape that works with a bind-mounted host socket.
+gitea_runner_image_repo: "gitea/act_runner"
+gitea_runner_image_tag: "0.6.1"
+gitea_runner_image_digest: "sha256:b5c35d6bdbb9bb25e531230bfc7cc663cb751406cbec90a2a891b85fea54de86"
+gitea_runner_image: "{{ gitea_runner_image_repo }}:{{ gitea_runner_image_tag }}@{{ gitea_runner_image_digest }}"
+
+# --- The Docker socket: a privilege boundary, not a sandbox ----------------
+# act_runner has no execution engine of its own — every job step runs in a
+# fresh container it asks the Docker daemon to start (see
+# templates/config.yaml.j2's `container:` block and gitea_runner_labels
+# below). Reaching that daemon means reaching cmp01's REAL Docker daemon,
+# the same one every other service role in this fleet composes against.
+#
+# Concretely: anything that can submit a workflow to this repo (right now,
+# anyone who can open a pull request against it) can make cmp01's Docker
+# daemon start a container of their choosing, with whatever docker run flags
+# a workflow's `container.options` is allowed to pass (see
+# valid_volumes/options in templates/config.yaml.j2 for the one guard rail
+# this role puts on that). That container is NOT confined to "the repo's
+# checkout" — it is a normal sibling container on cmp01, with the same reach
+# into cmp01's network and any Docker-level resource that entails.
+#
+# Do not describe this as sandboxed anywhere in docs, commit messages, or a
+# workflow comment — it is not, and pretending otherwise is how this
+# boundary gets crossed by accident later. What keeps this posture
+# acceptable is the credentials block above: a hostile workflow can start
+# containers on cmp01, but it still cannot reach the rest of the fleet,
+# because this role never hands it anything that would let it.
+gitea_runner_docker_socket: "/var/run/docker.sock"
+
+# --- Registering against Gitea -------------------------------------------
+# Gitea's own admin API mints the one-time registration token this runner
+# needs (POST /api/v1/admin/actions/runners/registration-token, instance-
+# scoped — see tasks/main.yml). That call is authenticated with the SAME
+# admin account the gitea role already bootstraps (gitea_admin_username /
+# gitea_admin_password_file, both role defaults of services/development/
+# gitea — available here because that role already ran earlier in this same
+# play; see the play-order comment at the top of this file). No new secret
+# is introduced anywhere in the fleet to make this work.
+#
+# Gitea hands back the SAME token on every call as long as it is still
+# active (it does not rotate on every request), and act_runner only
+# registers once — its own state file (.runner, under gitea_runner_data_dir)
+# makes a second `register` a no-op — so re-running this role is idempotent
+# on both sides.
+gitea_runner_registration_token_file: "{{ gitea_runner_compose_dir }}/.registration_token"
+
+# Gitea is reached over cmp01's own LAN address, NOT 127.0.0.1/localhost:
+# this container is on its own (separate compose project's) bridge network,
+# so its loopback is its own — it is not Gitea's. gitea_http_port IS
+# published on every host interface by services/development/gitea's compose
+# file (`ports: "{{ gitea_http_port }}:3000"`, no bind address), so cmp01's
+# own LAN IP reaches it from any other container on the same host via the
+# normal Docker DNAT path — the same reasoning as every other cross-service
+# LAN address in this fleet (see e.g. researchd_llm_host), just looped back
+# to the same box here.
+gitea_runner_instance_url: "http://{{ ansible_host }}:{{ gitea_http_port }}"
+
+# --- Labels: what `runs-on:` in a workflow can target ----------------------
+# `<label>:docker://<image>` tells act_runner which image to start for a job
+# claiming that label — this is what makes `runs-on: ubuntu-latest` in
+# .gitea/workflows/ci.yml actually resolve to something. Taken straight from
+# Gitea's own recommended config (gitea/runner's config.example.yaml) rather
+# than a third-party image, since it is the image Gitea itself maintains and
+# tests act_runner against.
+gitea_runner_labels:
+  - "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
+  - "ubuntu-22.04:docker://docker.gitea.com/runner-images:ubuntu-22.04"
+
+# One job at a time. cmp01 also runs the whole media/knowledge stack plus
+# GPU work (see playbooks/hosts/cmp01.yml) — a single-user instance has no
+# concurrent-PR pressure that would justify competing with that for CPU/RAM.
+# Raise deliberately if that stops being true.
+gitea_runner_capacity: 1
