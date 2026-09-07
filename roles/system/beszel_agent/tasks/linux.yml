@@ -49,7 +49,16 @@
         group: "{{ beszel_agent_user }}"
         mode: "0755"
 
+    # Skipped under --check, and it has to be. In check mode the staging
+    # directory above is only simulated, so unarchive fails hard with
+    # "dest '.../.stage' must be an existing dir" — which failed site.yml
+    # --check on EVERY Linux host and would have broken the PR dry-run gate
+    # from the day it was switched on. There is nothing useful to dry-run
+    # here anyway: this downloads a release tarball, and check mode cannot
+    # tell you anything about it that the version comparison above has not
+    # already decided.
     - name: Download and extract the agent binary into the staging directory
+      when: not ansible_check_mode
       ansible.builtin.unarchive:
         src: "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_linux_{{ _beszel_arch }}.tar.gz"
         dest: "{{ beszel_agent_install_dir }}/.stage"

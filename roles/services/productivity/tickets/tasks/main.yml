@@ -1,0 +1,101 @@
+---
+# Family helpdesk front-end over Gitea issues, on util01. A thin reader/
+# writer of Gitea's API: it owns no copy of ticket content, only the token ->
+# issue-number lookup table that keeps ticket URLs unguessable — see
+# defaults/main.yml and the header comment in templates/server.mjs.j2.
+
+- name: Create tickets dirs owned by the service user
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ tickets_root_dir }}"
+    - "{{ tickets_root_dir }}/compose"
+
+- name: Create the app and data dirs owned by the container uid
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ tickets_uid }}"
+    group: "{{ tickets_gid }}"
+    mode: "0755"
+  loop:
+    - "{{ tickets_root_dir }}/app"
+    - "{{ tickets_data_dir }}"
+
+# The ticket-bot API token is provisioned OUT OF BAND (created by hand in
+# Gitea's UI, scoped to write on uknth/tickets only, then copied to this
+# path) — this role only ever reads it. It is not minted here because doing
+# so would require Gitea admin credentials in this play, which util01's play
+# has no other reason to hold.
+- name: Read back the Gitea bot token
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ tickets_bot_token_file }}"
+  register: _tickets_bot_token_slurp
+  no_log: true
+
+- name: Set the Gitea bot token fact
+  ansible.builtin.set_fact:
+    _tickets_bot_token: "{{ (_tickets_bot_token_slurp.content | b64decode).strip() }}"
+  no_log: true
+
+- name: Template the tickets app
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ tickets_root_dir }}/app/{{ item.dest }}"
+    owner: "{{ tickets_uid }}"
+    group: "{{ tickets_gid }}"
+    mode: "0644"
+  loop:
+    - { src: server.mjs.j2, dest: server.mjs }
+    - { src: index.html.j2, dest: index.html }
+  notify: Restart tickets
+
+- name: Template tickets compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ tickets_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart tickets
+
+# Carries TICKETS_BOT_TOKEN in clear — see the header comment in the
+# template itself for why both mode 0600 and no_log: true are load-bearing
+# here, not stylistic (ops/gitops_executor's periodic `--check --diff` run).
+# This is also the ONLY place the token reaches the container: never inline
+# under compose's `environment:`, which `docker inspect` exposes, and never
+# baked into server.mjs (mode 0644, readable by anything on the host).
+- name: Template the tickets env file
+  become: true
+  ansible.builtin.template:
+    src: tickets.env.j2
+    dest: "{{ tickets_root_dir }}/compose/tickets.env"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart tickets
+
+- name: Check whether tickets has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ tickets_root_dir }}/compose/docker-compose.yml"
+  register: _tickets_deployed
+
+- name: Deploy tickets
+  become: true
+  when: not ansible_check_mode or _tickets_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ tickets_root_dir }}/compose"
+    project_name: "tickets"
+    state: present
+    pull: missing

@@ -4,3 +4,15 @@
 # ops/restic — Syncthing data is the only thing util01 backs up (user directive).
 restic_paths:
   - "{{ service_root }}/syncthing/data"
+
+# --- GitOps deploy trigger -------------------------------------------------
+# Public half of the keypair Gitea Actions uses to trigger a deploy. Its
+# PRIVATE half is stored as the `GITOPS_TRIGGER_KEY` secret in Gitea and
+# exists nowhere else — not in this repo, not in the vault.
+#
+# Safe to commit: it is a public key, and it is authorised in authorized_keys
+# ONLY against `command="gitops-trigger.sh"` with pty/forwarding disabled. The
+# worst a leak of the matching private key permits is running that wrapper,
+# which accepts exactly two verbs (`apply`, `check <ref>`) and validates the
+# ref before it reaches git. It cannot run an arbitrary command.
+gitops_ci_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7u5d0/YGDLs0comlhdq6ed1xdlODiiJzU/VKS9qgFF gitea-actions-trigger@puhome.net"

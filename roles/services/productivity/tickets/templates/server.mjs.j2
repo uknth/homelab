@@ -1,0 +1,428 @@
+// Managed by Ansible — services/productivity/tickets
+//
+// Family helpdesk front-end over Gitea issues, on util01. There is ONE
+// source of truth: the Gitea issue. Every page here renders LIVE from
+// Gitea's API on each request — no sync job, no webhook, no mirrored copy
+// of comments. Two stores could disagree; one store cannot.
+//
+// SQLite (node:sqlite) holds ONLY a token -> issue-number lookup, so a
+// ticket's URL is an unguessable 32-hex-char token instead of a small
+// sequential issue number. That is its entire job — it is never asked for
+// title, body, status or comments; those always come from Gitea, fresh.
+//
+// Text pulled from Gitea (titles, bodies, comments) is user-supplied and is
+// rendered as ESCAPED PLAIN TEXT, never as markdown — see esc() below. That
+// is deliberate: interpreting it as markdown/HTML would be an injection
+// surface for no real benefit on a helpdesk form.
+import fs from "node:fs"
+import path from "node:path"
+import http from "node:http"
+import crypto from "node:crypto"
+import { DatabaseSync } from "node:sqlite"
+
+const PORT = {{ tickets_port }}
+const DATA = "/data"
+
+// Derived from the inventory + gitea's own port, not hardcoded — see
+// defaults/main.yml for how tickets_gitea_base_url is built.
+const GITEA_BASE = {{ tickets_gitea_base_url | to_json }}
+const OWNER = {{ tickets_gitea_owner | to_json }}
+const REPO = {{ tickets_gitea_repo | to_json }}
+const VIA_FORM_LABEL = {{ tickets_via_form_label | to_json }}
+const CATEGORIES = {{ tickets_categories | to_json }}
+const CATEGORY_VALUES = new Set(CATEGORIES.map((c) => c.value))
+
+// Never baked into this file (world-readable, 0644 in the container): it
+// comes in only through the container's environment, from a 0600 env file
+// templated with no_log: true. See templates/tickets.env.j2. It never
+// reaches the browser either — every Gitea call below happens server-side.
+const BOT_TOKEN = process.env.TICKETS_BOT_TOKEN || ""
+
+// -------------------------------------------------------------- storage ---
+// The ONLY state this service owns. `tickets.db` lives on the bind-mounted
+// /data volume so it survives a container recreate; everything else about a
+// ticket is fetched fresh from Gitea on every page load, never cached here.
+const db = new DatabaseSync(path.join(DATA, "tickets.db"))
+db.exec(`CREATE TABLE IF NOT EXISTS tickets (
+  token TEXT PRIMARY KEY,
+  issue_number INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+)`)
+const insertTicket = db.prepare("INSERT INTO tickets (token, issue_number, created_at) VALUES (?, ?, ?)")
+const selectIssueForToken = db.prepare("SELECT issue_number FROM tickets WHERE token = ?")
+const selectAllTokens = db.prepare("SELECT token, issue_number FROM tickets")
+
+function saveToken(token, issueNumber) {
+  insertTicket.run(token, issueNumber, Date.now())
+}
+
+// null for an unknown token — the caller turns that into a plain 404.
+function issueForToken(token) {
+  const row = selectIssueForToken.get(token)
+  return row ? row.issue_number : null
+}
+
+// issue number -> token, for linking the open-tickets list on / straight to
+// each ticket's page without exposing the token anywhere it wasn't already
+// minted for. Issues with no row here (filed directly in Gitea, not through
+// this form) are still listed, just without a link.
+function tokenMapForIssues() {
+  const map = new Map()
+  for (const row of selectAllTokens.all()) map.set(row.issue_number, row.token)
+  return map
+}
+
+// >= 16 bytes of randomness, hex-encoded (32 chars) — long enough that
+// guessing a live token is not a practical attack, short enough to fit
+// cleanly in a URL.
+function genToken() {
+  return crypto.randomBytes(16).toString("hex")
+}
+
+// ----------------------------------------------------------------- gitea --
+async function giteaFetch(reqPath, opts = {}) {
+  const r = await fetch(`${GITEA_BASE}/api/v1${reqPath}`, {
+    ...opts,
+    headers: {
+      // Gitea's own scheme for a personal/bot API token, distinct from an
+      // OAuth bearer token.
+      authorization: `token ${BOT_TOKEN}`,
+      "content-type": "application/json",
+      ...(opts.headers || {}),
+    },
+  })
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "")
+    throw new Error(`gitea ${r.status} ${reqPath}: ${detail.slice(0, 200)}`)
+  }
+  return r.status === 204 ? null : r.json()
+}
+
+function listOpenIssues() {
+  return giteaFetch(`/repos/${OWNER}/${REPO}/issues?state=open&type=issues&sort=created&order=desc&limit=100`)
+}
+
+async function getLabelMap() {
+  const labels = await giteaFetch(`/repos/${OWNER}/${REPO}/labels?limit=100`)
+  return new Map(labels.map((l) => [l.name, l.id]))
+}
+
+// Gitea's create-issue API takes label IDs, not names, so every submit
+// resolves the category's label name (and via-form) against the repo's
+// actual label list rather than assuming IDs that could drift.
+async function createTicketIssue({ title, body, category }) {
+  const labelMap = await getLabelMap()
+  const labelIds = []
+  const categoryLabelId = labelMap.get(category)
+  if (categoryLabelId) labelIds.push(categoryLabelId)
+  else console.error(`tickets: category label "${category}" not found in ${OWNER}/${REPO}`)
+  const viaFormId = labelMap.get(VIA_FORM_LABEL)
+  if (viaFormId) labelIds.push(viaFormId)
+  else console.error(`tickets: "${VIA_FORM_LABEL}" label not found in ${OWNER}/${REPO}`)
+  return giteaFetch(`/repos/${OWNER}/${REPO}/issues`, {
+    method: "POST",
+    body: JSON.stringify({ title, body, labels: labelIds }),
+  })
+}
+
+function getIssue(number) {
+  return giteaFetch(`/repos/${OWNER}/${REPO}/issues/${number}`)
+}
+
+function getComments(number) {
+  return giteaFetch(`/repos/${OWNER}/${REPO}/issues/${number}/comments`)
+}
+
+// Posted as the bot (the only Gitea identity family members ever act
+// through), with the typed name prefixed into the body so attribution is
+// still visible even though every reply here is authored by ticket-bot.
+function postComment(number, body) {
+  return giteaFetch(`/repos/${OWNER}/${REPO}/issues/${number}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  })
+}
+
+// ------------------------------------------------------------ rendering ---
+const esc = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+
+function ago(iso) {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+// The one HTML file, read once at startup and reused for every response —
+// __TICKETS_TITLE__ / __TICKETS_BODY__ are plain string placeholders (not
+// double-brace Jinja delimiters, so Ansible's own Jinja pass never touches them), swapped in per
+// request. No templating engine, no client-side framework.
+const UI = fs.readFileSync("/app/index.html", "utf8")
+
+function page(title, bodyHtml) {
+  return UI.split("__TICKETS_TITLE__").join(esc(title)).split("__TICKETS_BODY__").join(bodyHtml)
+}
+
+function categoryOptions(selected) {
+  return CATEGORIES.map(
+    (c) => `<option value="${esc(c.value)}"${c.value === selected ? " selected" : ""}>${esc(c.label)}</option>`,
+  ).join("")
+}
+
+function renderForm(values, error) {
+  const v = { name: "", title: "", description: "", contact: "", category: CATEGORIES[0].value, ...values }
+  return `
+    <h2>Raise a ticket</h2>
+    ${error ? `<div class="error">${esc(error)}</div>` : ""}
+    <form class="card" method="POST" action="/submit">
+      <label for="name">Your name</label>
+      <input type="text" id="name" name="name" required value="${esc(v.name)}">
+
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" required value="${esc(v.title)}">
+
+      <label for="category">Category</label>
+      <select id="category" name="category">${categoryOptions(v.category)}</select>
+
+      <label for="description">Description</label>
+      <textarea id="description" name="description">${esc(v.description)}</textarea>
+
+      <label for="contact">How to reach you (optional)</label>
+      <input type="text" id="contact" name="contact" value="${esc(v.contact)}" placeholder="phone, or &quot;ask at dinner&quot;">
+
+      <button type="submit">Submit ticket</button>
+    </form>`
+}
+
+function renderTicketList(issues, tokenMap) {
+  if (!issues.length) return `<div class="empty">No open tickets. Nice.</div>`
+  return `<ul class="tickets">${issues
+    .map((i) => {
+      const token = tokenMap.get(i.number)
+      const title = token ? `<a href="/t/${token}">${esc(i.title)}</a>` : esc(i.title)
+      return `<li><span>${title}</span><span class="meta"><span class="pill open">Open</span> ${ago(i.created_at)}</span></li>`
+    })
+    .join("")}</ul>`
+}
+
+function renderHomeBody({ ticketsHtml, degraded, formValues, formError }) {
+  return `
+    ${degraded ? `<div class="banner">Can't reach the helpdesk system right now — open tickets aren't shown, but you can still try submitting one below.</div>` : ""}
+    <h2>Open tickets</h2>
+    ${ticketsHtml}
+    ${renderForm(formValues, formError)}
+  `
+}
+
+// Shared by the plain GET / and by a failed POST /submit (which re-renders
+// the same page with the typed values preserved and an error banner,
+// instead of losing what was typed).
+async function renderHomePage(formValues = {}, formError = null) {
+  let ticketsHtml = ""
+  let degraded = false
+  try {
+    ticketsHtml = renderTicketList(await listOpenIssues(), tokenMapForIssues())
+  } catch (e) {
+    console.error("tickets: list failed:", e.message)
+    degraded = true
+  }
+  return page("Family Help Desk", renderHomeBody({ ticketsHtml, degraded, formValues, formError }))
+}
+
+function renderComments(comments) {
+  if (!comments.length) return `<div class="empty">No replies yet.</div>`
+  return `<ul class="comments">${comments
+    .map(
+      (c) => `
+    <li>
+      <div class="comment-head"><strong>${esc(c.user?.login || "unknown")}</strong> · ${ago(c.created_at)}</div>
+      <div class="comment-text">${esc(c.body || "")}</div>
+    </li>`,
+    )
+    .join("")}</ul>`
+}
+
+function renderTicketBody({ issue, comments, token, replyError }) {
+  const status = issue.state === "closed" ? "done" : "open"
+  const statusLabel = issue.state === "closed" ? "Done" : "Open"
+  return `
+    <a class="back" href="/">&larr; Back to open tickets</a>
+    <div class="ticket-head">
+      <h2>${esc(issue.title)} <span class="pill ${status}">${statusLabel}</span></h2>
+      <div class="meta">Opened ${ago(issue.created_at)}</div>
+    </div>
+    <div class="body-text">${esc(issue.body || "")}</div>
+    <h2>Replies</h2>
+    ${renderComments(comments)}
+    <h2>Add a reply</h2>
+    ${replyError ? `<div class="error">${esc(replyError)}</div>` : ""}
+    <form class="card" method="POST" action="/t/${token}/reply">
+      <label for="rname">Your name</label>
+      <input type="text" id="rname" name="name" required>
+      <label for="rmessage">Message</label>
+      <textarea id="rmessage" name="message" required></textarea>
+      <button type="submit">Send reply</button>
+    </form>
+  `
+}
+
+function renderDegradedTicket() {
+  return `<div class="banner">Can't reach the helpdesk system right now. Try again in a bit.</div><a class="back" href="/">&larr; Back to open tickets</a>`
+}
+
+// Shared by the plain GET /t/<token> and by a failed POST /t/<token>/reply
+// (re-rendered with an error banner rather than losing the ticket view).
+async function renderTicketPage(token, issueNumber, replyError = null) {
+  try {
+    const [issue, comments] = await Promise.all([getIssue(issueNumber), getComments(issueNumber)])
+    return page(`${issue.title} — Family Help Desk`, renderTicketBody({ issue, comments, token, replyError }))
+  } catch (e) {
+    console.error("tickets: fetch ticket failed:", e.message)
+    return page("Family Help Desk", renderDegradedTicket())
+  }
+}
+
+function render404() {
+  return page(
+    "Not found — Family Help Desk",
+    `<p>That ticket link doesn't exist. Double-check you copied the whole link.</p><a class="back" href="/">&larr; Back to open tickets</a>`,
+  )
+}
+
+// ------------------------------------------------------------- routing ---
+// A 32-hex-char token (16 random bytes) — anything else is treated the same
+// as an unknown token, a plain 404, never a lookup error.
+const TOKEN_RE = /^[0-9a-f]{32}$/
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let raw = ""
+    req.on("data", (c) => (raw += c))
+    req.on("end", () => resolve(raw))
+  })
+}
+
+function html200(res, body) {
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
+  res.end(body)
+}
+
+http
+  .createServer(async (req, res) => {
+    const u = new URL(req.url, "http://x")
+    // Plain form posts (application/x-www-form-urlencoded, the HTML
+    // default), so URLSearchParams parses the body directly — no framework
+    // and no client-side JS anywhere in this app.
+    const parts = u.pathname.split("/").filter(Boolean)
+
+    try {
+      // ------------------------------------------------------------ home --
+      if (u.pathname === "/" && req.method === "GET") {
+        return html200(res, await renderHomePage())
+      }
+
+      // ---------------------------------------------------------- submit --
+      if (u.pathname === "/submit" && req.method === "POST") {
+        const form = new URLSearchParams(await readBody(req))
+        const name = (form.get("name") || "").trim()
+        const title = (form.get("title") || "").trim()
+        const description = (form.get("description") || "").trim()
+        const contact = (form.get("contact") || "").trim()
+        const rawCategory = form.get("category") || ""
+        const category = CATEGORY_VALUES.has(rawCategory) ? rawCategory : CATEGORIES[0].value
+        const values = { name, title, description, contact, category }
+
+        if (!name || !title) {
+          return html200(res, await renderHomePage(values, "Name and title are both required."))
+        }
+
+        // The issue body carries the submitter's name and contact
+        // explicitly — there is no Gitea account to attribute this to.
+        const body = [`Submitted by: ${name}`, `Contact: ${contact || "(not provided)"}`, "", description || "(no description provided)"].join(
+          "\n",
+        )
+
+        let issue
+        try {
+          issue = await createTicketIssue({ title, body, category })
+        } catch (e) {
+          console.error("tickets: create issue failed:", e.message)
+          return html200(
+            res,
+            await renderHomePage(values, "Can't file the ticket right now — the helpdesk system is unreachable. Please try again shortly."),
+          )
+        }
+
+        const token = genToken()
+        saveToken(token, issue.number)
+        res.writeHead(303, { location: `/t/${token}` })
+        return res.end()
+      }
+
+      // ---------------------------------------------------------- ticket --
+      if (parts[0] === "t" && parts.length === 2 && req.method === "GET") {
+        const token = parts[1]
+        const issueNumber = TOKEN_RE.test(token) ? issueForToken(token) : null
+        if (!issueNumber) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" })
+          return res.end(render404())
+        }
+        return html200(res, await renderTicketPage(token, issueNumber))
+      }
+
+      // ----------------------------------------------------------- reply --
+      if (parts[0] === "t" && parts.length === 3 && parts[2] === "reply" && req.method === "POST") {
+        const token = parts[1]
+        const issueNumber = TOKEN_RE.test(token) ? issueForToken(token) : null
+        if (!issueNumber) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" })
+          return res.end(render404())
+        }
+
+        const form = new URLSearchParams(await readBody(req))
+        const name = (form.get("name") || "").trim()
+        const message = (form.get("message") || "").trim()
+
+        if (!name || !message) {
+          return html200(res, await renderTicketPage(token, issueNumber, "Name and message are both required."))
+        }
+
+        try {
+          await postComment(issueNumber, `${name} says:\n\n${message}`)
+        } catch (e) {
+          console.error("tickets: post comment failed:", e.message)
+          return html200(
+            res,
+            await renderTicketPage(token, issueNumber, "Can't send that reply right now — the helpdesk system is unreachable. Please try again shortly."),
+          )
+        }
+
+        res.writeHead(303, { location: `/t/${token}` })
+        return res.end()
+      }
+
+      if (u.pathname === "/healthz") {
+        res.writeHead(200, { "content-type": "application/json" })
+        return res.end(JSON.stringify({ ok: true }))
+      }
+
+      res.writeHead(404, { "content-type": "text/html; charset=utf-8" })
+      return res.end(render404())
+    } catch (e) {
+      // Anything unexpected still gets a plain page, never a raw stack trace.
+      console.error("tickets: unhandled error:", e)
+      res.writeHead(500, { "content-type": "text/html; charset=utf-8" })
+      res.end(page("Family Help Desk", `<p>Something went wrong. Please try again.</p><a class="back" href="/">&larr; Back to open tickets</a>`))
+    }
+  })
+  .listen(PORT, "0.0.0.0", () => {
+    console.log(`tickets listening on ${PORT}`)
+  })

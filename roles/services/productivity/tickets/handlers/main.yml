@@ -1,0 +1,8 @@
+---
+- name: Restart tickets
+  become: true
+  when: not ansible_check_mode or _tickets_deployed.stat.exists | default(false)
+  community.docker.docker_compose_v2:
+    project_src: "{{ tickets_root_dir }}/compose"
+    project_name: "tickets"
+    state: restarted

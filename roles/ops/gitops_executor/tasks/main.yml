@@ -33,6 +33,17 @@
     group: "{{ user }}"
     mode: "0750"
 
+# The forced-command target for the CI key below — see its own header
+# comment for why it is the security boundary of the Gitea-triggered design.
+- name: Install gitops trigger wrapper (forced-command entry point for CI)
+  become: true
+  ansible.builtin.template:
+    src: gitops-trigger.sh.j2
+    dest: "{{ gitops_dir }}/gitops-trigger.sh"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0750"
+
 - name: Note manual prerequisites (repo clone + secret files)
   become: true
   ansible.builtin.stat:
@@ -42,10 +53,32 @@
   ansible.builtin.debug:
     msg: >-
       Executor script installed at {{ gitops_dir }}/deploy.sh. Before it can run,
-      clone the repo to {{ gitops_dir }}/repo, place the vault password at
-      {{ gitops_vault_pass }}, and the ansible SSH key at
-      {{ gitops_dir }}/repo/keys/ansible_rsa.private. See role defaults.
+      clone the repo (over SSH, {{ gitops_repo_url }}) to {{ gitops_dir }}/repo,
+      place the vault password at {{ gitops_vault_pass }}, the ansible SSH key at
+      {{ gitops_dir }}/repo/keys/ansible_rsa.private, and — because this repo is
+      PRIVATE — a read-only Gitea deploy key at
+      {{ gitops_dir }}/repo/keys/gitea_deploy_ed25519.private. See role defaults.
   when: not _repo.stat.exists
+
+# Forced command: this key can invoke nothing but gitops-trigger.sh, and that
+# script whitelists the two verbs it accepts (see its own header for the
+# full reasoning — this is the same forced-command idiom as
+# roles/ops/maintenance's n8n key, one authorized_keys block per caller).
+# Skipped while gitops_ci_pubkey is empty so the role stays deployable
+# before the Gitea-side key pair exists.
+- name: Authorise the CI key for the trigger wrapper only
+  become: true
+  ansible.builtin.blockinfile:
+    path: "/home/{{ user }}/.ssh/authorized_keys"
+    marker: "# {mark} ANSIBLE MANAGED — Gitea gitops trigger (forced command)"
+    create: true
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+    block: >-
+      command="{{ gitops_dir }}/gitops-trigger.sh",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
+      {{ gitops_ci_pubkey }}
+  when: gitops_ci_pubkey | length > 0
 
 - name: Install gitops deploy systemd units
   become: true

@@ -39,10 +39,21 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
           git config --global --add safe.directory "$PWD"
+          # The repo is PRIVATE, so an anonymous clone fails with
+          #   fatal: could not read Username for '...': No such device or address
+          # GITEA_TOKEN is injected into every workflow run by Gitea itself and
+          # is scoped to this repository and this run — it is not a standing
+          # credential and does not need to be added as a secret by hand.
+          # act_runner masks it in logs.
+          HOST="${GITHUB_SERVER_URL#*://}"
           git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
+          # Keeps apt from trying dialog/readline frontends it cannot use in a
+          # non-tty job container and emitting eight lines of noise per job.
+          DEBIAN_FRONTEND: noninteractive
           GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
       - name: Install yamllint
         run: pip install --quiet yamllint
       - name: yamllint
@@ -77,10 +88,21 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
           git config --global --add safe.directory "$PWD"
+          # The repo is PRIVATE, so an anonymous clone fails with
+          #   fatal: could not read Username for '...': No such device or address
+          # GITEA_TOKEN is injected into every workflow run by Gitea itself and
+          # is scoped to this repository and this run — it is not a standing
+          # credential and does not need to be added as a secret by hand.
+          # act_runner masks it in logs.
+          HOST="${GITHUB_SERVER_URL#*://}"
           git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
+          # Keeps apt from trying dialog/readline frontends it cannot use in a
+          # non-tty job container and emitting eight lines of noise per job.
+          DEBIAN_FRONTEND: noninteractive
           GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
       - name: Install Ansible + ansible-lint
         run: pip install --quiet ansible ansible-lint
       - name: ansible-lint
@@ -107,10 +129,21 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
           git config --global --add safe.directory "$PWD"
+          # The repo is PRIVATE, so an anonymous clone fails with
+          #   fatal: could not read Username for '...': No such device or address
+          # GITEA_TOKEN is injected into every workflow run by Gitea itself and
+          # is scoped to this repository and this run — it is not a standing
+          # credential and does not need to be added as a secret by hand.
+          # act_runner masks it in logs.
+          HOST="${GITHUB_SERVER_URL#*://}"
           git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
+          # Keeps apt from trying dialog/readline frontends it cannot use in a
+          # non-tty job container and emitting eight lines of noise per job.
+          DEBIAN_FRONTEND: noninteractive
           GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
       - name: Install Ansible
         # The full `ansible` package, not just `ansible-core` — it bundles
         # every community collection this repo's roles use
@@ -175,10 +208,21 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
           git config --global --add safe.directory "$PWD"
+          # The repo is PRIVATE, so an anonymous clone fails with
+          #   fatal: could not read Username for '...': No such device or address
+          # GITEA_TOKEN is injected into every workflow run by Gitea itself and
+          # is scoped to this repository and this run — it is not a standing
+          # credential and does not need to be added as a secret by hand.
+          # act_runner masks it in logs.
+          HOST="${GITHUB_SERVER_URL#*://}"
           git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
+          # Keeps apt from trying dialog/readline frontends it cannot use in a
+          # non-tty job container and emitting eight lines of noise per job.
+          DEBIAN_FRONTEND: noninteractive
           GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
       - name: Install researchd/app dependencies
         run: pip install --quiet -r roles/services/ai/researchd/files/app/requirements.txt pytest
       - name: Test researchd/app

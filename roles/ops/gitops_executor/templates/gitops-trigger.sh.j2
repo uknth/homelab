@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Managed by Ansible — ops/gitops_executor.
+#
+# THIS SCRIPT IS THE SECURITY BOUNDARY OF THE WHOLE GITEA-TRIGGERED DEPLOY
+# DESIGN. It is installed as the `command=` target in authorized_keys for
+# the CI key (gitops_ci_pubkey, see tasks/main.yml) — a forced command, so
+# that key can run NOTHING ELSE, no matter what the caller actually asks
+# for over SSH. The caller's request never reaches real argv; sshd hands it
+# to us as one string in $SSH_ORIGINAL_COMMAND, and from that point on every
+# byte of it is attacker-influenced input, because the caller is a Gitea
+# Actions workflow triggered by a pull_request or a push — i.e. ultimately
+# by whatever a PR's author or a committer put in the repo. Exactly two
+# verbs are accepted:
+#   apply
+#   check <ref>
+# `<ref>` is the one place that input reaches git (deploy.sh's `git
+# checkout`), so it is validated below against an explicit allow-list
+# (full/short SHA, or a conservative safe-branch-name pattern) before it is
+# ever passed on. Anything else — an unknown verb, a ref that fails the
+# pattern, extra arguments, no command at all — is logged and rejected with
+# a non-zero exit. Do not relax the ref pattern for convenience; that
+# pattern is the whole point of this file.
+set -uo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+DEPLOY="{{ gitops_dir }}/deploy.sh"
+LOG="{{ gitops_dir }}/trigger.log"
+
+log() { printf '%s %s\n' "$(date -Is)" "$1" >> "$LOG" 2>/dev/null || true; }
+
+# A conservative allow-list for a git ref, not an attempt to accept every
+# legal ref name. Rejects: empty, anything starting with `-` (so it can
+# never be read as a flag by git downstream), and anything containing `..`
+# (git's own refname rule, and the classic path-escape substring). Accepts
+# either a full/short hex commit SHA, or a branch-name-shaped string built
+# only from [A-Za-z0-9._/-] and not starting with one of the punctuation
+# characters.
+safe_ref() {
+  case "$1" in
+    "") return 1 ;;
+    -*) return 1 ;;
+    *..*) return 1 ;;
+  esac
+  if printf '%s' "$1" | grep -qE '^[0-9a-fA-F]{7,40}$'; then
+    return 0
+  fi
+  printf '%s' "$1" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+}
+
+# Under the forced-command key the caller's request lands here, not in
+# argv — same convention as roles/ops/maintenance's maintenance.sh.j2.
+ARGS="${SSH_ORIGINAL_COMMAND:-}"
+# shellcheck disable=SC2086
+set -- $ARGS
+
+VERB="${1:-}"
+case "$VERB" in
+  apply)
+    if [ "$#" -ne 1 ]; then
+      log "rejected: apply takes no arguments (got: $ARGS)"
+      echo "usage: apply" >&2
+      exit 1
+    fi
+    log "apply"
+    exec "$DEPLOY"
+    ;;
+  check)
+    REF="${2:-}"
+    if [ "$#" -ne 2 ]; then
+      log "rejected: check takes exactly one argument (got: $ARGS)"
+      echo "usage: check <ref>" >&2
+      exit 1
+    fi
+    if ! safe_ref "$REF"; then
+      log "rejected: unsafe ref '$REF'"
+      echo "refusing suspicious ref: $REF" >&2
+      exit 1
+    fi
+    log "check $REF"
+    exec "$DEPLOY" --check "$REF"
+    ;;
+  *)
+    log "rejected: unknown verb '$VERB' (full command: $ARGS)"
+    echo "usage: apply | check <ref>" >&2
+    exit 1
+    ;;
+esac

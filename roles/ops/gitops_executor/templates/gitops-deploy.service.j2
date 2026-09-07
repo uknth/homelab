@@ -1,6 +1,6 @@
 # Managed by Ansible — ops/gitops_executor
 [Unit]
-Description=Homelab GitOps deploy (poll git.sr.ht main -> check/apply)
+Description=Homelab GitOps deploy (hourly backstop reconciliation of {{ gitops_branch }} against Gitea; primary trigger is .gitea/workflows/deploy.yml over SSH)
 After=network-online.target
 Wants=network-online.target
 

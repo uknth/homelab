@@ -1,6 +1,6 @@
 # Managed by Ansible — ops/gitops_executor
 [Unit]
-Description=Poll git.sr.ht for homelab deploys
+Description=Backstop poll of Gitea for a dropped homelab deploy webhook (see gitops_timer_calendar's comment in defaults/main.yml)
 
 [Timer]
 OnCalendar={{ gitops_timer_calendar }}

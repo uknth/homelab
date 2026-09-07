@@ -1,0 +1,62 @@
+---
+# services/productivity/tickets — family helpdesk front-end over Gitea issues,
+# on util01. Same idiom as services/knowledge/vaultask: one Node script, one
+# HTML shell, node:22-slim, no npm install / package.json / dependencies —
+# stdlib and global fetch only, node:sqlite for storage.
+#
+# Design decision (not up for relitigating here): there is ONE source of
+# truth, the Gitea issue. Every page renders live from Gitea's API on each
+# load — no sync job, no webhook, no mirrored copy of comments. SQLite holds
+# ONLY a token -> issue-number lookup, so ticket URLs are unguessable without
+# a Gitea account existing for every family member. See tasks/main.yml for
+# how the bot token is kept out of the browser and out of `docker inspect`.
+
+tickets_root_dir: "{{ service_root }}/tickets"
+tickets_image: "node:22-slim"
+tickets_port: 8103
+
+# Arbitrary, self-contained pair — this role owns its whole data dir and
+# mounts nothing that belongs to another uid (unlike vaultask, which aligns
+# to media_uid/gid because it reads the media pipeline's output). Same
+# posture as researchd_uid/gid and gitea_uid/gid: pick one, chown the dirs
+# below to match, done.
+tickets_uid: 1000
+tickets_gid: 1000
+
+# --- Gitea -----------------------------------------------------------------
+# Derived from the inventory + the existing gitea role's port rather than
+# hardcoded, same pattern as researchd_llm_base_url / vaultask_llm_base_url
+# deriving from omlx_host/omlx_port. gitea_http_port is a role default
+# (roles/services/development/gitea/defaults/main.yml) that does not cross
+# plays, and util01's play never loads that role — the `default(8102)` is
+# load-bearing, not decorative.
+tickets_gitea_host: "{{ hostvars['cmp01'].ansible_host }}"
+tickets_gitea_port: "{{ gitea_http_port | default(8102) }}"
+tickets_gitea_base_url: "http://{{ tickets_gitea_host }}:{{ tickets_gitea_port }}"
+tickets_gitea_owner: "uknth"
+tickets_gitea_repo: "tickets"
+
+# The bot token already exists on util01 (created out of band — see the
+# comment in tasks/main.yml) at this path, mode 0600. Read with slurp, never
+# templated into the image or into `environment:` in compose.
+tickets_bot_token_file: "{{ tickets_root_dir }}/.bot_token"
+
+# token -> issue number lookup only. Bind-mounted read-write (this is the
+# one piece of state this role owns outright); everything else in the UI is
+# fetched live from Gitea on every request.
+tickets_data_dir: "{{ tickets_root_dir }}/data"
+
+# Category dropdown -> existing Gitea label (repo already has all of these).
+# Every created issue additionally gets tickets_via_form_label below, so a
+# ticket raised through this form is always distinguishable in Gitea from
+# one filed directly.
+tickets_categories:
+  - { value: "internet", label: "Internet / Wi-Fi" }
+  - { value: "tv-media", label: "TV / Media" }
+  - { value: "printer", label: "Printer" }
+  - { value: "device", label: "Device / Computer" }
+  - { value: "account", label: "Account / Login" }
+  - { value: "request", label: "General request" }
+  - { value: "urgent", label: "Urgent" }
+
+tickets_via_form_label: "via-form"

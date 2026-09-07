@@ -1,0 +1,57 @@
+---
+# .gitea/workflows/deploy.yml — the primary GitOps trigger. Every push to
+# master (i.e. every PR merge, since master is otherwise protected by
+# pr-dryrun.yml's dry-run + normal review) SSHes into util01 with the
+# gitops trigger key (roles/ops/gitops_executor) and asks the executor to
+# `apply`: pull master, `--check --diff`, then apply — see
+# roles/ops/gitops_executor/templates/deploy.sh.j2 for that script's own
+# contract. The hourly systemd timer on util01 (gitops_timer_calendar) is
+# only a backstop for a run this workflow fails to trigger; this workflow
+# is the fast path.
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+
+# Serialises deploys, deliberately WITHOUT cancelling one in progress: two
+# merges landing close together must run one after the other, not
+# concurrently against the same checkout (deploy.sh's own flock also
+# guards this, but queuing here means the second push's job doesn't even
+# start until the first is done, rather than starting and then blocking).
+# cancel-in-progress: true would be wrong here — it would abort a
+# `site.yml` apply mid-run, which can leave a service half-configured;
+# that is fine to guard against for a superseded PR dry-run
+# (pr-dryrun.yml), never for a real apply.
+concurrency:
+  group: gitops-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger `apply` on util01
+        env:
+          GITOPS_TRIGGER_KEY: ${{ secrets.GITOPS_TRIGGER_KEY }}
+        run: |
+          set -eu
+          # See pr-dryrun.yml's identical step for why this fallback exists
+          # rather than being assumed present.
+          command -v ssh >/dev/null 2>&1 || {
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends openssh-client >/dev/null
+          }
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$GITOPS_TRIGGER_KEY" > ~/.ssh/gitops_trigger
+          chmod 600 ~/.ssh/gitops_trigger
+
+          # No output capture here on purpose: deploy.sh's own stdout/stderr
+          # (and its own ntfy notification) stream straight into this job's
+          # log as-is, and `set -eu` fails this step — and therefore the
+          # job, in red — the moment the executor's exit code is non-zero,
+          # exactly as gitops-trigger.sh's `exec "$DEPLOY"` propagates it.
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+              -i ~/.ssh/gitops_trigger ansible@10.0.2.8 "apply"

@@ -1,0 +1,124 @@
+---
+# .gitea/workflows/pr-dryrun.yml — dry-run the fleet against a PR's exact
+# head commit before anyone merges it, on cmp01's Gitea Actions runner (see
+# roles/services/development/gitea_runner). Unlike every job in ci.yml, this
+# one reaches PAST the runner container: it SSHes into util01 with the
+# gitops trigger key (roles/ops/gitops_executor) and asks the executor
+# there to run `ansible-playbook site.yml --check --diff` against this PR's
+# commit, then posts the outcome back as a PR comment via the Gitea API.
+#
+# Deliberately its own workflow file, not a job bolted onto ci.yml — ci.yml
+# is documented as static-only ("nothing reads a vault password, an SSH
+# key, or touches a real host"; see its own header), and this job is the
+# opposite of that on purpose. It runs independently of ci.yml's jobs
+# (in parallel, triggered by the same `pull_request` event) rather than
+# waiting on them: Gitea Actions' `needs:` only orders jobs within ONE
+# workflow file, so there is no way to depend on another workflow's jobs
+# without merging the two files, which the "don't restructure ci.yml, add
+# siblings" brief for this change explicitly rules out. ci.yml's checks are
+# cheap and static; this one is the one worth seeing fail on its own.
+#
+# WHY THIS IS NOT A STATIC CHECK, AND WHY THE FORK GUARD BELOW IS
+# LOAD-BEARING: --check is NOT inert in this repo. Several tasks set
+# `check_mode: false` deliberately because the thing they do cannot be
+# represented as a diff — SearXNG's secret key
+# (roles/services/ai/researchd), Gitea's admin password
+# (roles/services/development/gitea), Paperless's API token
+# (roles/services/productivity paperless-ai integration) — and those tasks
+# EXECUTE, for real, during a "dry run". A pull_request workflow loads its
+# OWN yaml from the base branch (master), so a malicious PR cannot rewrite
+# this file to do something else — but the PR's head commit still becomes
+# the exact ref checked out and run with those real side effects. That is
+# an acceptable risk for a branch pushed by someone who could already push
+# to master; it is NOT acceptable for a fork, which would otherwise get an
+# untrusted commit executed against the fleet using this workflow's own
+# trigger key. Hence the `if:` below, enforced as a condition — not left as
+# a comment — restricting this job to PRs whose head repo IS this repo.
+name: PR dry-run
+
+on:
+  pull_request:
+    branches: [master]
+
+# One in-flight dry-run per PR: a fast-follow push to the same PR should
+# replace the previous check, not queue behind it (unlike deploy.yml, where
+# queuing rather than cancelling is the point).
+concurrency:
+  group: pr-dryrun-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dryrun:
+    runs-on: ubuntu-latest
+    # Same-repo branches only — see the header comment above. A PR opened
+    # from a fork carries a head.repo.full_name different from this repo's
+    # own, so this condition is false and the job is skipped (not failed):
+    # the PR still gets ci.yml's result, just no fleet-reaching dry-run.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Trigger `check <head-sha>` on util01
+        id: check
+        env:
+          GITOPS_TRIGGER_KEY: ${{ secrets.GITOPS_TRIGGER_KEY }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          # docker.gitea.com/runner-images:ubuntu-latest (what a bare
+          # `runs-on: ubuntu-latest` maps to — see gitea_runner_labels in
+          # roles/services/development/gitea_runner/defaults/main.yml)
+          # ships openssh-client already; this is a defensive fallback only,
+          # matching ci.yml's own install-what-you-need posture rather than
+          # assuming a specific image build.
+          command -v ssh >/dev/null 2>&1 || {
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends openssh-client >/dev/null
+          }
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$GITOPS_TRIGGER_KEY" > ~/.ssh/gitops_trigger
+          chmod 600 ~/.ssh/gitops_trigger
+
+          set +e
+          # ServerAlive* matches ansible.cfg's own [ssh_connection] keepalive
+          # settings — a `--check --diff` run over the whole fleet can sit
+          # quiet for a long stretch, and without keepalives the connection
+          # gets torn down mid-run (see ansible.cfg's comment for the
+          # observed failure mode this is copied from).
+          OUTPUT=$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+                       -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+                       -i ~/.ssh/gitops_trigger ansible@10.0.2.8 "check ${HEAD_SHA}" 2>&1)
+          RC=$?
+          set -e
+          echo "$OUTPUT"
+          {
+            echo "result<<GITOPS_DRYRUN_EOF"
+            echo "$OUTPUT"
+            echo "GITOPS_DRYRUN_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit "$RC"
+
+      - name: Comment the outcome on the PR
+        if: always()
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          OUTCOME: ${{ steps.check.outcome }}
+          RESULT: ${{ steps.check.outputs.result }}
+        run: |
+          set -eu
+          command -v jq >/dev/null 2>&1 || {
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends jq >/dev/null
+          }
+          BODY=$(printf 'Fleet dry-run (`site.yml --check --diff` @ `%s`): **%s**\n\n```\n%s\n```\n' \
+                   "$HEAD_SHA" "$OUTCOME" "$(printf '%s' "$RESULT" | tail -c 3000)")
+          PAYLOAD=$(jq -n --arg body "$BODY" '{body: $body}')
+          curl -fsS -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            >/dev/null

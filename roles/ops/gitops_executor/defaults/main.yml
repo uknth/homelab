@@ -1,29 +1,97 @@
 ---
 # ops/gitops_executor — turns util01 into the on-LAN deploy executor.
 #
-# n8n (also on util01) polls git.sr.ht for a new `main` commit and runs the
-# deploy script below, which git-pulls, does a --check dry-run, optionally
-# applies, and notifies ntfy. Ansible runs from a dedicated venv here (not the
-# system), against the repo clone. SAFE BY DEFAULT: dry-run only unless
-# gitops_auto_apply is true.
+# TRIGGER MODEL (2026-09): Gitea (git.puhome.net, cmp01) is the fleet's
+# source of truth. A merge to master runs .gitea/workflows/deploy.yml on
+# cmp01's Actions runner, which SSHes in here and asks for `apply`; a PR
+# against master runs .gitea/workflows/pr-dryrun.yml, which asks for
+# `check <head-sha>` before anyone merges. Both reach this host through
+# gitops-trigger.sh (see templates/), a forced-command wrapper that is the
+# ONLY thing the CI key (gitops_ci_pubkey below) can run — see that
+# template's own header for why it is the security boundary of this design.
+# git.sr.ht is now only a MIRROR: it used to be what a systemd timer polled
+# for a new commit, but polling it was watching the wrong repo once Gitea
+# became canonical, which is why gitops_repo_url below points at Gitea. The
+# timer that remains is a reconciliation BACKSTOP for a dropped webhook, not
+# the primary trigger — see gitops_timer_calendar below. Ansible runs from a
+# dedicated venv here (not the system), against the repo clone.
 #
 # Out-of-band prerequisites on util01 (secrets, never in git):
-#   - {{ gitops_dir }}/repo               : `git clone` of git.sr.ht:~uknth/homelab
-#     (read-only sr.ht deploy key, or public https)
+#   - {{ gitops_dir }}/repo               : `git clone` of gitops_repo_url
+#   - {{ gitops_deploy_key }} : a READ-ONLY
+#     Gitea deploy key for uknth/homelab (the repo is PRIVATE — an anonymous
+#     or push-capable key both fail/over-reach here). Provisioning this key,
+#     on both the Gitea side (deploy key) and this path, is being done by
+#     hand; this role deliberately does not generate or install it — see
+#     deploy.sh.j2's GIT_SSH_COMMAND for where it gets used.
+#
+#     It lives OUTSIDE the clone, deliberately. The fleet's other keys sit in
+#     repo/keys/, but this one is the key used TO MAKE the clone — putting it
+#     inside would mean a fresh host cannot clone without a key that only
+#     exists once it has cloned. It also survives a re-clone or a git clean.
+#
+#     It MUST be owned by the account the executor runs as, not by whoever
+#     copied it there. Installed as the wrong owner it is unreadable at 0600
+#     and every fetch fails with "Please make sure you have the correct access
+#     rights and the repository exists" — which reads like a Gitea permissions
+#     problem and is not one. Cost a debugging round on 2026-09-07.
 #   - ~/.config/homelab/.vault_pass       : ansible vault password (chmod 600)
 #   - {{ gitops_dir }}/repo/keys/ansible_rsa.private     : ansible SSH key (keys/ is git-ignored)
 #   - {{ gitops_dir }}/repo/keys/restic_backup_ed25519  : Synology backup key (ops/restic)
 
 gitops_dir: "{{ service_root }}/gitops"          # /opt/homelab/gitops
-gitops_repo_url: "git@git.sr.ht:~uknth/homelab"
+gitops_deploy_key: "{{ gitops_dir }}/.gitea_deploy_key"   # read-only Gitea clone key
+
+# The Gitea host, kept as its own var rather than inlined into
+# gitops_repo_url below so nothing else has to know the clone URL's shape to
+# reuse the hostname (e.g. a future health check). Matches gitea_ssh_domain
+# in roles/services/development/gitea/defaults/main.yml — that role's own
+# vars aren't reachable from util01's play, so this is deliberately
+# re-derived from base_domain rather than imported.
+gitops_git_host: "ssh.git.{{ base_domain }}"
+
+# Gitea over SSH (portless — see the gitea role's gitops_git_host comment
+# above), NOT git.sr.ht. sr.ht is a mirror only now; the executor must watch
+# the repo that PRs and merges actually happen against, and that is Gitea.
+gitops_repo_url: "git@{{ gitops_git_host }}:uknth/homelab.git"
+
 gitops_branch: "master"   # repo default branch (override per-need)
-gitops_auto_apply: false                          # dry-run only until you flip this
+
+# The human gate moved from this flag to the PR merge itself: a change only
+# reaches master (and therefore this executor) after a merge, and
+# .gitea/workflows/pr-dryrun.yml already forces a `--check --diff` dry-run
+# against every PR before that merge happens. Leaving this false would just
+# add a SECOND, redundant gate that nobody remembers to flip, while the
+# timer below (and every push-triggered deploy) silently piles up
+# unapplied dry-runs. True is the correct steady state now, not a
+# loosening — do not read the var name as still meaning "unattended and
+# unreviewed".
+gitops_auto_apply: true
+
 gitops_ntfy_url: "http://localhost:8091/homelab-deploy"
 gitops_vault_pass: "/home/{{ user }}/.config/homelab/.vault_pass"   # on util01, the executor user's home
 
-# Polling trigger: a systemd timer runs deploy.sh on a schedule (the robust,
-# no-extra-credentials option vs n8n SSH-ing into the host). Disabled by default
-# — enable once the repo clone + secret files are in place. deploy.sh is dry-run
-# only unless gitops_auto_apply is also true.
-gitops_timer_enabled: true    # dry-run poll on; auto-apply below stays off
-gitops_timer_calendar: "*:0/10"    # every 10 minutes
+# Systemd timer trigger: now a BACKSTOP, not the primary path. The primary
+# path is .gitea/workflows/deploy.yml calling gitops-trigger.sh over SSH the
+# moment master moves, which is near-instant and event-driven. This timer
+# exists only to catch the case where that webhook never arrives (runner
+# down, network blip, a manual git push that bypassed the workflow) —
+# deploy.sh's own up-to-date check makes every other tick a no-op, so it
+# costs nothing to leave running.
+gitops_timer_enabled: true
+# Hourly ("*:0" = top of every hour), NOT the old every-10-minutes. A tight
+# poll made sense when polling WAS the trigger; now that the event path
+# (above) is the fast one, a 10-minute poll would just race the webhook on
+# every single merge for no benefit, and add noise (a fetch + up-to-date
+# check every 10 minutes, forever) for a backstop that only ever needs to
+# fire when something already went wrong. Hourly is frequent enough that a
+# dropped webhook self-heals within the hour, and rare enough to actually
+# read as "backstop" rather than "poller".
+gitops_timer_calendar: "*:0"
+
+# The CI public key authorised to run gitops-trigger.sh (forced command —
+# see tasks/main.yml and templates/gitops-trigger.sh.j2). Empty by default
+# so this role stays deployable before that key exists; the corresponding
+# private key is a Gitea Actions secret (GITOPS_TRIGGER_KEY), never in this
+# repo. Set this once the key pair exists on the Gitea side.
+gitops_ci_pubkey: ""

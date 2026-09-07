@@ -22,6 +22,13 @@ nginx_sites:
   # n8n — own auth + receives webhooks (phase 7 GitOps); not forward-authed.
   - { name: n8n,        upstream: "http://10.0.2.8:5678", sso: false }
   - { name: git,        upstream: "http://10.0.2.5:8102", sso: false }   # Gitea — own auth; forward-auth breaks git-over-HTTPS and the API
+  # Family helpdesk. `sso: false` is THE POINT, not an oversight: the whole
+  # purpose is that family members file and read tickets without a login, and
+  # forward-auth would defeat it. Acceptable only because this fleet's
+  # subdomains do not resolve publicly (verified: git.puhome.net has no public
+  # A record), so an unauthenticated write endpoint stays on the LAN. Revisit
+  # this line if that ever changes.
+  - { name: help,       upstream: "http://10.0.2.8:8103", sso: false }   # tickets (util01)
   # ssh.git exists only to carry Gitea's SSH listener (see blocky's
   # blocky_extra_mappings). Anyone reaching it over HTTP has typed the wrong
   # thing; bounce them to the web UI rather than a connection error.

@@ -60,3 +60,12 @@
 
     - role: services/productivity/syncthing
       tags: [syncthing, sync, backup-source]
+
+
+    # Family helpdesk: a read/write front-end over Gitea issues in
+    # uknth/tickets, so family members can raise a ticket and read replies
+    # WITHOUT a Gitea account and without Gitea being reachable by them.
+    # Depends on services/development/gitea (on cmp01) being up for its API,
+    # and on the ticket-bot token already present at tickets_bot_token_file.
+    - role: services/productivity/tickets
+      tags: [tickets, helpdesk, productivity]
