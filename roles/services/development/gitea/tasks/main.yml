@@ -30,7 +30,18 @@
     group: "{{ gitea_gid }}"
     mode: "0755"
 
-# The admin account's password. Generated once and persisted on disk (NOT a
+# The admin account's BOOTSTRAP password, and only that. It is used once, to
+# create the account on a fresh instance; the moment the account exists it is
+# the running Gitea that owns the password, not this file. Changing it in the
+# UI is expected and does NOT make the deployment drift — the create command
+# below is a no-op from then on, and this file simply goes stale. It is kept
+# so a rebuild from an empty volume can still be logged into.
+#
+# Do NOT move this into the vault. That would imply Ansible manages the
+# password, and the only way to make that true is to reset it on every run —
+# silently overwriting whatever the user set.
+#
+# Generated once and persisted on disk (NOT a
 # vault secret — this role must not require editing hosts/group_vars/all/
 # vault.yml, which is encrypted) so re-running the role doesn't rotate it out
 # from under the one person who uses this instance.
