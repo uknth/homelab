@@ -118,6 +118,82 @@
     mode: "0640"
   notify: Restart gitea
 
+# The ssh-redirect sidecar's own config — no secrets in it either (the cert
+# and key live as separate files under gitea_tls_dir, mounted in directly;
+# see the TLS block below), so it needs no no_log of its own.
+- name: Template the ssh-redirect nginx config
+  become: true
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ gitea_compose_dir }}/nginx.conf"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart gitea ssh redirect
+
+# --- TLS for the ssh.git redirect vhost --------------------------------------
+# cmp01 has no certificate of its own and the fleet has NO cert-distribution
+# mechanism — certbot (roles/services/network/certbot) runs on gw01 only.
+# This reads gw01's live cert/key over SSH at PLAY TIME and drops a copy
+# under gitea_tls_dir for the sidecar to mount read-only.
+#
+# Read that as "copied whenever this play runs", NOT "kept in sync with
+# renewal". certbot renews on its own systemd timer on gw01, independent of
+# any Ansible run; between a renewal there and the next time this play
+# touches cmp01, this copy is stale. The blast radius of that staleness is
+# small and specific: ONLY ssh.git.{{ base_domain }}'s :443 redirect serves
+# the outdated cert until the next run refreshes it — every other name in the
+# fleet is terminated at gw01 directly, straight from certbot's own copy, and
+# is unaffected. A renewal hook that pushes a fresh cert here the moment
+# certbot rotates it is a real, deliberate follow-up — this task does not
+# attempt it, and this is not a fully-solved TLS story for this vhost.
+- name: Create the gitea TLS dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ gitea_tls_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+
+- name: Read gw01's certificate covering ssh.git.{{ base_domain }}
+  become: true
+  delegate_to: gw01
+  ansible.builtin.slurp:
+    src: "{{ gitea_tls_source_cert }}"
+  register: _gitea_tls_cert_slurp
+
+# no_log: true on this and the write below — ops/gitops_executor writes
+# `--check --diff` output to a file, and a private key must never land there.
+- name: Read gw01's private key covering ssh.git.{{ base_domain }}
+  become: true
+  delegate_to: gw01
+  ansible.builtin.slurp:
+    src: "{{ gitea_tls_source_key }}"
+  register: _gitea_tls_key_slurp
+  no_log: true
+
+- name: Write the ssh.git redirect vhost's certificate
+  become: true
+  ansible.builtin.copy:
+    content: "{{ _gitea_tls_cert_slurp.content | b64decode }}"
+    dest: "{{ gitea_tls_cert_file }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart gitea ssh redirect
+
+- name: Write the ssh.git redirect vhost's private key
+  become: true
+  ansible.builtin.copy:
+    content: "{{ _gitea_tls_key_slurp.content | b64decode }}"
+    dest: "{{ gitea_tls_key_file }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart gitea ssh redirect
+
 - name: Deploy gitea
   become: true
   community.docker.docker_compose_v2:

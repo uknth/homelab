@@ -28,11 +28,15 @@ blocky_extra_mappings:
   router.host.puhome.net: "10.0.2.1"
   # Gitea's SSH listener. `git.puhome.net` resolves to the reverse proxy and
   # serves the web UI and git-over-HTTPS; SSH cannot go through it, because
-  # nginx here proxies HTTP only. This alias points at Gitea's host directly
-  # so the SSH remote reads `git@ssh.git.puhome.net:2222`. Named `ssh.git.*`
-  # rather than `git.host.*` so it reads as "the SSH layer of git.puhome.net"
-  # rather than as an unrelated host record.
-  ssh.git.puhome.net: "10.0.2.5"
+  # nginx here proxies HTTP only. This points at the ssh-redirect sidecar's
+  # OWN macvlan IP (roles/services/development/gitea, gitea_ssh_ip) rather
+  # than at cmp01 (10.0.2.5) itself — cmp01's own sshd already owns
+  # 0.0.0.0:22, so the portless clone URL
+  # (`git@ssh.git.puhome.net:uknth/homelab.git`, no port suffix) has to land
+  # on a DIFFERENT address that has its own, unrelated port 22. Named
+  # `ssh.git.*` rather than `git.host.*` so it reads as "the SSH layer of
+  # git.puhome.net" rather than as an unrelated host record.
+  ssh.git.puhome.net: "10.0.2.18"
 
 # Pin specific hostnames to a working IP (workaround for broken anycast edges).
 # GitHub's CDN (*.githubusercontent.com) round-robins 185.199.108-111.133;

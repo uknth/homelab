@@ -1,0 +1,42 @@
+# Managed by Ansible — services/development/gitea (ssh-redirect sidecar)
+#
+# One nginx process does two unrelated jobs here, because nginx:alpine ships
+# the stream module compiled in already — see gitea_ssh_redirect_image in
+# defaults/main.yml for why a second container would be pure overhead.
+
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+# L4/TCP: makes THIS container's own port 22 (on {{ gitea_ssh_ip }}) a
+# transparent pass-through to Gitea's container port 22. Reached by compose
+# service name on the project's own (bridge) network — NOT via the host's
+# {{ gitea_ssh_host_port }} publish, which would be a pointless extra hop out
+# to the host and back, and would break the day that publish is dropped.
+stream {
+    server {
+        listen 22;
+        proxy_pass gitea:22;
+    }
+}
+
+# L7/HTTP: anyone who points a browser (or `git clone https://...`) at
+# ssh.git.{{ base_domain }} gets bounced to the real web UI, rather than a
+# connection error or, worse, a cert name-mismatch.
+http {
+    server {
+        listen 80;
+        listen 443 ssl;
+        server_name ssh.git.{{ base_domain }};
+
+        # Play-time copy of gw01's cert/key for *.git.{{ base_domain }} — see
+        # the TLS task block in tasks/main.yml for the staleness caveat
+        # (refreshed on the next play run, not on renewal).
+        ssl_certificate     /etc/nginx/tls/fullchain.pem;
+        ssl_certificate_key /etc/nginx/tls/privkey.pem;
+
+        return 301 https://git.{{ base_domain }}$request_uri;
+    }
+}

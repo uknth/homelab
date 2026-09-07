@@ -15,7 +15,11 @@ services:
       - gitea.env
     ports:
       - "{{ gitea_http_port }}:3000"
-      - "{{ gitea_ssh_port }}:22"
+      # Redundant now that ssh-redirect/gitea_ssh_ip carries the advertised
+      # clone URL (see gitea_ssh_host_port in defaults/main.yml) — kept only
+      # so the pre-macvlan URL keeps working during the transition. Drop once
+      # nobody uses ssh.git.{{ base_domain }}:{{ gitea_ssh_host_port }}.
+      - "{{ gitea_ssh_host_port }}:22"
     volumes:
       # /data: app.ini, the SQLite db, sessions — LOCAL disk. See the storage
       # split comment in defaults/main.yml before "fixing" this.
@@ -29,3 +33,46 @@ services:
       # log lines) agree with the rest of the fleet.
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+
+  # Portless SSH for ssh.git.{{ base_domain }} + its HTTPS redirect — one
+  # nginx:alpine container, two jobs. See gitea_ssh_ip and
+  # gitea_ssh_redirect_image in defaults/main.yml for why, and
+  # templates/nginx.conf.j2 for what it actually runs.
+  ssh-redirect:
+    image: {{ gitea_ssh_redirect_image }}
+    container_name: {{ gitea_ssh_redirect_container_name }}
+    restart: unless-stopped
+    depends_on:
+      - gitea
+    networks:
+      # The project's own (bridge) network — how this container reaches
+      # Gitea by its compose service name, on Gitea's CONTAINER port 22,
+      # instead of bouncing back out to the host's
+      # {{ gitea_ssh_host_port }} publish and in again.
+      default: {}
+      # The macvlan network below — this container's OWN LAN address,
+      # independent of cmp01's own network stack.
+      lan:
+        ipv4_address: {{ gitea_ssh_ip }}
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Play-time copy of gw01's cert/key — see the TLS task block in
+      # tasks/main.yml for the staleness caveat (not a live subscription to
+      # certbot's renewals).
+      - {{ gitea_tls_dir }}:/etc/nginx/tls:ro
+
+networks:
+  # Gives ssh-redirect a real LAN IP with its own network stack, so it has
+  # its own port 22 without ever touching cmp01's sshd (which already owns
+  # 0.0.0.0:22) — see gitea_ssh_ip in defaults/main.yml.
+  lan:
+    driver: macvlan
+    driver_opts:
+      # Taken from cmp01's live network config — see gitea_macvlan_parent_iface
+      # in defaults/main.yml. Do not "correct" the /8 mask below to /24.
+      parent: "{{ gitea_macvlan_parent_iface }}"
+    ipam:
+      config:
+        - subnet: "{{ gitea_macvlan_subnet }}"
+          ip_range: "{{ gitea_macvlan_ip_range }}"
+          gateway: "{{ gitea_macvlan_gateway }}"

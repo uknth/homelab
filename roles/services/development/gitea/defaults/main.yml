@@ -70,15 +70,104 @@ gitea_container_name: "gitea"
 # Both free in this fleet — checked against every `*_port` default across
 # roles/ before picking them (see the task's verification step).
 gitea_http_port: 8102
-gitea_ssh_port: 2222
+
+# The HOST publish of Gitea's container port 22 (docker-compose.yml.j2's
+# `ports:`). Kept only so the OLD clone URL (`ssh.git.{{ base_domain }}:2222`)
+# keeps working during the transition to the portless one below — it is now
+# redundant with the macvlan sidecar and can be dropped once nobody uses it.
+gitea_ssh_host_port: 2222
+
+# The port clone URLs now ADVERTISE (GITEA__server__SSH_PORT). Plain 22,
+# because clones go through gitea_ssh_ip's own port 22 (the macvlan sidecar
+# below), not through gitea_ssh_host_port anymore. This is a DIFFERENT thing
+# from SSH_LISTEN_PORT (gitea.env.j2), which is what the container itself
+# binds and stays 22 always — conflating the two is exactly how a clone URL
+# ends up lying about how to reach it.
+gitea_ssh_advertised_port: 22
 
 # The host clone-over-SSH URLs must point at, and it is NOT gitea_domain.
 # `git.{{ base_domain }}` resolves to gw01, which terminates HTTPS for the web
-# UI and speaks nothing on 2222; Gitea's SSH listener is published on THIS
-# host. Advertising the proxy name would hand out clone URLs that cannot
-# connect. `<host>.host.<domain>` is the fleet's direct-to-host convention
-# (see docs/HANDOFF.md routing note).
+# UI and cannot also speak SSH (nginx there proxies HTTP only). This name
+# instead resolves straight to gitea_ssh_ip below (see blocky's
+# blocky_extra_mappings) — Gitea's own dedicated LAN IP, not cmp01's, and not
+# gw01's. Advertising the proxy name would hand out clone URLs that cannot
+# connect.
 gitea_ssh_domain: "ssh.git.{{ base_domain }}"
+
+# --- Portless SSH: a dedicated LAN IP via Docker macvlan ---------------------
+# cmp01's own sshd binds 0.0.0.0:22, so nothing else on that HOST can also own
+# port 22 — there is no way to publish a second, unrelated :22 on cmp01's own
+# address. A Docker macvlan network sidesteps the conflict entirely instead of
+# working around it: it gives one container a REAL LAN IP with its OWN network
+# stack, so that container has its own port 22, completely independent of (and
+# never touching) cmp01's sshd. This is the only way to get a portless clone
+# URL here without moving the host's sshd — do not substitute a host port
+# remap or an iptables trick for it.
+#
+# Chosen by the user, verified free and outside the DHCP pool.
+gitea_ssh_ip: "10.0.2.18"
+
+# Parent interface + subnet/gateway for the macvlan network, both taken
+# directly from cmp01's live `ip -4 addr show enp42s0` on 2026-09-07 — the
+# mask really is /8 on this host (not the usual /24); do not "correct" it.
+gitea_macvlan_parent_iface: "enp42s0"
+# 10.0.0.0/8, not 10.0.2.0/8: a /8's network address has the last three
+# octets zero, and Docker rejects a subnet with host bits set outright
+# ("invalid CIDR address"). The mask really is /8 — cmp01's own address is
+# 10.0.2.5/8 — so this describes the LAN correctly; it is only the network
+# address that has to be written properly.
+gitea_macvlan_subnet: "10.0.0.0/8"
+
+# Constrains Docker's IPAM to exactly the one address we hand out. Without it
+# Docker believes it owns the whole of 10.0.0.0/8 and is free to allocate any
+# address in it to a future container — i.e. straight on top of a live host.
+gitea_macvlan_ip_range: "{{ gitea_ssh_ip }}/32"
+gitea_macvlan_gateway: "10.0.2.1"
+
+# --- ssh.git sidecar: SSH proxy + HTTPS redirect, one container -------------
+# A single nginx:alpine container on gitea_ssh_ip does BOTH jobs, because
+# nginx:alpine ships the stream module compiled in already — standing up a
+# second container just to avoid sharing one would be pure overhead:
+#   - stream{} on :22   -> proxy_pass to Gitea's container port 22, reached by
+#     compose service name on the project's own (bridge) network. NOT via
+#     gitea_ssh_host_port on the host — going back out to the host and in
+#     again would be a pointless hop, and would break the day that publish is
+#     dropped (see the comment on it above).
+#   - http{} on :80/:443 -> 301 to https://git.{{ base_domain }}, for anyone
+#     who types the SSH name into a browser.
+# See templates/nginx.conf.j2 for the actual config, and tasks/main.yml for
+# where its TLS cert/key come from.
+gitea_ssh_redirect_container_name: "gitea-ssh-redirect"
+
+# Pinned by tag+digest, same posture as gitea_image above and searxng_image in
+# roles/services/ai/researchd/defaults/main.yml — the digest is the
+# manifest-LIST digest (not a per-platform one), confirmed to include
+# linux/amd64 (cmp01 is a Debian PC, not arm) by fetching Docker Hub's
+# registry API for this manifest list directly on 2026-09-07. Bump by hand.
+gitea_ssh_redirect_image_repo: "nginx"
+gitea_ssh_redirect_image_tag: "alpine"
+gitea_ssh_redirect_image_digest: "sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3"
+gitea_ssh_redirect_image: "{{ gitea_ssh_redirect_image_repo }}:{{ gitea_ssh_redirect_image_tag }}@{{ gitea_ssh_redirect_image_digest }}"
+
+# --- TLS for the ssh.git redirect vhost --------------------------------------
+# cmp01 has no certificate of its own and the fleet has NO cert-distribution
+# mechanism. certbot on gw01 (roles/services/network/certbot) is the only
+# place *.git.{{ base_domain }} is actually issued — that SAN exists
+# specifically for this name (a wildcard SAN matches exactly one label, so
+# *.{{ base_domain }} alone does not cover ssh.git.{{ base_domain }}, two
+# labels deep). See tasks/main.yml for the full staleness caveat around
+# copying it here.
+gitea_tls_dir: "{{ gitea_root_dir }}/tls"
+gitea_tls_cert_file: "{{ gitea_tls_dir }}/fullchain.pem"
+gitea_tls_key_file: "{{ gitea_tls_dir }}/privkey.pem"
+
+# Source paths on gw01. certbot_cert_name (services/network/certbot/defaults)
+# is base_domain, so this is where certbot actually writes the lineage that
+# covers *.git.{{ base_domain }} — kept as plain base_domain-derived paths
+# here rather than depending on the certbot role's own vars, since cmp01's
+# play never loads that role.
+gitea_tls_source_cert: "/etc/letsencrypt/live/{{ base_domain }}/fullchain.pem"
+gitea_tls_source_key: "/etc/letsencrypt/live/{{ base_domain }}/privkey.pem"
 
 # --- Image ------------------------------------------------------------------
 # Pinned by tag+digest, same posture as searxng_image in
