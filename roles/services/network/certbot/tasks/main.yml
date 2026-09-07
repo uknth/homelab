@@ -39,13 +39,40 @@
          + (['--staging'] if certbot_staging else [])
          + (certbot_domains | map('regex_replace', '^(.*)$', '--domain=\1') | list) }}
 
+# What SANs the CURRENT certificate actually carries. Needed because the issue
+# step below used to be guarded by `creates:` on the cert file, which meant it
+# ran exactly once, ever: after that, adding a name to certbot_domains changed
+# the repo and nothing else, silently, forever. The variable looked declarative
+# and was not. Found when *.git.puhome.net was added and the cert kept serving
+# only *.puhome.net.
+- name: Read the current certificate's SANs
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      openssl x509 -in /etc/letsencrypt/live/{{ certbot_cert_name }}/fullchain.pem
+      -noout -ext subjectAltName
+  register: _certbot_sans
+  changed_when: false
+  failed_when: false
+
+- name: Work out whether the desired domains are already covered
+  ansible.builtin.set_fact:
+    _certbot_missing_domains: >-
+      {{ certbot_domains
+         | reject('in', (_certbot_sans.stdout | default('')
+                          | regex_findall('DNS:([^,\s]+)')))
+         | list }}
+
+# Runs when the cert is absent OR when certbot_domains names something the
+# current cert does not cover. `--expand` is what lets certbot add a SAN to an
+# existing lineage rather than refusing as a duplicate.
 - name: Request/renew the wildcard certificate
   become: true
   ansible.builtin.command:
-    argv: "{{ _certbot_argv }}"
-    creates: "/etc/letsencrypt/live/{{ certbot_cert_name }}/fullchain.pem"
+    argv: "{{ _certbot_argv + ['--expand'] }}"
   register: _certbot
   no_log: true
+  when: _certbot_sans.rc != 0 or _certbot_missing_domains | length > 0
 
 - name: Ensure the certbot renewal timer is enabled
   become: true

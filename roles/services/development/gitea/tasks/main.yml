@@ -68,6 +68,11 @@
     openssl rand -hex 24 > {{ gitea_admin_password_file }}
   args:
     creates: "{{ gitea_admin_password_file }}"
+    # bash explicitly: `set -o pipefail` is a bashism, and on Debian /bin/sh is
+    # dash, which rejects it outright ("Illegal option -o pipefail"). This role
+    # was written against ctl01 (macOS) where /bin/sh accepts it, so the bug
+    # only surfaced when Gitea moved to cmp01.
+    executable: /bin/bash
   when: not _gitea_password_stat.stat.exists
 
 - name: Fix ownership and mode on the Gitea admin password
@@ -143,6 +148,20 @@
 # no_log: true on the whole task, not just this one field, because the
 # password is a literal argv element here (openssl-generated hex, so no shell
 # metacharacters to worry about, but still not something to leave in a log).
+# Rewrites ~git/.ssh/authorized_keys from the database. Idempotent, and worth
+# running every deploy rather than once: that file lives in the git user's HOME
+# (/data/git/.ssh), NOT under the repository root, so anything that rebuilds or
+# relocates the data directory leaves it behind. Exactly that happened moving
+# from util01 — repositories went to NFS and the database came across, but
+# authorized_keys did not, and every SSH push failed with "Permission denied
+# (publickey)" against a database that held the key perfectly well.
+- name: Regenerate the git user's authorized_keys from the database
+  become: true
+  ansible.builtin.command:
+    cmd: docker exec -u git {{ gitea_container_name }} gitea admin regenerate keys
+  register: _gitea_regen_keys
+  changed_when: false
+
 - name: Create the Gitea admin user (idempotent — already-exists is not a failure)
   become: true
   ansible.builtin.command:

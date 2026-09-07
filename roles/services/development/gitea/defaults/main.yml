@@ -78,7 +78,7 @@ gitea_ssh_port: 2222
 # host. Advertising the proxy name would hand out clone URLs that cannot
 # connect. `<host>.host.<domain>` is the fleet's direct-to-host convention
 # (see docs/HANDOFF.md routing note).
-gitea_ssh_domain: "git.host.{{ base_domain }}"
+gitea_ssh_domain: "ssh.git.{{ base_domain }}"
 
 # --- Image ------------------------------------------------------------------
 # Pinned by tag+digest, same posture as searxng_image in
