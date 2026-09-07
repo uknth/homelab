@@ -304,12 +304,16 @@ const GROUNDED_SYSTEM =
   "e.g. [1], [2]. If the notes do not contain the answer, say so plainly " +
   "rather than filling the gap yourself."
 
-const UNGROUNDED_SYSTEM =
-  "Wiki retrieval found nothing useful for this question, so there are no " +
-  "notes to ground an answer in. Answer from your own general knowledge, " +
-  "but you MUST make clear, plainly and near the start of your reply, that " +
-  "this answer is NOT sourced from the wiki — a generated answer must never " +
-  "read as though it came from the notes."
+// There is deliberately NO ungrounded system prompt any more.
+//
+// This service answers from the wiki or it does not answer. It used to fall
+// back to the model's general knowledge, clearly labelled — but general
+// questions now belong to ask.{{ base_domain }}, which is a separate service
+// with no wiki data at all. Keeping a general-knowledge path here would blur
+// the boundary that split them: THIS host holds the notes (including
+// Secrets/ and Finances/) and never talks to a third-party model; THAT host
+// may talk to one and never holds the notes. A fallback here would be the
+// crack that boundary leaks through.
 
 // Last HISTORY_TURNS entries only, and only the shape a chat message needs —
 // the client's `history` is untrusted input, not something to pass through.
@@ -322,13 +326,8 @@ function trimHistory(history) {
 }
 
 function buildAskMessages(query, notes, history) {
-  if (notes.length === 0) {
-    return [
-      { role: "system", content: UNGROUNDED_SYSTEM },
-      ...history,
-      { role: "user", content: query },
-    ]
-  }
+  // `notes` is never empty here: the caller refuses an unmatched query before
+  // the model is ever reached, so there is no ungrounded branch to take.
   const notesBlock = notes.map((n) => `[${n.n}] ${n.title} (${n.url})\n${n.text}`).join("\n\n")
   const user = `Numbered notes:\n\n${notesBlock}\n\nQuestion: ${query}`
   return [
@@ -449,19 +448,33 @@ http
         try {
           const { notes, grounded, topCosine } = await retrieveForAsk(query)
           send({ type: "mode", mode: "ask", grounded })
-          // Sources are still sent when ungrounded — they are what retrieval
-          // actually returned, and showing them lets a reader see for
-          // themselves that nothing matched, rather than being told so.
+          console.log(`ask: grounded=${grounded} topCosine=${topCosine === null ? "n/a" : topCosine.toFixed(3)} q=${JSON.stringify(query.slice(0, 80))}`)
+
+          // Nothing in the wiki matched -> say so and stop. This service
+          // answers from the notes or not at all; general questions belong to
+          // ask.{{ base_domain }}, which has no wiki data. The sources are
+          // still sent so a reader can see WHAT retrieval returned and judge
+          // the miss for themselves rather than being told to trust it.
+          if (!grounded) {
+            send({
+              type: "sources",
+              sources: notes.map((n) => ({ n: n.n, title: n.title, url: n.url, snippet: n.snippet })),
+            })
+            send({
+              type: "token",
+              text: "Nothing in the wiki covers this. The closest notes are listed below — "
+                + "if none of them are what you meant, try different words, or ask at "
+                + "ask.{{ base_domain }} for a general answer.",
+            })
+            send({ type: "done" })
+            return res.end()
+          }
+
           send({
             type: "sources",
             sources: notes.map((n) => ({ n: n.n, title: n.title, url: n.url, snippet: n.snippet })),
           })
-          console.log(`ask: grounded=${grounded} topCosine=${topCosine === null ? "n/a" : topCosine.toFixed(3)} q=${JSON.stringify(query.slice(0, 80))}`)
-          // Ungrounded answers get NO notes in the prompt. Passing irrelevant
-          // ones alongside "answer from general knowledge" is the worst of
-          // both: the model tries to reconcile them and cites pages that do
-          // not support what it said.
-          const messages = buildAskMessages(query, grounded ? notes : [], trimHistory(payload.history))
+          const messages = buildAskMessages(query, notes, trimHistory(payload.history))
           await streamAnswer(messages, (text) => send({ type: "token", text }))
           send({ type: "done" })
         } catch (e) {

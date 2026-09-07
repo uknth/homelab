@@ -1,0 +1,204 @@
+---
+# services/ai/openwebui — general chat on cmp01. See defaults/main.yml for
+# the privacy boundary this role must not cross (no wiki, no vaultask).
+
+- name: Create openwebui dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0755"
+  loop:
+    - "{{ openwebui_root_dir }}"
+    - "{{ openwebui_compose_dir }}"
+
+# Root-owned, not chowned to a container uid — see the note on
+# openwebui_image in defaults/main.yml for why there is no uid to chown to
+# here (unlike gitea_data_dir/vaultask's app dir): the published image runs
+# as root (UID=0/GID=0 baked in at build time), so its own root user owns
+# whatever it writes here without any help from this task.
+- name: Create the openwebui data dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ openwebui_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# WEBUI_SECRET_KEY signs Open WebUI's session cookies. Left unset, the
+# container's own start.sh generates one and writes it to
+# /app/backend/.webui_secret_key — NOT under /app/backend/data (checked
+# against backend/start.sh at the pinned tag: it cd's to the script's own
+# directory first), which is the ONE path this role bind-mounts. That file
+# would therefore NOT survive a container recreate, silently invalidating
+# every session on every redeploy. Generating and persisting our own here,
+# the same way as the SearXNG secret key in roles/services/ai/researchd/
+# tasks/main.yml and the Gitea admin password in roles/services/development/
+# gitea/tasks/main.yml, avoids that entirely — WEBUI_SECRET_KEY set in the
+# environment is used as-is and start.sh's own generate-and-store branch
+# never runs.
+- name: Check whether an Open WebUI secret key already exists
+  ansible.builtin.stat:
+    path: "{{ openwebui_compose_dir }}/.webui_secret_key"
+  register: _openwebui_secret_stat
+
+- name: Generate an Open WebUI secret key
+  become: true
+  # Safe under --check: creating a not-yet-existing secret is not
+  # destructive (same posture as the SearXNG key task this mirrors), and the
+  # env file rendered below needs it to exist even during a dry run.
+  check_mode: false
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    openssl rand -hex 32 > {{ openwebui_compose_dir }}/.webui_secret_key
+  args:
+    # bash explicitly: `set -o pipefail` is a bashism and cmp01's /bin/sh is
+    # dash, which rejects it outright. Gitea's equivalent task hit exactly
+    # this on first deploy; pinned here before it can happen again.
+    executable: /bin/bash
+    creates: "{{ openwebui_compose_dir }}/.webui_secret_key"
+  when: not _openwebui_secret_stat.stat.exists
+
+- name: Fix ownership and mode on the Open WebUI secret key
+  become: true
+  ansible.builtin.file:
+    path: "{{ openwebui_compose_dir }}/.webui_secret_key"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+
+- name: Read back the Open WebUI secret key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ openwebui_compose_dir }}/.webui_secret_key"
+  register: _openwebui_secret_slurp
+  no_log: true
+
+- name: Set the Open WebUI secret key fact
+  ansible.builtin.set_fact:
+    _openwebui_secret_key: "{{ (_openwebui_secret_slurp.content | b64decode).strip() }}"
+  no_log: true
+
+# LiteLLM's master key: Open WebUI's only credential onto the proxy, and the
+# proxy's own auth secret. Same idiom as the Open WebUI secret key above and
+# the Gitea admin password (roles/services/development/gitea/tasks/main.yml)
+# — generated on the remote host, never the vault, so re-running this role
+# doesn't rotate a credential two other files depend on.
+- name: Check whether a LiteLLM master key already exists
+  ansible.builtin.stat:
+    path: "{{ openwebui_litellm_master_key_file }}"
+  register: _openwebui_litellm_key_stat
+
+- name: Generate a LiteLLM master key
+  become: true
+  # Safe under --check, same reasoning as the Open WebUI secret key task
+  # above — the env file rendered below needs it to exist even during a
+  # dry run.
+  check_mode: false
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    openssl rand -hex 32 > {{ openwebui_litellm_master_key_file }}
+  args:
+    creates: "{{ openwebui_litellm_master_key_file }}"
+  when: not _openwebui_litellm_key_stat.stat.exists
+
+- name: Fix ownership and mode on the LiteLLM master key
+  become: true
+  ansible.builtin.file:
+    path: "{{ openwebui_litellm_master_key_file }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+
+- name: Read back the LiteLLM master key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ openwebui_litellm_master_key_file }}"
+  register: _openwebui_litellm_key_slurp
+  no_log: true
+
+- name: Set the LiteLLM master key fact
+  ansible.builtin.set_fact:
+    _openwebui_litellm_master_key: "{{ (_openwebui_litellm_key_slurp.content | b64decode).strip() }}"
+  no_log: true
+
+- name: Template openwebui compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ openwebui_compose_dir }}/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart openwebui
+
+# No secret in this file at all — every key LiteLLM needs is an
+# os.environ/<name> reference resolved from litellm.env below (see the
+# header comment in litellm-config.yaml.j2 for the docs this schema was
+# checked against). That is why, unlike openwebui.env below, this task
+# needs no no_log and this file needs no 0600.
+- name: Template the litellm config
+  become: true
+  ansible.builtin.template:
+    src: litellm-config.yaml.j2
+    dest: "{{ openwebui_compose_dir }}/litellm-config.yaml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart openwebui
+
+# Carries omlx_api_key, vault_anthropic_api_key, and the LiteLLM master key
+# in clear — this file MUST stay mode 0600 and this task MUST stay
+# no_log: true, same reasoning as the openwebui env file below.
+- name: Template the litellm env file
+  become: true
+  ansible.builtin.template:
+    src: litellm.env.j2
+    dest: "{{ openwebui_compose_dir }}/litellm.env"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart openwebui
+
+# Carries the LiteLLM master key AND the session secret key above in clear —
+# this file MUST stay mode 0600 and this task MUST stay no_log: true.
+# ops/gitops_executor runs `site.yml --check --diff` on a timer and writes
+# the output to a log file, so a diffed secret would otherwise be persisted
+# there. Same pattern, same reason, as roles/services/knowledge/vaultask/
+# templates/vaultask.env.j2. This is also why the key is templated into an
+# env_file and never inlined under `environment:` in the compose template
+# below — that block lands verbatim in `docker inspect`, an env_file does
+# not. Neither omlx_api_key nor vault_anthropic_api_key appear in this file
+# any more — they live only in litellm.env now (see above); this is the
+# point of putting LiteLLM in front.
+- name: Template the openwebui env file
+  become: true
+  ansible.builtin.template:
+    src: openwebui.env.j2
+    dest: "{{ openwebui_compose_dir }}/openwebui.env"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart openwebui
+
+- name: Check whether openwebui has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ openwebui_compose_dir }}/docker-compose.yml"
+  register: _openwebui_deployed
+
+- name: Deploy openwebui
+  become: true
+  when: not ansible_check_mode or _openwebui_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ openwebui_compose_dir }}"
+    project_name: "{{ openwebui_compose_project }}"
+    state: present
+    pull: missing

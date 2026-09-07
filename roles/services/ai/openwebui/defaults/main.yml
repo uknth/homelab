@@ -1,0 +1,184 @@
+---
+# services/ai/openwebui — general-purpose LLM chat on cmp01, at
+# ask.puhome.net... no: at ASK is vaultask (see below). This is the OTHER
+# half of a split, so the boundary matters more than the usual role intro.
+#
+# --- The privacy boundary this split exists to hold ------------------------
+# One fleet, two "ask something" services, and they must never touch:
+#
+#   - search.puhome.net (services/knowledge/vaultask, existing) is the WIKI
+#     search/ask surface. It has retrieval over the merged Obsidian vaults,
+#     which include Secrets/ and Finances/ — and it talks ONLY to the local
+#     model on ai01 (omlx), never to a third party. That is the whole reason
+#     it is allowed to hold that content at all.
+#   - ask.puhome.net (THIS role) is general chat. It has NO wiki data, no
+#     retrieval over the wiki, and no connection to vaultask — it does not
+#     mount the merge/index output, does not know vaultindex's embedding
+#     server exists, and shares nothing with that role but the LLM backend.
+#     It may later gain a third-party provider (Anthropic) alongside omlx,
+#     which is PRECISELY why it must never hold wiki content: the day a
+#     request can leave the LAN, anything this container has ever touched is
+#     a document that could leave with it. Keep it clean now rather than
+#     needing to audit it later.
+#
+# Do not wire vaultindex, vaultmerge, or vaultask into this role. Open WebUI's
+# own document/RAG features are addressed below (RAG section) — leave them
+# on their local, non-wiki default; do not point them at the wiki's index.
+
+openwebui_root_dir: "{{ service_root }}/openwebui"
+openwebui_compose_dir: "{{ openwebui_root_dir }}/compose"
+openwebui_data_dir: "{{ openwebui_root_dir }}/data"
+
+openwebui_compose_project: "openwebui"
+openwebui_container_name: "openwebui"
+
+# Verified free against every `*_port` default across roles/ (see the task's
+# verification step) — the next one free after vaultask's 8100/quartz's
+# 8101/gitea's 8102/tickets' 8103.
+openwebui_port: 8104
+
+# --- Image --------------------------------------------------------------
+# Pinned by tag+digest, same posture as gitea_image (roles/services/
+# development/gitea/defaults/main.yml) and searxng_image (roles/services/ai/
+# researchd/defaults/main.yml) — a floating tag is exactly what Diun would
+# flag elsewhere in this fleet.
+#
+# Verified against ghcr.io's registry API directly (anonymous token +
+# `GET /v2/open-webui/open-webui/manifests/0.11.3`) on 2026-09-08:
+# `0.11.3` is upstream's latest tagged release (github.com/open-webui/
+# open-webui releases, published 2026-08-31) and resolves to this
+# manifest-LIST digest (Docker-Content-Digest header on that request — the
+# multi-arch index, not a per-platform manifest, same posture as
+# gitea_image_digest). The index was fetched and confirmed to list BOTH
+# linux/amd64 (cmp01 is an x86 PC, not arm) and linux/arm64. Bump by hand.
+openwebui_image_repo: "ghcr.io/open-webui/open-webui"
+openwebui_image_tag: "0.11.3"
+openwebui_image_digest: "sha256:41daa0cf2561a5d4c8d1ff31ee2a98d93ab4d3ac2605cac69366ff6a3374a933"
+openwebui_image: "{{ openwebui_image_repo }}:{{ openwebui_image_tag }}@{{ openwebui_image_digest }}"
+
+# The published image is built with `--build-arg UID=0 --build-arg GID=0`
+# (upstream's default — checked its Dockerfile at the same tag: `ARG UID=0`,
+# `ARG GID=0`, `USER $UID:$GID`), i.e. it runs as root, unlike gitea/vaultask
+# where the image bakes in a real non-root uid to chown ahead of time.
+# There is no non-root uid to match here, so openwebui_data_dir below is
+# simply root-owned and the container writes into it as itself — do not
+# "fix" this into a uid chown the way gitea_uid/vaultask_uid do; there is no
+# matching uid to chown to.
+
+# --- LLM backend: omlx on ai01, OpenAI-compatible, and ONLY omlx ------------
+# Derived from the existing omlx vars exactly like researchd_llm_base_url
+# (roles/services/ai/researchd/defaults/main.yml) and vaultask_llm_base_url
+# (roles/services/knowledge/vaultask/defaults/main.yml) — omlx_host is
+# "10.0.2.9,127.0.0.1" (LAN address explicit, then localhost; see
+# hosts/group_vars/all/vars.yml), so the LAN half is the first element. Do
+# not hardcode the IP a fourth time.
+openwebui_llm_host: "{{ omlx_host.split(',')[0] }}"
+openwebui_llm_base_url: "http://{{ openwebui_llm_host }}:{{ omlx_port }}/v1"
+
+# --- Registration -----------------------------------------------------------
+# ENABLE_SIGNUP=false (openwebui.env.j2) so this can never become an open
+# registration endpoint on the LAN. Verified against the app's own source
+# (backend/open_webui/routers/auths.py at this tag) that this does NOT lock
+# the instance out on first boot: the very first account (no users yet in
+# the db) is exempted from the ENABLE_SIGNUP check specifically so the
+# initial admin can still be created; every signup after that first one is
+# refused. Create that first (admin) account once, by hand, right after
+# first deploy — this role does not automate it, the same way gitea's admin
+# bootstrap is a deliberate exception rather than the norm here (gitea has a
+# CLI to script it; Open WebUI's first-run signup does not).
+openwebui_enable_signup: false
+
+# --- RAG / document ingestion: deliberately left on its LOCAL default ------
+# Open WebUI ships a generic "attach a file to this chat" feature that is
+# UNRELATED to the wiki boundary above — a user pasting a PDF into a chat
+# here never touches vaultindex, vaultmerge, or anything wiki-shaped. Its
+# embedding engine (RAG_EMBEDDING_ENGINE) defaults to '' — bundled, local
+# sentence-transformers, no external call at all — and is NOT overridden
+# here to "openai", which would otherwise point it at omlx via
+# RAG_OPENAI_API_BASE_URL (that var's own default, checked in config.py at
+# this tag, is OPENAI_API_BASE_URL — i.e. omlx — precisely so a config
+# left blank does not silently start calling out anywhere). No
+# vaultindex/vaultask var is referenced anywhere in this role; that is the
+# actual guarantee, not just the embedding engine choice above.
+
+# The model every new chat starts on: the local one, addressed by the alias
+# LiteLLM gives it below (openwebui_litellm_local_alias), not this raw omlx
+# id directly — Open WebUI no longer dials omlx itself (see the LiteLLM
+# section). Matches the id omlx serves (see researchd_llm_model — same pin,
+# asserted independently because omlx's role defaults are not reachable
+# from this play).
+openwebui_default_model: "Qwen3-30B-A3B-Instruct-2507-4bit"
+
+# --- LiteLLM: the enforcement point between Open WebUI and every provider --
+# ask.puhome.net has NO LOGIN (WEBUI_AUTH=false, sso: false on the vhost — a
+# deliberate, standing choice; see openwebui.env.j2) and it can reach
+# Anthropic, which is metered per token. Two things follow, and this proxy
+# is how both are solved:
+#
+#   1. Model restriction must be ENFORCED, not configured. Open WebUI's own
+#      per-connection model allowlist (OPENAI_API_CONFIGS, Settings -> Admin
+#      -> Connections -> Model IDs Filter) is broken upstream — the variable
+#      is parsed into an empty dict and ignored (open-webui/open-webui#19017)
+#      — so without this proxy the picker lists every Anthropic model the key
+#      can reach, Opus included. LiteLLM's model_list below only DEFINES the
+#      permitted models; a model that was never defined cannot be dialed,
+#      whatever the picker or a stray API call tries. See the comment in
+#      litellm-config.yaml.j2 for where that enforcement actually lives.
+#   2. Open WebUI holds no provider keys any more. It is the unauthenticated
+#      surface; the omlx key and vault_anthropic_api_key now live ONLY in
+#      litellm.env, and openwebui.env.j2 carries a single LiteLLM master key
+#      instead.
+#
+# Runs as a second service in THIS SAME compose project (docker-compose.yml.j2)
+# — it exists solely to serve Open WebUI, exactly as searxng exists solely to
+# serve researchd (roles/services/ai/researchd) — not as its own role.
+openwebui_litellm_container_name: "litellm"
+
+# No published port, ever: reached only as http://litellm:4000 on the
+# project's own (implicit) network, same posture as searxng.
+openwebui_litellm_port: 4000
+
+# --- Image ----------------------------------------------------------------
+# Pinned by tag+digest, same posture as openwebui_image above. The digest is
+# the multi-arch manifest-LIST digest (docker resolves the right
+# platform-specific manifest under it automatically, same as gitea_image).
+#
+# Verified directly against ghcr.io's registry API (anonymous token +
+# `GET /v2/berriai/litellm/manifests/v1.100.0`) on 2026-09-08: v1.100.0 is
+# upstream's latest STABLE release (github.com/BerriAI/litellm/releases —
+# v1.101.0-rc.1 exists but is a release candidate, not "latest"; published
+# 2026-09-06). The index was fetched and confirmed to list BOTH linux/amd64
+# (cmp01 is an x86 PC, not arm) and linux/arm64. Bump by hand.
+openwebui_litellm_image_repo: "ghcr.io/berriai/litellm"
+openwebui_litellm_image_tag: "v1.100.0"
+openwebui_litellm_image_digest: "sha256:c8756e7b9a61fe45df2ccb5b781d388c3b2f3a21ef9e4956630caef20f9f03aa"
+openwebui_litellm_image: "{{ openwebui_litellm_image_repo }}:{{ openwebui_litellm_image_tag }}@{{ openwebui_litellm_image_digest }}"
+
+# The user-facing model_name LiteLLM gives the omlx backend, and what
+# openwebui_default_model above now actually resolves to. Openwebui's
+# DEFAULT_MODELS (openwebui.env.j2) must be THIS, not the raw omlx model id
+# — LiteLLM is the only thing that still knows that id (litellm-config.yaml.j2).
+openwebui_litellm_local_alias: "qwen"
+
+# The exact two Anthropic model_name entries LiteLLM exposes — Sonnet and
+# Haiku only. Opus is 5x Haiku's output price, and this endpoint is
+# unauthenticated, so a per-token bill is exposed to anyone on the LAN. Kept
+# as two scalars rather than a list because litellm-config.yaml.j2 needs to
+# reference each individually (Anthropic model_list entries, and the
+# fallback ordering below, which is NOT the same order).
+#
+# THIS IS NOW ENFORCED, unlike the old openwebui_anthropic_allowed_models
+# note it replaces: LiteLLM's model_list (litellm-config.yaml.j2) defines
+# exactly these two Anthropic models and no others, so Opus is not a setting
+# someone could leave unset or undo — it is simply absent from what the
+# proxy can route to.
+openwebui_litellm_sonnet_model: "claude-sonnet-5"      # $3 / $15 per Mtok
+openwebui_litellm_haiku_model: "claude-haiku-4-5"      # $1 / $5  per Mtok — the cheap fallback
+
+# The master key file, generated on the remote host and read back the same
+# way as the Open WebUI secret key above and Gitea's admin password
+# (roles/services/development/gitea/tasks/main.yml) — never stored in the
+# vault. This is Open WebUI's ONLY credential onto LiteLLM (OPENAI_API_KEY
+# in openwebui.env.j2) and LiteLLM's own auth secret
+# (general_settings.master_key in litellm-config.yaml.j2).
+openwebui_litellm_master_key_file: "{{ openwebui_compose_dir }}/.litellm_master_key"

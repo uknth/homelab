@@ -1,0 +1,64 @@
+# Managed by Ansible — services/ai/openwebui
+#
+# Two services: openwebui itself, and litellm in front of every model
+# provider it talks to (see defaults/main.yml's "LiteLLM" section for why —
+# ask.puhome.net has no login, and litellm's model_list is what makes Opus
+# unreachable rather than merely discouraged). litellm exists solely to
+# serve openwebui, exactly as searxng exists solely to serve researchd
+# (roles/services/ai/researchd) — one project, no second role.
+#
+# No wiki mount, no vaultask/vaultindex network — see defaults/main.yml's
+# boundary comment before adding either.
+services:
+  openwebui:
+    image: {{ openwebui_image }}
+    container_name: {{ openwebui_container_name }}
+    hostname: openwebui
+    restart: unless-stopped
+    # The LiteLLM master key and the session secret live ONLY here, never
+    # inline under `environment:` — that block lands verbatim in
+    # `docker inspect`, an env_file does not. Same posture as vaultask's
+    # compose (roles/services/knowledge/vaultask/templates/docker-compose.yml.j2).
+    # Neither omlx_api_key nor vault_anthropic_api_key are anywhere in this
+    # service any more — they live only in litellm's env below.
+    env_file:
+      - openwebui.env
+    ports:
+      - "{{ openwebui_port }}:8080"   # gw01 nginx -> forward-auth
+    volumes:
+      # SQLite db, uploaded-chat-file cache, the local sentence-transformers
+      # embedding model this image ships for that feature (see the RAG note
+      # in defaults/main.yml) — all of it, one bind mount, root-owned (see
+      # the note on openwebui_data_dir in tasks/main.yml for why there is no
+      # uid chown here).
+      - {{ openwebui_data_dir }}:/app/backend/data
+      # Host clock, read-only — matches gitea_ssh_redirect's own compose and
+      # keeps container-side timestamps in step with the rest of the fleet.
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      litellm:
+        condition: service_started
+
+  litellm:
+    image: {{ openwebui_litellm_image }}
+    container_name: {{ openwebui_litellm_container_name }}
+    hostname: litellm
+    restart: unless-stopped
+    # The omlx key, the Anthropic key, and the master key live ONLY here,
+    # never inline under `environment:` — same reasoning as openwebui's own
+    # env_file above.
+    env_file:
+      - litellm.env
+    # No `ports:` at all — reached only as http://litellm:4000 on the
+    # project's own (implicit) network, exactly like searxng in researchd's
+    # compose. This is the entire reason openwebui itself no longer needs
+    # its own Anthropic/omlx credentials.
+    volumes:
+      # No secret in this file (see the header comment in
+      # litellm-config.yaml.j2) — read-only regardless, since litellm never
+      # needs to write it back.
+      - {{ openwebui_compose_dir }}/litellm-config.yaml:/app/proxy_server_config.yaml:ro
+    command:
+      - "--config"
+      - "/app/proxy_server_config.yaml"

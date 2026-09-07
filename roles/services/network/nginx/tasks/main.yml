@@ -64,12 +64,25 @@
     label: "{{ item.name }}"
   notify: Reload nginx
 
+# force matters ONLY under --check, and is deliberately conditional rather
+# than a flat true. The template task above is a no-op in check mode, so a
+# vhost being added for the FIRST time has no source file on the target yet
+# and this task dies with "src file does not exist" — a check-mode artifact,
+# not a real failure (a live run templates the file immediately before this).
+# Left unhandled it makes .gitea/workflows/pr-dryrun.yml go red on every PR
+# that introduces a vhost, which is a change we make often; it first bit the
+# `search` site on PR #1. Flat `force: true` would fix that too, but it would
+# also silently create dangling symlinks in REAL runs when a site is listed
+# in nginx_sites with no template behind it — exactly the mistake this task
+# failing is useful for catching. Tying it to ansible_check_mode keeps the
+# real-run guard intact and suppresses only the false positive.
 - name: Enable configured sites (symlink)
   become: true
   ansible.builtin.file:
     src: "/etc/nginx/sites-available/{{ item }}.conf"
     dest: "/etc/nginx/sites-enabled/{{ item }}.conf"
     state: link
+    force: "{{ ansible_check_mode }}"
   loop: "{{ ['000-default'] + (nginx_sites | map(attribute='name') | list) }}"
   notify: Reload nginx
 

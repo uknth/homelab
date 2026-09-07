@@ -104,6 +104,11 @@
     umask 077
     openssl rand -hex 32 > {{ researchd_searxng_dir }}/.secret_key
   args:
+    # bash explicitly: `set -o pipefail` is a bashism. This role targets ctl01
+    # (macOS) where /bin/sh happens to accept it, so the bug is latent rather
+    # than active — but it would surface the moment this ran on a Debian host,
+    # which is how it broke gitea and openwebui.
+    executable: /bin/bash
     creates: "{{ researchd_searxng_dir }}/.secret_key"
   when: not _searxng_secret_stat.stat.exists
 

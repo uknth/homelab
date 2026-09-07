@@ -19,13 +19,21 @@ layout:
   Media: { tab: Home, style: column, columns: 1 }
   Weather: { tab: Home, style: column, columns: 1 }
   Documents: { tab: Home, style: column, columns: 1 }
+  # Moved from the System tab. The old comment here warned that the wiki
+  # republishes whole vaults including Secrets/ and Finances/ — that is still
+  # true (vaultsync excludes nothing, per the 2026-09-01 decision), but the tab
+  # was never what protected it: wiki.* and ask.* are both sso: true, so
+  # Authentik is the gate and a dashboard tab is only organisation.
+  Knowledge: { tab: Home, style: row, columns: 4 }
+  Assistant: { tab: Home, style: row, columns: 4 }
   # ---- System (admin) — links ----
   Downloaders: { tab: System, style: row, columns: 4 }
   Storage & Sync: { tab: System, style: row, columns: 3 }
-  # Wiki republishes whole vaults — Secrets/, Finances/ and work notes — so it
-  # sits on the admin tab, not the family-facing Home tab.
-  Knowledge: { tab: System, style: row, columns: 4 }
   Admin: { tab: System, style: row, columns: 4 }
+  # Gitea and anything else developer-facing. System rather than Home: nobody
+  # in the family has a reason to open a git forge, and it keeps Home to things
+  # people actually use.
+  Development: { tab: System, style: row, columns: 4 }
   # ---- System — status band (full width, above the two panes) ----
   Status: { tab: System, style: row, columns: 2 }
   # ---- System — widgets (two panes) ----

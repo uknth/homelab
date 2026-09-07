@@ -46,7 +46,14 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
+          # not a branch name, and cloning it fails with "Remote branch 1 not
+          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
+          # on pull_request and is empty on push, so this covers both triggers.
+          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
+          # already refuses those, and this repo takes no outside PRs.)
+          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          git clone --depth 1 --branch "$REF" \
             "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a
@@ -95,7 +102,14 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
+          # not a branch name, and cloning it fails with "Remote branch 1 not
+          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
+          # on pull_request and is empty on push, so this covers both triggers.
+          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
+          # already refuses those, and this repo takes no outside PRs.)
+          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          git clone --depth 1 --branch "$REF" \
             "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a
@@ -148,7 +162,14 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
+          # not a branch name, and cloning it fails with "Remote branch 1 not
+          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
+          # on pull_request and is empty on push, so this covers both triggers.
+          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
+          # already refuses those, and this repo takes no outside PRs.)
+          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          git clone --depth 1 --branch "$REF" \
             "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a
@@ -227,7 +248,14 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
+          # not a branch name, and cloning it fails with "Remote branch 1 not
+          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
+          # on pull_request and is empty on push, so this covers both triggers.
+          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
+          # already refuses those, and this repo takes no outside PRs.)
+          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          git clone --depth 1 --branch "$REF" \
             "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a

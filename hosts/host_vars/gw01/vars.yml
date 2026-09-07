@@ -47,7 +47,22 @@ nginx_sites:
   # Secrets/ and Finances/ by the user's 2026-09-01 decision, so forward-auth is
   # the only thing standing in front of it — it is never exposed off-LAN.
   - { name: wiki,       upstream: "http://10.0.2.5:8101", sso: true }    # Quartz (Obsidian vaults)
-  - { name: ask,        upstream: "http://10.0.2.5:8100", sso: true }    # wiki search (hybrid BM25 + vector)
+  # Repointed 2026-09 from vaultask (wiki search, 10.0.2.5:8100 — now
+  # search.puhome.net, added by concurrent work) to Open WebUI, general LLM
+  # chat with NO wiki data (roles/services/ai/openwebui). sso: true matches
+  # the fleet default; see that role's defaults/main.yml for the forward-auth
+  # + websocket caveat this was not able to verify live.
+  # sso: false by explicit request — no login on this one at all (Open WebUI's
+  # own auth is off too, WEBUI_AUTH=false). Anyone on the LAN can use it, and
+  # since it reaches Anthropic, anyone on the LAN can spend credits. A Console
+  # spend cap is the backstop, not this vhost.
+  - { name: ask,        upstream: "http://10.0.2.5:8104", sso: false }   # Open WebUI (general chat; omlx + Claude)
+  # Wiki search + wiki-grounded answers. Split out from `ask` on 2026-09-08:
+  # THIS host holds the wiki (which includes Secrets/ and Finances/) and talks
+  # only to the local model on ai01. `ask` above is general chat with no wiki
+  # data, and may later reach a third-party provider — which is exactly why the
+  # two are separate services rather than two modes of one.
+  - { name: search,     upstream: "http://10.0.2.5:8100", sso: true }    # vaultask (wiki search + RAG)
   # Research agent (phase 10) — the FIRST published service on ctl01 (10.0.2.4).
   # Every other entry here is util01 or cmp01. It lives on ctl01 by user
   # direction; docs/spec/research.md explains why that is safe despite ctl01

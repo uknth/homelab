@@ -1,0 +1,72 @@
+# Managed by Ansible — services/ai/openwebui, LiteLLM proxy
+#
+# See defaults/main.yml (the "LiteLLM" section) for the why: ask.puhome.net
+# has NO LOGIN, and this proxy is what turns "Opus is discouraged" into
+# "Opus is unreachable" — Open WebUI's own per-connection model allowlist is
+# broken upstream (open-webui/open-webui#19017: OPENAI_API_CONFIGS is parsed
+# into an empty dict and ignored), so a proxy that only DEFINES the reachable
+# models is the actual enforcement, not a setting someone could leave off.
+#
+# Schema verified against LiteLLM's own docs (2026-09-08), not written from
+# memory:
+#   - model_list / litellm_params shape:
+#     https://docs.litellm.ai/docs/proxy/configs
+#   - pointing litellm_params.model at a self-hosted OpenAI-compatible
+#     endpoint ("openai/<model>" prefix + api_base):
+#     https://docs.litellm.ai/docs/providers/openai_compatible
+#   - Anthropic provider ("anthropic/<model>" prefix, "os.environ/<VAR>" key
+#     references):
+#     https://docs.litellm.ai/docs/providers/anthropic
+#   - fallbacks live under router_settings, NOT litellm_settings:
+#     https://docs.litellm.ai/docs/proxy/reliability
+#
+# Every key below is an os.environ/<name> reference, resolved from
+# litellm.env at container start (templates/litellm.env.j2) — this file
+# itself carries no secret, which is why it is NOT mode 0600 the way
+# litellm.env and openwebui.env are (see tasks/main.yml).
+
+model_list:
+  # --- Local: omlx on ai01 --------------------------------------------------
+  # The alias Open WebUI's DEFAULT_MODELS now names (openwebui.env.j2) — Open
+  # WebUI no longer dials omlx directly, it asks LiteLLM for this alias.
+  - model_name: {{ openwebui_litellm_local_alias }}
+    litellm_params:
+      model: openai/{{ openwebui_default_model }}
+      api_base: {{ openwebui_llm_base_url }}
+      api_key: os.environ/OMLX_API_KEY
+
+  # --- Anthropic: exactly these two model_name entries, and no others ------
+  # Opus must not appear anywhere in this file. THE ABSENCE IS THE
+  # ENFORCEMENT: Open WebUI (and anything else that talks to this proxy) can
+  # only ever request a model_name defined here, so a model this file never
+  # lists is a model that cannot be reached, whatever the picker shows or a
+  # stray API call tries.
+  - model_name: {{ openwebui_litellm_sonnet_model }}
+    litellm_params:
+      model: anthropic/{{ openwebui_litellm_sonnet_model }}
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: {{ openwebui_litellm_haiku_model }}
+    litellm_params:
+      model: anthropic/{{ openwebui_litellm_haiku_model }}
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+# The local alias falls back to Anthropic, and ONLY in that direction — a
+# fallback fires because {{ openwebui_litellm_local_alias }} (omlx) is
+# unreachable or erroring, and the cheap model is the right first answer to
+# that failure, not the expensive one. Haiku is tried before Sonnet;
+# Sonnet is still second in the chain in case Haiku itself is having a bad
+# day. Neither Anthropic model falls back to anything — there is nothing
+# cheaper to fall back to that isn't the (already-failing) local model.
+router_settings:
+  fallbacks:
+    - {{ openwebui_litellm_local_alias }}:
+        - {{ openwebui_litellm_haiku_model }}
+        - {{ openwebui_litellm_sonnet_model }}
+
+# The one credential Open WebUI needs to reach this proxy at all
+# (OPENAI_API_KEY in openwebui.env.j2). Generated on the host by
+# tasks/main.yml, never stored in the vault — same idiom as Gitea's admin
+# password.
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
