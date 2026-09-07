@@ -110,3 +110,20 @@ openwebui_enable_signup: false
 # holds the wiki (Secrets/, Finances/) and never leaves the LAN, while this
 # host holds no wiki data at all. Do not add wiki retrieval here.
 openwebui_anthropic_base_url: "https://api.anthropic.com/v1"
+
+# The model every new chat starts on: the local one. Matches the id omlx serves
+# (see researchd_llm_model — same pin, asserted independently because omlx's
+# role defaults are not reachable from this play).
+openwebui_default_model: "Qwen3-30B-A3B-Instruct-2507-4bit"
+
+# Which Anthropic models are acceptable as a fallback. Sonnet and Haiku only —
+# Opus is 5x Haiku's output price, and this endpoint is unauthenticated, so a
+# per-token bill is exposed to anyone on the LAN.
+#
+# NOT ENFORCED BY THIS FILE. It is the allowlist to type into Settings -> Admin
+# -> Connections -> Model IDs (Filter); the env-var equivalent is broken
+# upstream (open-webui/open-webui#19017). Recorded here so the intended cap is
+# in git even though the mechanism is not.
+openwebui_anthropic_allowed_models:
+  - "claude-sonnet-5"      # $3 / $15 per Mtok
+  - "claude-haiku-4-5"     # $1 / $5  per Mtok — the cheap fallback
