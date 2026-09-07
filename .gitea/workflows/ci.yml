@@ -22,7 +22,27 @@ jobs:
     runs-on: ubuntu-latest
     container: python:3.12-slim
     steps:
-      - uses: actions/checkout@v4
+      # Plain git clone rather than actions/checkout@v4, and deliberately so.
+      # checkout is a JavaScript action: act_runner executes it with node
+      # INSIDE the job container, and python:3.12-slim has no node — so every
+      # job failed in about three seconds with nothing useful in the log.
+      #
+      # Fixing it by switching to a node-bearing image would give up the exact
+      # 3.12 interpreter these tests need (3.14 cannot build pydantic-core
+      # here, and it masks a gpt-researcher bug). Cloning by hand keeps the
+      # interpreter pinned AND removes CI's dependency on fetching actions
+      # from github.com, which a self-hosted homelab runner has no business
+      # needing.
+      - name: Checkout
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
+          git config --global --add safe.directory "$PWD"
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
       - name: Install yamllint
         run: pip install --quiet yamllint
       - name: yamllint
@@ -40,7 +60,27 @@ jobs:
     runs-on: ubuntu-latest
     container: python:3.12-slim
     steps:
-      - uses: actions/checkout@v4
+      # Plain git clone rather than actions/checkout@v4, and deliberately so.
+      # checkout is a JavaScript action: act_runner executes it with node
+      # INSIDE the job container, and python:3.12-slim has no node — so every
+      # job failed in about three seconds with nothing useful in the log.
+      #
+      # Fixing it by switching to a node-bearing image would give up the exact
+      # 3.12 interpreter these tests need (3.14 cannot build pydantic-core
+      # here, and it masks a gpt-researcher bug). Cloning by hand keeps the
+      # interpreter pinned AND removes CI's dependency on fetching actions
+      # from github.com, which a self-hosted homelab runner has no business
+      # needing.
+      - name: Checkout
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
+          git config --global --add safe.directory "$PWD"
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
       - name: Install Ansible + ansible-lint
         run: pip install --quiet ansible ansible-lint
       - name: ansible-lint
@@ -50,7 +90,27 @@ jobs:
     runs-on: ubuntu-latest
     container: python:3.12-slim
     steps:
-      - uses: actions/checkout@v4
+      # Plain git clone rather than actions/checkout@v4, and deliberately so.
+      # checkout is a JavaScript action: act_runner executes it with node
+      # INSIDE the job container, and python:3.12-slim has no node — so every
+      # job failed in about three seconds with nothing useful in the log.
+      #
+      # Fixing it by switching to a node-bearing image would give up the exact
+      # 3.12 interpreter these tests need (3.14 cannot build pydantic-core
+      # here, and it masks a gpt-researcher bug). Cloning by hand keeps the
+      # interpreter pinned AND removes CI's dependency on fetching actions
+      # from github.com, which a self-hosted homelab runner has no business
+      # needing.
+      - name: Checkout
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
+          git config --global --add safe.directory "$PWD"
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
       - name: Install Ansible
         # The full `ansible` package, not just `ansible-core` — it bundles
         # every community collection this repo's roles use
@@ -98,7 +158,27 @@ jobs:
     runs-on: ubuntu-latest
     container: python:3.12-slim
     steps:
-      - uses: actions/checkout@v4
+      # Plain git clone rather than actions/checkout@v4, and deliberately so.
+      # checkout is a JavaScript action: act_runner executes it with node
+      # INSIDE the job container, and python:3.12-slim has no node — so every
+      # job failed in about three seconds with nothing useful in the log.
+      #
+      # Fixing it by switching to a node-bearing image would give up the exact
+      # 3.12 interpreter these tests need (3.14 cannot build pydantic-core
+      # here, and it masks a gpt-researcher bug). Cloning by hand keeps the
+      # interpreter pinned AND removes CI's dependency on fetching actions
+      # from github.com, which a self-hosted homelab runner has no business
+      # needing.
+      - name: Checkout
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
+          git config --global --add safe.directory "$PWD"
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
       - name: Install researchd/app dependencies
         run: pip install --quiet -r roles/services/ai/researchd/files/app/requirements.txt pytest
       - name: Test researchd/app
