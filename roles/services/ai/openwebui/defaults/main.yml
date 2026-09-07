@@ -100,3 +100,13 @@ openwebui_enable_signup: false
 # left blank does not silently start calling out anywhere). No
 # vaultindex/vaultask var is referenced anywhere in this role; that is the
 # actual guarantee, not just the embedding engine choice above.
+
+# --- Anthropic (Claude) as a second model choice --------------------------
+# Registered as an OpenAI-compatible connection; Open WebUI detects the
+# Anthropic endpoint and translates. The key is vault_anthropic_api_key.
+#
+# This is the ONLY place in the fleet where a third party sees conversation
+# content, and it is why ask.* and search.* are separate services: search.*
+# holds the wiki (Secrets/, Finances/) and never leaves the LAN, while this
+# host holds no wiki data at all. Do not add wiki retrieval here.
+openwebui_anthropic_base_url: "https://api.anthropic.com/v1"

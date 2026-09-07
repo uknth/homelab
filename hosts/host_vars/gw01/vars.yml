@@ -52,7 +52,11 @@ nginx_sites:
   # chat with NO wiki data (roles/services/ai/openwebui). sso: true matches
   # the fleet default; see that role's defaults/main.yml for the forward-auth
   # + websocket caveat this was not able to verify live.
-  - { name: ask,        upstream: "http://10.0.2.5:8104", sso: true }    # Open WebUI (general chat, omlx backend)
+  # sso: false by explicit request — no login on this one at all (Open WebUI's
+  # own auth is off too, WEBUI_AUTH=false). Anyone on the LAN can use it, and
+  # since it reaches Anthropic, anyone on the LAN can spend credits. A Console
+  # spend cap is the backstop, not this vhost.
+  - { name: ask,        upstream: "http://10.0.2.5:8104", sso: false }   # Open WebUI (general chat; omlx + Claude)
   # Wiki search + wiki-grounded answers. Split out from `ask` on 2026-09-08:
   # THIS host holds the wiki (which includes Secrets/ and Finances/) and talks
   # only to the local model on ai01. `ask` above is general chat with no wiki
