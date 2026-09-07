@@ -43,6 +43,15 @@ media_nfs_export: "/mnt/data-pool/media/data"              # existing TrueNAS NF
 # to match Gitea's container user.
 gitea_nfs_export: "/mnt/data-pool/gitea"
 gitea_repos_dir: "/mnt/gitea"                              # mount point on cmp01
+
+# Gitea's LOCAL state (app.ini + the SQLite db). Here rather than in the gitea
+# role's defaults for the same reason as the two lines above: cmp01's
+# restic_paths references it, and ops/restic runs in a DIFFERENT play that
+# never loads the gitea role — so a role default is undefined exactly where
+# the backup scope is evaluated. That failed site.yml --check with
+# "'gitea_data_dir' is undefined" and blocked the first pipeline deploy.
+gitea_root_dir: "{{ service_root }}/gitea"
+gitea_data_dir: "{{ gitea_root_dir }}/data"
 media_root: "/mnt/media"
 media_data_dir: "{{ media_root }}/data"                    # local mount point == the export
 

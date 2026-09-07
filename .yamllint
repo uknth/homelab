@@ -11,6 +11,9 @@ extends: default
 # first"). It predates this repo's own conventions and is not touched by
 # ongoing work, so it is excluded rather than cleaned up wholesale.
 ignore: |
+  # ansible-galaxy downloads collections here when ansible-lint runs; it is
+  # third-party source, gitignored, and never ours to lint.
+  .ansible/
   archive/
 
 rules:

@@ -59,7 +59,7 @@ jobs:
       - name: Trigger `check <head-sha>` on util01
         id: check
         env:
-          GITOPS_TRIGGER_KEY: ${{ secrets.GITOPS_TRIGGER_KEY }}
+          GITOPS_TRIGGER_KEY_B64: ${{ secrets.GITOPS_TRIGGER_KEY_B64 }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eu
@@ -75,7 +75,10 @@ jobs:
           }
           umask 077
           mkdir -p ~/.ssh
-          printf '%s\n' "$GITOPS_TRIGGER_KEY" > ~/.ssh/gitops_trigger
+          # base64 -d, not a raw write. The secret is stored encoded because a
+          # multiline PEM defeated Gitea's log masking once already and printed
+          # the whole key into a job log; a single-line value it masks reliably.
+          printf '%s' "$GITOPS_TRIGGER_KEY_B64" | base64 -d > ~/.ssh/gitops_trigger
           chmod 600 ~/.ssh/gitops_trigger
 
           set +e

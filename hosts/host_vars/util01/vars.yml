@@ -6,7 +6,14 @@ restic_paths:
   - "{{ service_root }}/syncthing/data"
 
 # --- GitOps deploy trigger -------------------------------------------------
-# Public half of the keypair Gitea Actions uses to trigger a deploy. Its
+# Public half of the keypair Gitea Actions uses to trigger a deploy.
+#
+# ROTATED 2026-09-08. The first key leaked: deploy.yml passed the private half
+# through a step `env:` block, act_runner echoes that block into the job log,
+# and Gitea's secret masking did not match the multiline PEM — so the whole
+# key, header to footer, was printed in a readable Actions log. The private
+# half is now stored BASE64-ENCODED (single line) precisely because masking a
+# one-line value is something Gitea does reliably. Its
 # PRIVATE half is stored as the `GITOPS_TRIGGER_KEY` secret in Gitea and
 # exists nowhere else — not in this repo, not in the vault.
 #
@@ -15,4 +22,4 @@ restic_paths:
 # worst a leak of the matching private key permits is running that wrapper,
 # which accepts exactly two verbs (`apply`, `check <ref>`) and validates the
 # ref before it reaches git. It cannot run an arbitrary command.
-gitops_ci_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7u5d0/YGDLs0comlhdq6ed1xdlODiiJzU/VKS9qgFF gitea-actions-trigger@puhome.net"
+gitops_ci_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN+RxWntHyaiehhn8vTkzFU3/z2WsnSjQxllzGAxKnO2 gitea-actions-trigger-r2@puhome.net"

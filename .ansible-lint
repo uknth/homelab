@@ -12,3 +12,7 @@ exclude_paths:
   # conventions and is not touched by ongoing work (see AGENTS.md, "do not
   # restore without going through docs/plan/migration.md first").
   - archive/
+  # ansible-galaxy installs collections and roles here when ansible-lint runs.
+  # It is third-party source, gitignored, and never ours to lint — without this
+  # ansible-lint walks into it and reports other people's findings as ours.
+  - .ansible/

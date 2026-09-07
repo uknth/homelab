@@ -105,6 +105,18 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
       - name: Install Ansible + ansible-lint
         run: pip install --quiet ansible ansible-lint
+      # ansible-lint shells out to `ansible-playbook --syntax-check` itself, so
+      # unlike the syntax-check job it cannot be handed --vault-password-file.
+      # It reads ansible.cfg, which points vault_password_file at
+      # ~/.config/homelab/.vault_pass — absent on a runner, so every one of the
+      # 72 playbooks returned exit 1 and ansible-lint reported them all as
+      # `internal-error`, which looks like 72 lint findings and is really one
+      # missing file. The content is irrelevant: --syntax-check never decrypts
+      # vault.yml, it only needs the file to exist.
+      - name: Fake a vault password file where ansible.cfg expects it
+        run: |
+          mkdir -p ~/.config/homelab
+          echo "unused-ci-placeholder" > ~/.config/homelab/.vault_pass
       - name: ansible-lint
         run: ansible-lint
 

@@ -15,7 +15,8 @@
 # See the storage-split comments below for how this changes where each part
 # of Gitea's data lives.
 
-gitea_root_dir: "{{ service_root }}/gitea"
+# gitea_root_dir / gitea_data_dir live in hosts/group_vars/all/vars.yml —
+# cmp01's restic_paths needs them from a play that never loads this role.
 gitea_compose_dir: "{{ gitea_root_dir }}/compose"
 
 # --- Storage split: SQLite on LOCAL disk, repos+LFS on NFS -------------------
@@ -41,7 +42,6 @@ gitea_compose_dir: "{{ gitea_root_dir }}/compose"
 # hand — and hosts/host_vars/cmp01/vars.yml for why BOTH halves are also in
 # restic (this split is about corruption risk and storage growth, not about
 # which half is worth backing up).
-gitea_data_dir: "{{ gitea_root_dir }}/data"
 
 # gitea_nfs_export / gitea_repos_dir are deliberately NOT defined here. They
 # live in hosts/group_vars/all/vars.yml because nas01's play (which defines the
