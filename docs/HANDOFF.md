@@ -130,7 +130,8 @@ blocks them, because "open" was hiding three different situations.
   `.ansible-lint`. Those roles are legacy v2 leftovers unused by anything under
   `playbooks/hosts/`, so nothing needed fetching and the network dependency was
   pure flakiness.
-- **Arena Model in the Open WebUI picker.** The env var never had a chance:
+- **Arena Model in the Open WebUI picker** — **VERIFIED GONE 2026-09-08** after
+  deploy; the user confirmed the picker is clean. The env var never had a chance:
   `evaluation.arena.enable=true` was already persisted in `webui.db`, and
   Open WebUI's PersistentConfig lets the DB outrank env once seeded.
   `ENABLE_PERSISTENT_CONFIG=false` makes the role authoritative on every start.
@@ -188,18 +189,52 @@ fix (proper `changed_when`, or a read-before-write check), which is a different
 piece of work from the sweep. Worth doing before the dry-run output is trusted
 as a review artefact.
 
+### Mirroring (decided 2026-09-08)
+
+Gitea is the source of truth; **github.com/uknth/homelab** and
+**git.sr.ht/~uknth/homelab** are mirrors. Both are **public**, and this repo is
+private on Gitea — that asymmetry is deliberate and was confirmed explicitly.
+
+`.gitea/workflows/mirror.yml` force-pushes heads and tags with `--prune`, so the
+mirrors match this repo exactly. **The user accepted that this destroys the
+pre-existing GitHub branches** (`v2-home`, `main`, `dev01` and an old `master`
+carrying 2 unique commits) rather than mirroring to a side branch. sr.ht was
+already a clean fast-forward, 25 commits behind.
+
+Audited before enabling, and worth re-running before any change widens what is
+published:
+
+| check | result |
+|---|---|
+| private keys tracked or in history | none — `keys/` is self-ignoring (`*` + `!.gitignore`), only `keys/.gitignore` is tracked |
+| `sk-ant-` / `ghp_` / `github_pat_` / `AKIA` / PEM headers | 0 in tracked files **and** 0 across all history |
+| `hosts/group_vars/all/vault.yml` | `$ANSIBLE_VAULT;1.1;AES256` |
+| credentials in templates | all `{{ vault_* }}` references, no literals |
+| ssh keys appearing in docs/host_vars | public halves only |
+
+What IS published: ~16 RFC1918 addresses, ~30 `puhome.net` hostnames, the full
+service/port map and the SSO design. Reconnaissance value, not credentials.
+**The one standing consequence: an ansible-vault file now sits in a public repo,
+so it is only as strong as the vault password.** If that password is weak or
+reused, change it — the mirror makes it an offline brute-force target rather
+than a LAN-only one.
+
 ### Blocked on you — I cannot do these
 
 - **HBA swap** (nas01): LSI 9300-8i needs physically fitting, then move disks,
   `zpool online`/`clear`/`scrub`.
-- **Dual-WAN outage path unverified.** Everything reports, but no ISP has failed
-  since it was built. Pull one WAN cable to confirm the red/ntfy path.
+- ~~**Dual-WAN outage path unverified**~~ — **VERIFIED 2026-09-08 by the user**:
+  a physical WAN cable pull produced the expected failover and alerting. The
+  last untested assumption in the dual-WAN work is now tested.
 - **Dashboard + status band visual sign-off** — needs your eyes in a browser.
 - **Kavita Homepage widget** — needs a UI-generated API key, or the real Kavita
   admin password (`vault_kavita_admin_password` did not match; username `uknth`).
-- **Gitea → sr.ht/GitHub mirrors** — the keypair exists and `MIRROR_SSH_KEY` is a
-  Gitea secret; the public key still needs adding on both external accounts:
+- **Gitea → sr.ht/GitHub mirrors** — `.gitea/workflows/mirror.yml` exists as of
+  2026-09-08. The remaining manual step is adding this public key to **both**
+  accounts, after which the workflow runs on every push to master:
   `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZv6MmbYqklc2ljjVuRxbJAMENB3VtkKSf+GjxH79fj gitea-mirror@puhome.net`
+  (github.com/settings/keys and meta.sr.ht/keys). Until it is added the job goes
+  red on a permission-denied, which is the intended signal.
 
 ### Still open, deliberately not attempted in the sweep
 

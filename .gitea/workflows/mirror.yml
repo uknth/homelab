@@ -1,0 +1,108 @@
+---
+# Push-mirror this repo to GitHub and SourceHut.
+#
+# Gitea IS the source of truth (see docs/plan/gitops.md). These two are
+# mirrors: nothing is ever merged there, and anything pushed to them directly
+# WILL BE DESTROYED by the next run of this workflow.
+#
+# Why a workflow rather than Gitea's built-in push mirror: Gitea 1.27.3's
+# push-mirror API only accepts remote_username/remote_password, i.e. HTTPS
+# auth. That would mean minting and storing a GitHub PAT and an sr.ht token.
+# The SSH key that already exists (MIRROR_SSH_KEY) works for both hosts and
+# is scoped to exactly this job, so this is fewer credentials, not more.
+#
+# BOTH MIRRORS ARE PUBLIC REPOSITORIES, and this repo is private on Gitea.
+# That is deliberate (confirmed 2026-09-08). Before this was enabled the
+# tracked tree was audited: no private keys are tracked or present anywhere in
+# history (keys/ is self-ignoring — `*` plus `!.gitignore`), the vault is
+# AES256-encrypted, and every credential in a template is a `{{ vault_* }}`
+# reference rather than a literal. What IS published is the fleet's topology:
+# RFC1918 addresses, hostnames, the service/port map and the SSO design. That
+# is reconnaissance value, not credentials — but it does mean the encrypted
+# vault sits in public, so it is only ever as strong as the vault password.
+name: Mirror
+
+on:
+  push:
+    branches: [master]
+    tags: ["*"]
+
+# Never two mirror pushes at once — they force-update the same refs, and a
+# late finisher could otherwise leave a mirror pointing at an older commit.
+# Not cancel-in-progress: a half-finished mirror push is worse than a slow one.
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.12-slim
+    steps:
+      - name: Mirror to GitHub and SourceHut
+        env:
+          MIRROR_SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            git openssh-client ca-certificates >/dev/null
+
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+
+          # The secret is stored base64-encoded on ONE line, deliberately: a
+          # multi-line PEM defeats Gitea's log masking and was printed in full
+          # into a job log on 2026-09-07 (that key was rotated and revoked).
+          # Falls back to treating it as a raw key so this still works if the
+          # secret is ever re-added un-encoded.
+          printf '%s' "$MIRROR_SSH_KEY" | base64 -d > ~/.ssh/id_mirror 2>/dev/null \
+            || printf '%s' "$MIRROR_SSH_KEY" > ~/.ssh/id_mirror
+          chmod 600 ~/.ssh/id_mirror
+          if ! head -n1 ~/.ssh/id_mirror | grep -q 'BEGIN .*PRIVATE KEY'; then
+            echo "MIRROR_SSH_KEY did not yield a private key (checked without printing it)" >&2
+            exit 1
+          fi
+
+          # Pin the host keys rather than accept-new: this job pushes a force
+          # update to a public repo, so the one thing worth being strict about
+          # is which server is being pushed to.
+          ssh-keyscan -t rsa,ed25519 github.com git.sr.ht >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+          # --mirror clone so every branch and tag is present locally; a
+          # shallow or single-branch clone cannot mirror.
+          HOST="${GITHUB_SERVER_URL#*://}"
+          git clone --quiet --mirror \
+            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" repo.git
+          cd repo.git
+
+          # Explicit refspecs rather than `git push --mirror`. A Gitea mirror
+          # clone also carries refs/pull/*, which GitHub refuses to accept, so
+          # --mirror fails outright. heads + tags with --prune is what "mirror"
+          # actually means here: the remote ends up matching this repo, and
+          # branches deleted here are deleted there.
+          rc=0
+          for remote in \
+            "git@github.com:uknth/homelab.git" \
+            "git@git.sr.ht:~uknth/homelab"; do
+            echo "::group::${remote}"
+            if git push --quiet --prune --force "$remote" \
+                 'refs/heads/*:refs/heads/*' && \
+               git push --quiet --prune --force "$remote" \
+                 'refs/tags/*:refs/tags/*'; then
+              echo "mirrored -> ${remote}"
+            else
+              echo "FAILED   -> ${remote}" >&2
+              rc=1
+            fi
+            echo "::endgroup::"
+          done
+
+          # Both remotes are attempted even if the first fails, so one broken
+          # mirror does not hide the state of the other — but the job still
+          # goes red if either did not make it.
+          exit $rc
