@@ -101,4 +101,3 @@
         label: "{{ item.Name }}"
       when: _jf_admin_auth.json.AccessToken is defined
       failed_when: false
-

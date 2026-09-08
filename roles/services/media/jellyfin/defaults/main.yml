@@ -19,4 +19,3 @@ jellyfin_admin_password: "{{ vault_jellyfin_admin_password | default('') }}"
 # Jellyfin usernames that should hold the admin role. Authentik SSO users land
 # as non-admin, so without this a rebuild silently demotes them.
 jellyfin_sso_admin_users: ["uknth"]
-
