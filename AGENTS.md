@@ -123,6 +123,28 @@ roles/<category>/<name>/
 2. Template `docker-compose.yml.j2` (and any config files) into the service directory.
 3. Deploy with `community.docker.docker_compose_v2`.
 
+**Check mode (`--check`) and handlers:** every `docker_compose_v2` restart handler
+must be guarded, because `.gitea/workflows/pr-dryrun.yml` runs the whole fleet in
+check mode on every PR:
+
+```yaml
+- name: Restart <service>
+  when: not ansible_check_mode                       # plain form
+  # or, where the role registers a "has this deployed before" stat:
+  when: not ansible_check_mode or _<svc>_deployed.stat.exists
+```
+
+Without it a dry run fails on any role deploying for the **first** time: task 1
+creates the compose dir, but check mode makes that a no-op, so the handler dies
+with `"…/compose" is not a directory`. Guarding the deploy *task* is not enough —
+the templates still report `changed` under check mode, which notifies the handler
+anyway. **A notified handler needs the same guard as the task that notifies it.**
+
+The same trap applies to any task depending on an earlier task's side effect: the
+nginx `sites-enabled` symlink needs `force: "{{ ansible_check_mode }}"` because the
+vhost it points at has not been templated yet. These only ever surface on a
+first-ever deploy, which is exactly when nobody is looking for them.
+
 **Cross-platform roles** (currently everything under `system/`) use one role with
 OS-specific task files (`tasks/linux.yml`, `tasks/macos.yml`) dispatched from `tasks/main.yml`
 via `when: ansible_system == "Linux"` / `"Darwin"` — don't fork into separate

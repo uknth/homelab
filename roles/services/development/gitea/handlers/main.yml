@@ -1,5 +1,8 @@
 ---
 - name: Restart gitea
+  # Skipped under --check: a dry run cannot restart anything, and on a host
+  # where this role has never deployed the compose dir does not exist yet.
+  when: not ansible_check_mode
   become: true
   community.docker.docker_compose_v2:
     project_src: "{{ gitea_compose_dir }}"
@@ -10,6 +13,9 @@
 # renewal schedule should not bounce Gitea itself, which is a far more
 # disruptive restart than this redirect vhost needs.
 - name: Restart gitea ssh redirect
+  # Skipped under --check: a dry run cannot restart anything, and on a host
+  # where this role has never deployed the compose dir does not exist yet.
+  when: not ansible_check_mode
   become: true
   community.docker.docker_compose_v2:
     project_src: "{{ gitea_compose_dir }}"

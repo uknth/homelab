@@ -1,5 +1,8 @@
 ---
 - name: Restart glance
+  # Skipped under --check: a dry run cannot restart anything, and on a host
+  # where this role has never deployed the compose dir does not exist yet.
+  when: not ansible_check_mode
   become: true
   community.docker.docker_compose_v2:
     project_src: "{{ glance_root_dir }}/compose"
