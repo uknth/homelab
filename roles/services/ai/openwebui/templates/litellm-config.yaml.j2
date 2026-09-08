@@ -35,33 +35,28 @@ model_list:
       api_base: {{ openwebui_llm_base_url }}
       api_key: os.environ/OMLX_API_KEY
 
-  # --- Anthropic: exactly these two model_name entries, and no others ------
+  # --- Anthropic: exactly ONE model_name entry, and no others --------------
   # Opus must not appear anywhere in this file. THE ABSENCE IS THE
   # ENFORCEMENT: Open WebUI (and anything else that talks to this proxy) can
   # only ever request a model_name defined here, so a model this file never
   # lists is a model that cannot be reached, whatever the picker shows or a
-  # stray API call tries.
+  # stray API call tries. That now applies to Haiku too — it was removed by
+  # request, so Sonnet is the only Anthropic model reachable at all.
   - model_name: {{ openwebui_litellm_sonnet_model }}
     litellm_params:
       model: anthropic/{{ openwebui_litellm_sonnet_model }}
       api_key: os.environ/ANTHROPIC_API_KEY
 
-  - model_name: {{ openwebui_litellm_haiku_model }}
-    litellm_params:
-      model: anthropic/{{ openwebui_litellm_haiku_model }}
-      api_key: os.environ/ANTHROPIC_API_KEY
-
 # The local alias falls back to Anthropic, and ONLY in that direction — a
 # fallback fires because {{ openwebui_litellm_local_alias }} (omlx) is
-# unreachable or erroring, and the cheap model is the right first answer to
-# that failure, not the expensive one. Haiku is tried before Sonnet;
-# Sonnet is still second in the chain in case Haiku itself is having a bad
-# day. Neither Anthropic model falls back to anything — there is nothing
-# cheaper to fall back to that isn't the (already-failing) local model.
+# unreachable or erroring. The chain used to be Haiku then Sonnet, on the
+# reasoning that the cheap model is the right first answer to a local
+# outage; Haiku was dropped by request, so Sonnet is now both the first and
+# only fallback. Sonnet does not fall back to anything — there is nothing
+# left to fall back to that isn't the (already-failing) local model.
 router_settings:
   fallbacks:
     - {{ openwebui_litellm_local_alias }}:
-        - {{ openwebui_litellm_haiku_model }}
         - {{ openwebui_litellm_sonnet_model }}
 
 # The one credential Open WebUI needs to reach this proxy at all
