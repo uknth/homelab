@@ -7,6 +7,17 @@
 # as a follow-up, not as part of standing this up.
 profile: min
 
+# Do not install requirements.yml before linting. ansible-lint does this by
+# default, which made a green build depend on Galaxy being reachable: on
+# 2026-09-08 `comcast.sdkman` failed to download ("Remote end closed connection
+# without response") and failed ansible-lint on master, with nothing wrong in
+# the repo. Those roles are legacy v2 leftovers and are unused by anything under
+# playbooks/hosts/ (see the "Install Ansible" comment in ci.yml); the
+# collections that ARE used ship inside the full `ansible` pip package the
+# workflow installs. So there is nothing to fetch, and fetching it was pure
+# flakiness.
+offline: true
+
 exclude_paths:
   # Retired v2 roles/playbooks, reference only — predates this repo's own
   # conventions and is not touched by ongoing work (see AGENTS.md, "do not

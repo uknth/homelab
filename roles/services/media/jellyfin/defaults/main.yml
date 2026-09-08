@@ -10,3 +10,13 @@ jellyfin_pgid: "{{ media_gid }}"
 jellyfin_port: 8096
 jellyseerr_port: 5055
 jellyfin_published_url: "https://video.{{ base_domain }}"
+
+# Wizard admin (manual-login form, NOT the Authentik button) — see
+# docs/spec/auth.md. Used only to promote SSO users to admin in tasks/main.yml.
+jellyfin_admin_user: "admin"
+jellyfin_admin_password: "{{ vault_jellyfin_admin_password | default('') }}"
+
+# Jellyfin usernames that should hold the admin role. Authentik SSO users land
+# as non-admin, so without this a rebuild silently demotes them.
+jellyfin_sso_admin_users: ["uknth"]
+

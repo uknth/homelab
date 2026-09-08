@@ -46,15 +46,23 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
-          # not a branch name, and cloning it fails with "Remote branch 1 not
-          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
-          # on pull_request and is empty on push, so this covers both triggers.
-          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
-          # already refuses those, and this repo takes no outside PRs.)
-          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          git clone --depth 1 --branch "$REF" \
-            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
+          URL="http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git"
+          # Fetch the exact COMMIT, never a branch name. Cloning by branch broke
+          # twice: on a pull_request GITHUB_REF_NAME is the PR NUMBER, and once a
+          # PR is merged its branch is deleted, so any run still queued for it
+          # dies with "Remote branch ... not found in upstream origin". A SHA is
+          # immune to both, and is also what we actually want to test.
+          # Falls back to the branch if the server refuses a by-SHA fetch
+          # (uploadpack.allowReachableSHA1InWant) — that is the old behaviour,
+          # so this can only be better than what it replaces.
+          git init -q .
+          git remote add origin "$URL"
+          if ! git fetch -q --depth 1 origin "$GITHUB_SHA"; then
+            REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+            echo "by-SHA fetch refused by server; falling back to branch ${REF}"
+            git fetch -q --depth 1 origin "$REF"
+          fi
+          git checkout -q FETCH_HEAD
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a
           # non-tty job container and emitting eight lines of noise per job.
@@ -102,15 +110,23 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
-          # not a branch name, and cloning it fails with "Remote branch 1 not
-          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
-          # on pull_request and is empty on push, so this covers both triggers.
-          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
-          # already refuses those, and this repo takes no outside PRs.)
-          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          git clone --depth 1 --branch "$REF" \
-            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
+          URL="http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git"
+          # Fetch the exact COMMIT, never a branch name. Cloning by branch broke
+          # twice: on a pull_request GITHUB_REF_NAME is the PR NUMBER, and once a
+          # PR is merged its branch is deleted, so any run still queued for it
+          # dies with "Remote branch ... not found in upstream origin". A SHA is
+          # immune to both, and is also what we actually want to test.
+          # Falls back to the branch if the server refuses a by-SHA fetch
+          # (uploadpack.allowReachableSHA1InWant) — that is the old behaviour,
+          # so this can only be better than what it replaces.
+          git init -q .
+          git remote add origin "$URL"
+          if ! git fetch -q --depth 1 origin "$GITHUB_SHA"; then
+            REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+            echo "by-SHA fetch refused by server; falling back to branch ${REF}"
+            git fetch -q --depth 1 origin "$REF"
+          fi
+          git checkout -q FETCH_HEAD
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a
           # non-tty job container and emitting eight lines of noise per job.
@@ -162,15 +178,23 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
-          # not a branch name, and cloning it fails with "Remote branch 1 not
-          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
-          # on pull_request and is empty on push, so this covers both triggers.
-          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
-          # already refuses those, and this repo takes no outside PRs.)
-          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          git clone --depth 1 --branch "$REF" \
-            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
+          URL="http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git"
+          # Fetch the exact COMMIT, never a branch name. Cloning by branch broke
+          # twice: on a pull_request GITHUB_REF_NAME is the PR NUMBER, and once a
+          # PR is merged its branch is deleted, so any run still queued for it
+          # dies with "Remote branch ... not found in upstream origin". A SHA is
+          # immune to both, and is also what we actually want to test.
+          # Falls back to the branch if the server refuses a by-SHA fetch
+          # (uploadpack.allowReachableSHA1InWant) — that is the old behaviour,
+          # so this can only be better than what it replaces.
+          git init -q .
+          git remote add origin "$URL"
+          if ! git fetch -q --depth 1 origin "$GITHUB_SHA"; then
+            REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+            echo "by-SHA fetch refused by server; falling back to branch ${REF}"
+            git fetch -q --depth 1 origin "$REF"
+          fi
+          git checkout -q FETCH_HEAD
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a
           # non-tty job container and emitting eight lines of noise per job.
@@ -248,15 +272,23 @@ jobs:
           # credential and does not need to be added as a secret by hand.
           # act_runner masks it in logs.
           HOST="${GITHUB_SERVER_URL#*://}"
-          # On a pull_request event GITHUB_REF_NAME is the PR NUMBER ("1"),
-          # not a branch name, and cloning it fails with "Remote branch 1 not
-          # found in upstream origin". GITHUB_HEAD_REF holds the source branch
-          # on pull_request and is empty on push, so this covers both triggers.
-          # (A fork PR would also need the fork's clone URL; pr-dryrun.yml
-          # already refuses those, and this repo takes no outside PRs.)
-          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          git clone --depth 1 --branch "$REF" \
-            "http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
+          URL="http://x-access-token:${GITEA_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git"
+          # Fetch the exact COMMIT, never a branch name. Cloning by branch broke
+          # twice: on a pull_request GITHUB_REF_NAME is the PR NUMBER, and once a
+          # PR is merged its branch is deleted, so any run still queued for it
+          # dies with "Remote branch ... not found in upstream origin". A SHA is
+          # immune to both, and is also what we actually want to test.
+          # Falls back to the branch if the server refuses a by-SHA fetch
+          # (uploadpack.allowReachableSHA1InWant) — that is the old behaviour,
+          # so this can only be better than what it replaces.
+          git init -q .
+          git remote add origin "$URL"
+          if ! git fetch -q --depth 1 origin "$GITHUB_SHA"; then
+            REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+            echo "by-SHA fetch refused by server; falling back to branch ${REF}"
+            git fetch -q --depth 1 origin "$REF"
+          fi
+          git checkout -q FETCH_HEAD
         env:
           # Keeps apt from trying dialog/readline frontends it cannot use in a
           # non-tty job container and emitting eight lines of noise per job.

@@ -30,3 +30,75 @@
     project_name: jellyfin
     state: present
     pull: missing
+
+# --- Admin role for the SSO user (codifies a manual API promotion) ---------
+# Authentik SSO users land in Jellyfin as NON-admin. `uknth` was promoted by
+# hand via the API on 2026-08-22, which meant a Jellyfin rebuild silently
+# demoted him again — see docs/spec/auth.md, "Jellyfin admin".
+#
+# Idempotent by construction: it reads the user's current policy and only
+# writes when IsAdministrator is actually false, and it POSTs the EXISTING
+# policy object with that one field flipped rather than a hand-built one, so
+# no other permission is clobbered by omission.
+#
+# Best-effort, like the rest of the API-driven config in this fleet: every task
+# is failed_when: false, because Jellyfin not being up yet must not fail the
+# play. Skipped entirely under --check (it authenticates and writes).
+- name: Jellyfin admin promotion
+  when:
+    - not ansible_check_mode
+    - jellyfin_admin_user | length > 0
+    # Guard on the PASSWORD too, not just the username. vault_jellyfin_admin_password
+    # defaults to '' when absent from the vault, and without this the block would
+    # authenticate with an empty password on every run — a guaranteed-failing
+    # request, swallowed by failed_when: false, i.e. silently doing nothing.
+    - jellyfin_admin_password | length > 0
+    - jellyfin_sso_admin_users | length > 0
+  block:
+    - name: Jellyfin - authenticate as the wizard admin
+      ansible.builtin.uri:
+        url: "http://localhost:{{ jellyfin_port }}/Users/AuthenticateByName"
+        method: POST
+        body_format: json
+        body:
+          Username: "{{ jellyfin_admin_user }}"
+          Pw: "{{ jellyfin_admin_password }}"
+        headers:
+          Authorization: >-
+            MediaBrowser Client="Ansible", Device="ansible",
+            DeviceId="ansible-jellyfin-role", Version="1.0"
+      register: _jf_admin_auth
+      failed_when: false
+      no_log: true
+
+    - name: Jellyfin - list users
+      ansible.builtin.uri:
+        url: "http://localhost:{{ jellyfin_port }}/Users"
+        headers:
+          Authorization: 'MediaBrowser Token="{{ _jf_admin_auth.json.AccessToken }}"'
+      register: _jf_users
+      when: _jf_admin_auth.json.AccessToken is defined
+      failed_when: false
+      no_log: true
+
+    # One POST per user that needs it. The loop body sends item.Policy with
+    # IsAdministrator overridden via combine(), so existing fields survive.
+    - name: Jellyfin - grant admin to the SSO users that lack it
+      ansible.builtin.uri:
+        url: "http://localhost:{{ jellyfin_port }}/Users/{{ item.Id }}/Policy"
+        method: POST
+        body_format: json
+        body: "{{ item.Policy | combine({'IsAdministrator': true}) }}"
+        headers:
+          Authorization: 'MediaBrowser Token="{{ _jf_admin_auth.json.AccessToken }}"'
+        status_code: [200, 204]
+      loop: >-
+        {{ (_jf_users.json | default([]))
+           | selectattr('Name', 'in', jellyfin_sso_admin_users)
+           | rejectattr('Policy.IsAdministrator')
+           | list }}
+      loop_control:
+        label: "{{ item.Name }}"
+      when: _jf_admin_auth.json.AccessToken is defined
+      failed_when: false
+

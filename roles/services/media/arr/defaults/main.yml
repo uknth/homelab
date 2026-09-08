@@ -39,6 +39,23 @@ arr_nzbget_conf: "{{ arr_root_dir }}/nzbget/nzbget.conf"
 arr_nzbget_interdir: "/scratch/nzbget"           # in-progress (scratch-pool)
 arr_nzbget_destdir: "/data/downloads/usenet"     # completed (data-pool)
 arr_nzbget_categories: ["Movies", "Series", "Music", "Software"]
+
+# nzbget logging and buffers. nzbget.conf is NOT templated — it is edited live in
+# the UI — so these are enforced by the drift block in tasks/download_config.yml,
+# which stops the container to apply them (all four are read only at startup).
+#
+# WriteLog=rotate, not append: with append the log grows without bound, and
+# RotateLog is inert — /opt/homelab/arr/nzbget/nzbget.log reached 398 MB by
+# 2026-09-08 and nzbget warned about it on every start.
+arr_nzbget_writelog: "rotate"
+arr_nzbget_rotatelog: 7          # days of dated logs to keep
+
+# nzbget warns on every start that both of these are unset (disk fragmentation,
+# and a system write buffer that is "often too small and inefficient"). cmp01 has
+# 62 GB RAM with ~53 GB free, so it can afford these comfortably. Worth most here
+# because DirectWrite=yes, which is where the article cache pays off.
+arr_nzbget_articlecache: 700     # MB
+arr_nzbget_writebuffer: 1024     # KB
 arr_qbit_categories: ["tv", "movies"]
 # nzbget control creds used by the *arr download clients. Set BOTH in vault to
 # have the role enforce them; leave empty to leave nzbget's creds untouched.
