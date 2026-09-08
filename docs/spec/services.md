@@ -58,7 +58,8 @@ names.
 | Paperless-ngx | `services/documents/paperless` | `docs.puhome.net` | 🟢 built + live | migrated (182 docs) to local disk; postgres:17 glibc; tika/gotenberg; **Authentik OIDC login** (tier-1) + API tokens |
 | paperless-ai | part of `services/documents/paperless` | `docs-ai.puhome.net` | 🟢 built + live | LLM auto-tagging + RAG chat. **Opt-in**: only touches documents tagged `ai-process`. SSO-gated (holds a Paperless superuser token). Upstream unmaintained — excluded from auto-upgrades |
 | llama.cpp (`llama-server`) | part of `services/documents/paperless` | — (no published port) | 🟢 built + live | Gemma 3 4B Q4_K_M on the A4000 (~3.3 GB VRAM). On an `internal: true` network — no LAN route, no internet |
-| Open WebUI | `services/ai/openwebui` | `ask.puhome.net` | 🟢 built | General LLM chat, omlx (ai01) backend only. **No wiki data, no vaultask/vaultindex link** — the deliberate privacy split from `search.puhome.net` (vaultask), which does hold the wiki incl. `Secrets/`/`Finances/`. Signup disabled after the first (admin) account. May gain a third-party provider (Anthropic) later, which is exactly why it must stay wiki-free |
+| Open WebUI | `services/ai/openwebui` | `ask.puhome.net` | 🟢 built | General LLM chat on cmp01:8104. **No wiki data, no vaultask/vaultindex link** — the deliberate privacy split from `search.puhome.net` (vaultask), which does hold the wiki incl. `Secrets/`/`Finances/`. **No login at all** (`WEBUI_AUTH=false`, vhost `sso: false`) by explicit user instruction, which is precisely why it holds no provider keys and no wiki data. Talks only to LiteLLM |
+| LiteLLM | `services/ai/openwebui` (same role) | — (container-internal, cmp01) | 🟢 built | The model gateway in front of Open WebUI, and the **only** holder of `OMLX_API_KEY` and `ANTHROPIC_API_KEY`. Defines exactly `qwen` and `claude-sonnet-5`: Opus and Haiku are not restricted, they are **absent**, so they cannot be routed to regardless of what a picker shows. Automatic failover `qwen → claude-sonnet-5` when omlx is unreachable (verified live 2026-09-08). Deliberately not published to the host |
 | Gitea Actions runner | `services/development/gitea_runner` | — (no published port) | 🟢 built | `act_runner`, paired 1:1 with Gitea; runs after it in `playbooks/hosts/cmp01.yml`. **No fleet credentials** (no vault password, no ansible SSH key, no `/opt/homelab` mounts beyond its own state) — the one thing it holds is the Docker socket, which is a privilege boundary (can start containers on cmp01) not a sandbox. Registers via Gitea's own admin API using the admin account the `gitea` role bootstraps. Pinned `gitea/act_runner:0.6.1` |
 
 **Out of scope for v3 (user directive):** Immich (photos), Vaultwarden (passwords). Removed
@@ -85,7 +86,7 @@ helper is already PIA-shaped).
 | Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
 | n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7). Owns three workflows (2 maintenance + dual-WAN watch), defined as JSON in the role and imported via the n8n CLI |
 | Syncthing | `services/productivity/syncthing` | `sync.puhome.net` | 🟢 built + live | standalone file sync; GUI behind forward-auth; data under `/opt/homelab/syncthing/data` (Restic-backed) |
-| Gitea | `services/development/gitea` | `git.puhome.net` | 🟢 built | single-user Git host, local development; SQLite; registration disabled; own auth (`sso: false` — forward-auth breaks git-over-HTTPS/API); pinned `gitea/gitea:1.27.3`; ports 8102 (HTTP) + 2222 (SSH) |
+| Gitea | `services/development/gitea` | `git.puhome.net` | 🟢 built | single-user Git host, local development; SQLite; registration disabled; own auth (`sso: false` — forward-auth breaks git-over-HTTPS/API); pinned `gitea/gitea:1.27.3`; HTTP on 8102. SSH is **portless** — `git@ssh.git.puhome.net` with no `:2222`, via a macvlan sidecar on `10.0.2.18`. Repos on NFS from nas01, restic-backed-up to nas02. **This is the fleet's source of truth**; see [gitops](../plan/gitops.md) |
 
 ## `ai01` — AI workloads
 
@@ -117,10 +118,10 @@ helper is already PIA-shaped).
 |---|---|---|---|---|
 | Vault mirror | `services/knowledge/vaultsync` | — | 🟢 built | **`obsidian-headless`** (official Obsidian Sync CLI) on cmp01, `--mode mirror-remote` (downloads only, reverts local writes). Version-pinned npm install. Scheduled **hourly** by n8n (`homelab-vault-ingest`), not `--continuous`. `Secrets`/`Finances` **included** by user direction — LAN-only + SSO |
 | Enrichment (embeddings + summaries) | `services/knowledge/vaultindex` | — | 🟢 built | bge-small + Gemma 3 12B on the A4000; summary model started **on demand** and stopped after each run |
-| Search | `services/knowledge/vaultask` | `ask.puhome.net` | 🟢 built | FTS5/BM25 + cosine over note embeddings, fused with RRF. `node:sqlite` — no native modules, no `sqlite-vec`. Search only, no generation. Feeds the `dash.puhome.net` header search |
+| Search | `services/knowledge/vaultask` | `search.puhome.net` | 🟢 built | FTS5/BM25 + cosine over note embeddings, fused with RRF. `node:sqlite` — no native modules, no `sqlite-vec`. Also serves wiki-**grounded** answers via omlx; the ungrounded fallback was removed 2026-09-08 — below the grounding threshold it says so and lists the closest notes rather than answering from general knowledge. Behind Authentik, because it can reach `Secrets/`/`Finances/`. Feeds the `dash.puhome.net` header search. Moved off `ask.puhome.net` in the privacy split |
 | Merge (topic tree) | `services/knowledge/vaultmerge` | — | 🔵 planned (9b) | Dissolves the three vaults into one topic-organised tree; resolves 35 filename collisions, rewrites wikilinks source-vault-first |
 | Wiki (Quartz) | `services/knowledge/quartz` | `wiki.puhome.net` | 🟢 built | Quartz **v5.0.0** (pinned git checkout). Static HTML — Obsidian-native wikilinks/backlinks/graph, per-vault configs generated from upstream defaults. **Read-only**: Docmost/DokuWiki rejected as they become a second writer |
-| Answer/agent endpoint | `services/ai/omlx` (ai01) | — | 🔵 planned (8b) | One shared resident model on ai01 (24 GB unified memory fits exactly one). Serves the research agent first, vault Q&A after. Engine decided 2026-09-03: **omlx**, not llama.cpp — see [`research.md`](research.md#inference--ai01-runs-omlx-and-only-omlx) |
+| Answer/agent endpoint | `services/ai/omlx` (ai01) | — | 🟢 built | One shared resident model on ai01 (24 GB unified memory fits exactly one). Serves the research agent first, vault Q&A after. Engine decided 2026-09-03: **omlx**, not llama.cpp — see [`research.md`](research.md#inference--ai01-runs-omlx-and-only-omlx) |
 
 **Not backed up by design** — the mirror's source of truth is the Mac; the index and wiki
 build are derived. See [`knowledge.md`](knowledge.md#backups).
@@ -136,7 +137,7 @@ build are derived. See [`knowledge.md`](knowledge.md#backups).
 | Service | Target role | Domain | Status | Notes |
 |---|---|---|---|---|
 | Colima | `system/colima` | — | 🔵 planned (8c) | Docker runtime (Linux VM). **Hard prerequisite** for researchd. `mounts: []` |
-| Research agent | `services/ai/researchd` | `research.puhome.net` | 🔵 planned (10) | Commissioned research → wiki. Purpose-built pipeline, **not** Hermes/OpenClaw. Container with no host mounts, no credentials but the omlx key, and a `DOCKER-USER` egress allowlist. Delivery is a **pull**: cmp01 fetches the bundle |
+| Research agent | `services/ai/researchd` | `research.puhome.net` | 🟢 built | Commissioned research → wiki. Purpose-built pipeline, **not** Hermes/OpenClaw. Container with no host mounts, no credentials but the omlx key, and a `DOCKER-USER` egress allowlist. Delivery is a **pull**: cmp01 fetches the bundle |
 | SearXNG | part of `services/ai/researchd` | — | 🔵 planned (10) | Meta-search backing the agent. Moved off util01 (2026-09-03, already carrying 12 services) and folded into researchd's compose project — same pattern as paperless-ai inside Paperless. No published port, no domain, so researchd keeps exactly **one** allowed LAN destination |
 
 | Package | Target role | Status | v2 reference |
@@ -158,7 +159,7 @@ Also the **Ansible control node** — runs the playbooks against the fleet.
 | Full OS upgrades | `--tags patch` play | 🔵 net-new | [maintenance](maintenance.md#2-full-os-upgrades--deliberate) |
 | Container updates | Diun notify + Ansible apply | 🔵 net-new | [maintenance](maintenance.md#3-container-updates--notify-then-ansible-applies) |
 | Backups | `ops/restic` → nas02 (SFTP) | 🔵 net-new | [maintenance](maintenance.md#4-backups--restic--nas02-over-sftp) |
-| GitOps deploy | builds.sr.ht + n8n | 🔵 net-new | [gitops](../plan/gitops.md) |
+| GitOps deploy | Gitea Actions + `ops/gitops_executor` (util01) | 🟢 built + live | [gitops](../plan/gitops.md) |
 | Container upgrades + space reclaim | `ops/maintenance` (util01) driven by n8n | 🟢 built + live | [maintenance](maintenance.md#3-container-updates--diun-detects-n8n-applies-ntfy-reports) |
 
 ## Retired in v2, not planned for v3

@@ -110,7 +110,7 @@ embedding never crosses a host boundary.
        |        +-- answers:    ai01 llama-server over LAN
        |
        +--> quartz       static build -> wiki.puhome.net
-       +--> vaultindex UI                 ask.puhome.net
+       +--> vaultindex UI                 search.puhome.net
 ```
 
 ### Roles
@@ -133,7 +133,11 @@ embedding never crosses a host boundary.
 ### Domains
 
 - `wiki.puhome.net` -> cmp01:8101 (Quartz)
-- `ask.puhome.net` -> cmp01:8100 (search + Q&A)
+- `search.puhome.net` -> cmp01:8100 (wiki search + wiki-grounded Q&A, behind Authentik).
+  Renamed from `ask.puhome.net` on 2026-09-08: `ask.puhome.net` is now a **separate**
+  service (Open WebUI) with no wiki data at all. This one holds the notes — including
+  `Secrets/` and `Finances/` — talks only to omlx on ai01, and never answers from
+  general knowledge when retrieval misses. See [`services.md`](services.md)
 
 Both Tier-2 forward-auth. Neither is exposed off-LAN beyond Tailscale.
 

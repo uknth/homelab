@@ -12,7 +12,7 @@ Obsidian Sync (authored on the Macs — the only writer)
   → Quartz build → nginx                    [wiki.puhome.net]
      driven hourly by n8n `homelab-vault-ingest`
 
-  vaultask (always up, reads the two outputs)  [ask.puhome.net]
+  vaultask (always up, reads the two outputs)  [search.puhome.net]
      FTS5/BM25 + cosine, fused with RRF — search, not answers
 ```
 
@@ -248,7 +248,12 @@ devices (the Macs) are fine — that is the whole design.
 | Raw JavaScript on a wiki page | A Dataview fence the stripper missed. It matches ```` ```dataview ```` and ```` ```dataviewjs ````; anything else needs a pattern in `prepare-content.mjs`. |
 | Wiki 404s on a page that exists | Quartz emits `<page>.html`; nginx needs `try_files $uri $uri/ $uri.html`. Check `/opt/homelab/quartz/nginx.conf`. |
 
-## Search — `ask.puhome.net`
+## Search — `search.puhome.net`
+
+> Renamed from `ask.puhome.net` on 2026-09-08. That hostname now serves a **different**
+> service (Open WebUI general chat) which holds no wiki data — see
+> [`../spec/services.md`](../spec/services.md). If a bookmark or script still points at
+> `ask.puhome.net` expecting wiki search, it is pointing at the wrong service.
 
 Hybrid retrieval over the merged tree. **No LLM**: it returns notes, not
 answers (user decision 2026-09-02 — ship search, judge generation after using
@@ -272,7 +277,7 @@ says so in the UI rather than returning nothing.
 
 **On the dashboard:** the header search box on `dash.puhome.net` (the Phase-8
 placeholder) now queries the wiki instead of DuckDuckGo — `provider: custom`
-pointing at `https://ask.puhome.net/?q=`.
+pointing at `https://search.puhome.net/?q=`.
 
 ## Not yet built
 
