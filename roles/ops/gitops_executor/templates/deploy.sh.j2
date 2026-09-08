@@ -93,7 +93,30 @@ if [ "$LOCAL" = "$REMOTE" ]; then
   exit 0
 else
   echo "updating $LOCAL -> $REMOTE"
-  git pull --ff-only --quiet origin "$BRANCH" || { notify "Deploy FAILED" "git pull failed"; exit 1; }
+  # `reset --hard`, not `pull --ff-only`. This clone is a read-only mirror of
+  # origin/$BRANCH — it never has local commits worth protecting, so "make the
+  # worktree exactly what origin says" is the honest description of what this
+  # step is for, and it is what --ff-only was approximating.
+  #
+  # --ff-only also fails outright when upstream history is rewritten, which is
+  # not hypothetical: the vault purge on 2026-09-08 force-pushed master and
+  # wedged this executor with "git pull failed". Every deploy stayed broken
+  # until the clone was reset by hand, and the failure message pointed at git
+  # rather than at the rewrite, which is the expensive part.
+  #
+  # A force-update is still worth SAYING, because the normal case is a
+  # fast-forward and a rewrite is a genuinely unusual event.
+  if ! git merge-base --is-ancestor "$LOCAL" "$REMOTE" 2>/dev/null; then
+    echo "upstream history was rewritten (${LOCAL} is not an ancestor of ${REMOTE}) — resetting"
+    notify "Deploy: upstream history rewritten" \
+           "origin/$BRANCH no longer contains $LOCAL; the executor clone was reset to match."
+  fi
+  git reset --hard --quiet "origin/$BRANCH" \
+    || { notify "Deploy FAILED" "git reset to origin/$BRANCH failed"; exit 1; }
+  # Rewrites routinely leave files behind that the new tree does not track
+  # (the purged vault paths did exactly this). Untracked leftovers would be
+  # invisible to git status but very visible to Ansible.
+  git clean -qfd
 fi
 SHORT=$(git rev-parse --short HEAD)
 

@@ -219,6 +219,48 @@ so it is only as strong as the vault password.** If that password is weak or
 reused, change it — the mirror makes it an offline brute-force target rather
 than a LAN-only one.
 
+### Vault history purge (2026-09-08) — and what a force-push does NOT do
+
+The vault password was rotated from **9 characters to 64**, and every historical
+vault blob was then purged from git history with `git filter-repo`. Rekeying
+alone was not enough: git keeps the old blobs forever, so the weak-password
+versions would have stayed public in history.
+
+**Five paths ever held a vault**, and they were found by scanning every blob in
+all 193 commits for the `$ANSIBLE_VAULT` header — not by guessing names, which
+missed two of them:
+
+```
+vault.yml                       (root; hidden from path-filtered log by history simplification)
+group_vars/sidekick/vault       (2023)
+group_vars/all/vault            (21 commits, 2023-01 .. 2026-06 — the largest)
+group_vars/all/vault.yml
+hosts/group_vars/all/vault.yml
+```
+
+Result: 38 vault blobs before, 0 after the rewrite, 1 after re-adding the
+current vault. History survived — 189 commits (4 became empty and were dropped),
+oldest still 2023-01-08, `v3.0.0` intact. Backup bundle was taken first.
+
+**The lesson worth keeping — a force-push does not delete anything.** It moves
+refs; the objects stay and remain fetchable by SHA:
+
+| host | after force-push | why |
+|---|---|---|
+| Gitea | 38 blobs still present | `refs/pull/1..8/head` pin the pre-purge commits, so GC cannot drop them |
+| GitHub | old blobs still served by API | keeps unreferenced objects until its own GC; deleting *branches* does nothing |
+| sr.ht | pre-purge commits still fetchable by SHA | same |
+
+So the only reliable fix for a public remote is **deleting and recreating the
+repository**, which is what was done. Deleting branches, or force-pushing, is
+not sufficient — verify with a direct blob/commit fetch by SHA rather than by
+looking at the branch list.
+
+**The executor needs a manual reset after any rewrite** — or did, until
+`deploy.sh` was changed to `reset --hard` + `git clean` (see the comment there).
+`git pull --ff-only` fails on rewritten history and reports "git pull failed",
+which points at git rather than at the rewrite.
+
 ### Blocked on you — I cannot do these
 
 - **HBA swap** (nas01): LSI 9300-8i needs physically fitting, then move disks,
