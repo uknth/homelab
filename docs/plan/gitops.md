@@ -99,6 +99,50 @@ nobody remembers to flip, to the PR merge itself. The systemd timer is now an ho
 *backstop* for a dropped webhook — the event path is the trigger, and `deploy.sh`'s
 up-to-date check makes every other tick a no-op.
 
+## Mirroring
+
+`.gitea/workflows/mirror.yml` force-pushes heads and tags (with `--prune`) to
+**github.com/uknth/homelab** and **git.sr.ht/~uknth/homelab** on every push to
+master. Both are public; this repo is private on Gitea. That asymmetry is
+deliberate — see the audit recorded in [`../HANDOFF.md`](../HANDOFF.md).
+
+Nothing is ever merged on a mirror, and anything pushed to one directly is
+destroyed by the next run.
+
+### A force-push does not delete anything
+
+The single most expensive lesson of 2026-09-08. Force-pushing moves refs; the
+objects stay and remain fetchable **by SHA**, on every host tested:
+
+- **Gitea** kept every purged blob, because `refs/pull/*/head` pinned the
+  pre-purge commits and GC will not drop a referenced object.
+- **GitHub** kept serving blobs through its API after the branches were gone.
+  Deleting branches changes nothing.
+- **sr.ht** kept serving pre-purge commits to a `git fetch <sha>`.
+
+The only thing that worked was **deleting and recreating the repository**. And
+it must be verified by fetching a known old SHA — reading the branch list tells
+you nothing, and is exactly the check that would have declared success falsely.
+
+### Adding a mirror for a NEW repo
+
+Not yet built; `homelab` is the only mirrored repo. Gitea has no
+instance-level mirroring — every endpoint is `/repos/{owner}/{repo}/...` — so
+this is a per-repo decision. Three shapes, with the trade-off that matters:
+
+| approach | trigger | cost |
+|---|---|---|
+| **Per-repo `mirror.yml`** (preferred) | on push — no lag | one identical file per repo; `homelab` can template it at repo-creation |
+| Gitea native push mirror | on push | HTTPS only in 1.27.3 (`remote_username`/`remote_password`), so a GitHub PAT and an sr.ht token per repo — more credentials, which is what the workflow avoids |
+| Central scheduled workflow | **cron** | rejected: a push sits unmirrored until the next tick, and one broken job silently stops mirroring everywhere |
+
+A central *event-driven* variant is viable if per-repo files become tedious:
+Gitea push webhook → n8n → trigger the mirror. That plays to n8n's actual
+strength (routing events, not git plumbing), but adds a second system holding a
+push-capable key, and would need `workflow_dispatch` support confirmed in this
+Gitea version first. Prefer the per-repo file until there is a real reason not
+to.
+
 ## Gotchas
 
 - **Checkout is hand-rolled, not `actions/checkout`.** That action needs Node, which
