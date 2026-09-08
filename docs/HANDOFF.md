@@ -158,6 +158,36 @@ blocks them, because "open" was hiding three different situations.
   Verified 2026-09-08: `brew --version` is clean as both `ansible` and `uknth` on
   ai01.
 
+### Found 2026-09-08, not yet fixed — the fleet is not idempotent
+
+A **docs-only** deploy (PR #6, which changed nothing but markdown) still reported
+**39 changed tasks and restarted n8n.** A second run of an unchanged repo should
+be silent; this is drift-reporting noise loud enough to hide a real change.
+
+Counted from `/tmp/gitops-apply.log` on util01:
+
+| Source | Changed | Note |
+|---|---|---|
+| `services/productivity/n8n` | **30** | re-templates credentials, re-imports and re-publishes every workflow, deletes the plaintext files, then **restarts n8n** — every single run |
+| `services/dashboard/homepage` | 1 | "Template homepage config files" — the Portainer token churn, fixed in PR #7 |
+| `services/monitoring/beszel_hub` | 3 | superuser / app-URL / OIDC API calls report changed unconditionally |
+| `services/dashboard/portainer` | 1 | "Configure Authentik OAuth", same pattern |
+| `system/network` (ai01, ctl01) | 2 | macOS `networksetup` reports changed every run |
+| `system/tailscale` (gw01) | 1 | "Bring Tailscale up as subnet router" |
+| `services/auth/authentik` | 1 | "Create Authentik directories" — a plain directory task should not churn |
+| `services/productivity/tickets` | 1 | "Deploy tickets" |
+
+n8n is the one that matters: restarting it on every deploy briefly drops the
+webhooks and schedules that the research pipeline, the ticket sync and the
+maintenance jobs all depend on. The rest is cosmetic but it is what makes a
+`--diff` unreadable, which is the real cost — the PR dry-run is only useful if
+a changed line means something.
+
+Not attempted in PR #7: this is seven roles and each needs its own idempotency
+fix (proper `changed_when`, or a read-before-write check), which is a different
+piece of work from the sweep. Worth doing before the dry-run output is trusted
+as a review artefact.
+
 ### Blocked on you — I cannot do these
 
 - **HBA swap** (nas01): LSI 9300-8i needs physically fitting, then move disks,
