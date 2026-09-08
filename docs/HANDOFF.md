@@ -1,4 +1,4 @@
-# Session Handoff — Context Dump (updated 2026-09-08)
+# Session Handoff — Context Dump (updated 2026-09-09)
 
 Single pick-up point for a fresh session. Everything below reflects `master` at
 tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
@@ -18,6 +18,32 @@ tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
   (ansible.cfg). To edit safely: `ansible-vault view … > tmp`, append, then
   `ansible-vault encrypt tmp --output hosts/group_vars/all/vault.yml` (do NOT pass
   `--vault-password-file` to encrypt — ansible.cfg already provides the id).
+
+## If you read nothing else
+
+Three things, in the order I would act on them.
+
+1. **n8n restarts on every deploy.** A docs-only merge still reports 39 changed
+   tasks, 30 of them n8n re-templating credentials, re-importing and
+   re-publishing every workflow, then restarting. That briefly drops the
+   webhooks and schedules the research pipeline, ticket sync and maintenance
+   jobs all depend on — on every deploy, including ones that change nothing. It
+   also makes `--diff` unreadable, which matters now that the PR dry-run is a
+   review artefact people are meant to read. Seven roles need a `changed_when`
+   or a read-before-write; n8n is the one worth fixing first.
+
+2. **Branch protection is real but bypassable.** `master` requires `CI / *` with
+   0 approvals, and `deploy.yml` does not gate on `ci.yml` — the executor's own
+   pre-apply `--check` is what actually protects the fleet. PR #9 was
+   force-merged without waiting for CI (deliberately). Do not assume a commit on
+   master passed CI; check.
+
+3. **Gitea still holds 38 purged vault blobs**, pinned by `refs/pull/1..8/head`.
+   Private repo, so hygiene not exposure — but it is the last piece of the
+   2026-09-08 purge, and it needs a decision (deleting those refs costs the
+   "Files changed" view on eight merged PRs).
+
+Everything else is either blocked on the user, or written up below with reasons.
 
 ## Fleet
 | Host | IP | Role / key services |
@@ -256,6 +282,23 @@ repository**, which is what was done. Deleting branches, or force-pushing, is
 not sufficient — verify with a direct blob/commit fetch by SHA rather than by
 looking at the branch list.
 
+**VERIFIED 2026-09-09** after both repos were deleted and recreated, against a
+populated repo so a 404 means something:
+
+| probe | before | after |
+|---|---|---|
+| GitHub blob `09ef9f0b877f` | http 200, vault content | **404** |
+| GitHub blob `172f9ada3e15` | http 200, vault content | **404** |
+| sr.ht `git fetch <pre-purge sha>` | succeeded | **refused** |
+| all three heads | — | identical (`7630f283df99`) |
+
+**Still outstanding: Gitea itself holds 38 vault blobs**, pinned by
+`refs/pull/1..8/head`. GC cannot drop them while those refs exist. Deleting the
+refs purges the blobs but breaks the "Files changed" view on those eight merged
+PRs — their descriptions and comments survive, as those live in the database.
+Gitea is private, so this is hygiene rather than exposure, and it is left as a
+deliberate open choice rather than done silently.
+
 **The executor needs a manual reset after any rewrite** — or did, until
 `deploy.sh` was changed to `reset --hard` + `git clean` (see the comment there).
 `git pull --ff-only` fails on rewritten history and reports "git pull failed",
@@ -280,6 +323,14 @@ which points at git rather than at the rewrite.
 
 ### Still open, deliberately not attempted in the sweep
 
+- **Mirroring a NEW repo is undecided.** `homelab` mirrors via its own
+  `.gitea/workflows/mirror.yml`; Gitea has no instance-level mirroring, so each
+  repo needs its own arrangement. Options and the trade-offs are written up in
+  [`plan/gitops.md`](plan/gitops.md#adding-a-mirror-for-a-new-repo). Short
+  version: prefer a per-repo `mirror.yml` (push-triggered, no cron, independent
+  failures); a central *scheduled* job was rejected because cron leaves pushes
+  unmirrored until the next tick; a webhook → n8n router is the viable central
+  option but needs `workflow_dispatch` support confirmed first.
 - **Quartz search box still uses FlexSearch**, not `search.puhome.net`. Needs a
   templated `quartz.layout.ts` mounted into the `quartz-build` image — TypeScript
   that must compile against a specific Quartz version, which cannot be verified
