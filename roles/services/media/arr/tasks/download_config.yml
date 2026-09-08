@@ -33,7 +33,9 @@
 - name: Compute nzbget desired lines
   ansible.builtin.set_fact:
     _nzb_desired: >-
-      {{ ['InterDir=' ~ arr_nzbget_interdir, 'DestDir=' ~ arr_nzbget_destdir]
+      {{ ['InterDir=' ~ arr_nzbget_interdir, 'DestDir=' ~ arr_nzbget_destdir,
+          'WriteLog=' ~ arr_nzbget_writelog, 'RotateLog=' ~ arr_nzbget_rotatelog,
+          'ArticleCache=' ~ arr_nzbget_articlecache, 'WriteBuffer=' ~ arr_nzbget_writebuffer]
          + (['ControlUsername=' ~ arr_nzbget_username, 'ControlPassword=' ~ arr_nzbget_password]
             if (arr_nzbget_username | length > 0) else []) }}
   no_log: true
@@ -53,7 +55,23 @@
       loop:
         - { k: InterDir, v: "{{ arr_nzbget_interdir }}" }
         - { k: DestDir,  v: "{{ arr_nzbget_destdir }}" }
+        - { k: WriteLog, v: "{{ arr_nzbget_writelog }}" }
+        - { k: RotateLog, v: "{{ arr_nzbget_rotatelog }}" }
+        - { k: ArticleCache, v: "{{ arr_nzbget_articlecache }}" }
+        - { k: WriteBuffer, v: "{{ arr_nzbget_writebuffer }}" }
       no_log: true
+
+    # One-off cleanup, and it must happen while nzbget is stopped: switching to
+    # rotate starts new dated files and simply abandons the old monolithic log,
+    # so the 398 MB of history left by WriteLog=append would sit there forever.
+    # Guarded on the CURRENT file still saying append, so this fires exactly once
+    # — a later drift run (say a credential change) will not re-delete a healthy
+    # rotated log.
+    - name: Drop the unbounded nzbget.log left behind by WriteLog=append
+      ansible.builtin.file:
+        path: "{{ arr_root_dir }}/nzbget/nzbget.log"
+        state: absent
+      when: "'WriteLog=append' in (_nzb_raw.content | b64decode)"
     - name: Set nzbget control creds (if provided)
       ansible.builtin.lineinfile:
         path: "{{ arr_nzbget_conf }}"

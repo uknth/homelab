@@ -107,7 +107,32 @@
   ansible.builtin.set_fact:
     hp_jellyfin_key: "{{ hp_jellyfin_key | default('') }}"
 
-# --- Portainer access token (mint fresh each run; raw key shown once) ---
+# --- Portainer access token (minted ONCE, then reused) --------------------
+# This block used to mint a fresh token on every run. Portainer only returns
+# rawAPIKey at creation, so a fresh mint meant a different value in
+# services.yaml every time, which meant the template always reported "changed"
+# and Homepage restarted on every single site.yml run — for no reason.
+#
+# So the raw key is now persisted next to the service, in the same
+# generate-once-and-read-back idiom as Open WebUI's secret key and Gitea's
+# admin password (never the vault: re-running the role must not rotate a
+# credential something else already holds). A new token is minted only when
+# the cache is missing or Portainer no longer has a matching token — so a
+# revoked or hand-deleted token still self-heals on the next run.
+- name: Portainer - check for a cached access token
+  become: true
+  ansible.builtin.stat:
+    path: "{{ homepage_portainer_token_file }}"
+  register: _pt_cache
+
+- name: Portainer - read the cached access token
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ homepage_portainer_token_file }}"
+  register: _pt_cached_raw
+  when: _pt_cache.stat.exists
+  no_log: true
+
 - name: Portainer auth
   ansible.builtin.uri:
     url: "http://localhost:9001/api/auth"
@@ -127,6 +152,18 @@
   failed_when: false
   no_log: true
 
+# Reuse only if we hold a raw key AND Portainer still lists a token by that
+# description. Either half missing means the cache is worthless.
+- name: Portainer - decide whether the cached token is still usable
+  ansible.builtin.set_fact:
+    _pt_reuse: >-
+      {{ (_pt_cache.stat.exists | default(false))
+         and ((_pt_cached_raw.content | default('') | b64decode | trim) | length > 0)
+         and ((_pt_tokens.json | default([])
+               | selectattr('description', 'equalto', 'homepage-dash')
+               | list | length) > 0) }}
+  no_log: true
+
 - name: Portainer - delete old homepage-dash tokens
   ansible.builtin.uri:
     url: "http://localhost:9001/api/users/1/tokens/{{ item.id }}"
@@ -135,7 +172,7 @@
     status_code: [204, 200]
   loop: "{{ _pt_tokens.json | default([]) | selectattr('description','equalto','homepage-dash') | list }}"
   loop_control: { label: "{{ item.id }}" }
-  when: _pt_login.json.jwt is defined
+  when: _pt_login.json.jwt is defined and not _pt_reuse
   no_log: true
 
 - name: Portainer - create homepage-dash token
@@ -147,12 +184,25 @@
     body: { description: "homepage-dash", password: "{{ vault_portainer_admin_password }}" }
     status_code: [200, 201]
   register: _pt_new
-  when: _pt_login.json.jwt is defined
+  when: _pt_login.json.jwt is defined and not _pt_reuse
+  no_log: true
+
+- name: Portainer - persist the newly minted token
+  become: true
+  ansible.builtin.copy:
+    content: "{{ _pt_new.json.rawAPIKey }}\n"
+    dest: "{{ homepage_portainer_token_file }}"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0600"
+  when: not _pt_reuse and (_pt_new.json.rawAPIKey is defined)
   no_log: true
 
 - name: Set portainer facts
   ansible.builtin.set_fact:
-    hp_portainer_token: "{{ _pt_new.json.rawAPIKey | default('') }}"
+    hp_portainer_token: >-
+      {{ (_pt_cached_raw.content | b64decode | trim) if _pt_reuse
+         else (_pt_new.json.rawAPIKey | default('')) }}
     hp_portainer_env: 1
   no_log: true
 

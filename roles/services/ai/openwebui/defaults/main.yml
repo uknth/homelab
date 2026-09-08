@@ -97,6 +97,15 @@ openwebui_enable_signup: false
 # local model.
 openwebui_enable_arena_models: false
 
+# false = env vars beat the database for every PersistentConfig setting, on
+# every start. Set because ENABLE_EVALUATION_ARENA_MODELS=false alone did NOT
+# work: Open WebUI had already stored evaluation.arena.enable=true in webui.db
+# and the DB outranks env once seeded. See the long comment in
+# templates/openwebui.env.j2 for the two reasons this is the right default for
+# an Ansible-managed, login-less service — and for the trade-off it carries
+# (admin-UI settings no longer survive a restart).
+openwebui_enable_persistent_config: false
+
 # --- RAG / document ingestion: deliberately left on its LOCAL default ------
 # Open WebUI ships a generic "attach a file to this chat" feature that is
 # UNRELATED to the wiki boundary above — a user pasting a PDF into a chat

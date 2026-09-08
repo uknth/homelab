@@ -111,72 +111,116 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
   Pi-hole is v5.18.2 (v6.4.3 available).
 
 ## Open items / TODO (carry forward)
-- **Homepage re-templates on every run**: `gather_keys.yml` mints a *fresh*
-  Portainer API token each time, so `services.yaml` always differs and Homepage
-  restarts on every `site.yml` — and Portainer accumulates tokens. Pre-existing,
-  predates the dashboard work. Worth making the token lookup reuse an existing
-  one (or store it in the vault).
-- **Status band + bottom bar need visual sign-off** — verified end to end
-  server-side (endpoints, CORS, SSE, asset serving) but not seen in a browser.
-- **Dual-WAN watch: outage path unverified.** Everything is live and reporting,
-  but no ISP has actually gone down since it was built. Pull one WAN cable to
-  confirm the red/ntfy path before trusting it.
-- **Dashboard visual sign-off pending**: two-pane card widths + masonry split need the user's
-  eyes (no browser preview here). If cards look narrow, force full-width on the card element.
-  Navidrome now-playing only shows while something plays.
-- **Kavita Homepage widget** not wired: Kavita 0.9.x plugin-auth rejects a DB-set API key and
-  only exposes library counts (not reading progress). Needs a **UI-generated API key** from the
-  user, or the real Kavita admin password (vault_kavita_admin_password didn't match; username is
-  `uknth`). Kavita stays a link for now.
-- **HBA swap** (nas01): LSI 9300-8i ordered for the degraded RAIDZ2 data-pool. After fitting:
-  move disks, `zpool online`/`clear`/`scrub`. Do only after hardware is in.
-- **Jellyfin SSO admin** mapping not codified (a rebuild resets `uknth` to non-admin) — see
-  [`spec/auth.md`](spec/auth.md).
-- **Branch protection on `master` is missing.** `deploy.yml` does not gate on
-  `ci.yml`, so a red build still deploys. On 2026-09-08 a flaky Galaxy download
-  failed `ansible-lint` on master and the deploy ran anyway — it happened to be
-  harmless, which is exactly the problem. Require the CI checks on `master`.
-- **CI clones by branch name, so merged PRs go red.** `ci.yml` checks out
-  `${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}`; when a PR is merged and its branch
-  deleted, any still-queued run for that PR fails with "Remote branch … not found".
-  Cosmetic but recurring. Cloning `GITHUB_SHA` instead is immune to branch deletion.
-- **`ansible-lint` re-downloads Galaxy roles every run** and is one upstream blip
-  away from red (`comcast.sdkman` failed this way 2026-09-08). Cache the roles
-  between runs, or retry the `ansible-galaxy role install`.
-- **Arena Model still appears in the Open WebUI picker.** `ENABLE_EVALUATION_ARENA_MODELS=false`
-  is set and confirmed in the container env, but the entry persists — almost certainly
-  because Open WebUI wrote it into its `config` table on first start and the DB value
-  wins over the env var. Needs clearing in `webui.db`, not another env change. User has
-  said this is low priority. **Do not assume the env var fixed it.**
-- **Mirrors not wired.** Gitea → sr.ht/GitHub push mirrors are not running. The
-  keypair exists and `MIRROR_SSH_KEY` is already a Gitea secret; the public key
-  `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZv6MmbYqklc2ljjVuRxbJAMENB3VtkKSf+GjxH79fj
-  gitea-mirror@puhome.net` still needs adding on sr.ht and GitHub.
-- **Diun still notifies out-of-band**, not through the PR flow. Container updates
-  should follow the same change → PR → merge → deploy path as everything else.
-- **Quartz search box still uses FlexSearch**, not `search.puhome.net`. Wiring it up
-  replaces Quartz's built-in component and is a separate change.
-- **nzbget log grows without bound** (cmp01). `WriteLog=append` with no rotation —
-  `/opt/homelab/arr/nzbget/nzbget.log` reached **315 MB** by 2026-09-07, and nzbget
-  warns about it on every start. `RotateLog=3` is already set but is **inert** while
-  `WriteLog=append`. Fix: set `WriteLog=rotate` (bump `RotateLog` to 7 while there),
-  then delete the stale `nzbget.log` — switching to rotate starts new dated files and
-  leaves the old one behind.
-- **nzbget download tuning left at defaults** (cmp01). `ArticleCache=0` and
-  `WriteBuffer=0`; nzbget warns both on every start (disk fragmentation, and a system
-  write buffer that is "often too small and inefficient"). cmp01 has 62 GB RAM with
-  ~53 GB available, so it can afford `ArticleCache=700` (MB) and `WriteBuffer=1024` (KB).
-  Relevant because `DirectWrite=yes`, which is where the article cache pays off most.
 
-  **Both of the above are one job.** `nzbget.conf` is not templated — it is edited live
-  in the UI — so the durable fix is to extend the existing drift-enforcement block in
-  `roles/services/media/arr/tasks/download_config.yml:41`, which already does
-  stop → `lineinfile` → start for `InterDir`/`DestDir`/creds. Add `WriteLog`, `RotateLog`,
-  `ArticleCache` and `WriteBuffer` to both `_nzb_desired` (line 33) and the
-  "Set nzbget keys" loop (line 48), backed by new `arr_nzbget_*` defaults.
-  **Deferred 2026-09-07 at the user's request: that block stops the container, and a
-  download was in progress. Run it when the nzbget queue is idle.** All four keys are
-  read at startup, so there is no reload-free path.
+Reworked 2026-09-08 after an unattended sweep (PR #7). Split by what actually
+blocks them, because "open" was hiding three different situations.
+
+### Fixed in PR #7 — verify after it deploys
+
+- **nzbget unbounded log + default buffers.** `WriteLog=rotate` (`RotateLog=7`),
+  `ArticleCache=700`, `WriteBuffer=1024`, all enforced by the drift block in
+  `arr/tasks/download_config.yml`, plus a one-off delete of the 398 MB
+  `nzbget.log` guarded on the file still saying `append` so it fires exactly
+  once. Was deferred for an active download; **the queue was empty when this
+  was written**, and the block stops nzbget to apply.
+- **CI checked out by branch name**, so merged PRs went red once their branch
+  was deleted. All four jobs now fetch `$GITHUB_SHA`, falling back to the branch
+  if the server refuses a by-SHA fetch.
+- **`ansible-lint` re-downloaded Galaxy roles every run.** `offline: true` in
+  `.ansible-lint`. Those roles are legacy v2 leftovers unused by anything under
+  `playbooks/hosts/`, so nothing needed fetching and the network dependency was
+  pure flakiness.
+- **Arena Model in the Open WebUI picker.** The env var never had a chance:
+  `evaluation.arena.enable=true` was already persisted in `webui.db`, and
+  Open WebUI's PersistentConfig lets the DB outrank env once seeded.
+  `ENABLE_PERSISTENT_CONFIG=false` makes the role authoritative on every start.
+  Trade-off: admin-UI settings no longer survive a restart, which is also what
+  stops an anonymous visitor changing settings for everyone on a login-less
+  endpoint.
+- **Homepage re-templated on every run.** The Portainer token is now minted once
+  and cached at `{{ homepage_root_dir }}/.portainer_token`, re-minted only if the
+  cache is gone or Portainer no longer lists a matching token. (The "Portainer
+  accumulates tokens" half was already fixed — the role deletes old
+  `homepage-dash` tokens before minting.)
+- **Jellyfin SSO admin mapping.** Codified: the role reads each SSO user's policy
+  and POSTs it back with `IsAdministrator` flipped, only for users that lack it,
+  so a rebuild no longer silently demotes `uknth`.
+
+### Done outside the PR (live changes, nothing to merge)
+
+- **Branch protection on `master`** — now requires `CI / *` (all four CI jobs) with
+  0 required approvals so you can still merge your own PRs. The PR dry-run is
+  deliberately **not** required: it can fail for environmental reasons (a host
+  briefly unreachable) and `deploy.sh` runs its own pre-apply check anyway.
+- **`buildx_buildkit_mybuilder0` removed** from cmp01; only the `default` builder
+  remains.
+- **Homebrew "dubious ownership" was already fixed** — the entry was stale.
+  Verified 2026-09-08: `brew --version` is clean as both `ansible` and `uknth` on
+  ai01.
+
+### Found 2026-09-08, not yet fixed — the fleet is not idempotent
+
+A **docs-only** deploy (PR #6, which changed nothing but markdown) still reported
+**39 changed tasks and restarted n8n.** A second run of an unchanged repo should
+be silent; this is drift-reporting noise loud enough to hide a real change.
+
+Counted from `/tmp/gitops-apply.log` on util01:
+
+| Source | Changed | Note |
+|---|---|---|
+| `services/productivity/n8n` | **30** | re-templates credentials, re-imports and re-publishes every workflow, deletes the plaintext files, then **restarts n8n** — every single run |
+| `services/dashboard/homepage` | 1 | "Template homepage config files" — the Portainer token churn, fixed in PR #7 |
+| `services/monitoring/beszel_hub` | 3 | superuser / app-URL / OIDC API calls report changed unconditionally |
+| `services/dashboard/portainer` | 1 | "Configure Authentik OAuth", same pattern |
+| `system/network` (ai01, ctl01) | 2 | macOS `networksetup` reports changed every run |
+| `system/tailscale` (gw01) | 1 | "Bring Tailscale up as subnet router" |
+| `services/auth/authentik` | 1 | "Create Authentik directories" — a plain directory task should not churn |
+| `services/productivity/tickets` | 1 | "Deploy tickets" |
+
+n8n is the one that matters: restarting it on every deploy briefly drops the
+webhooks and schedules that the research pipeline, the ticket sync and the
+maintenance jobs all depend on. The rest is cosmetic but it is what makes a
+`--diff` unreadable, which is the real cost — the PR dry-run is only useful if
+a changed line means something.
+
+Not attempted in PR #7: this is seven roles and each needs its own idempotency
+fix (proper `changed_when`, or a read-before-write check), which is a different
+piece of work from the sweep. Worth doing before the dry-run output is trusted
+as a review artefact.
+
+### Blocked on you — I cannot do these
+
+- **HBA swap** (nas01): LSI 9300-8i needs physically fitting, then move disks,
+  `zpool online`/`clear`/`scrub`.
+- **Dual-WAN outage path unverified.** Everything reports, but no ISP has failed
+  since it was built. Pull one WAN cable to confirm the red/ntfy path.
+- **Dashboard + status band visual sign-off** — needs your eyes in a browser.
+- **Kavita Homepage widget** — needs a UI-generated API key, or the real Kavita
+  admin password (`vault_kavita_admin_password` did not match; username `uknth`).
+- **Gitea → sr.ht/GitHub mirrors** — the keypair exists and `MIRROR_SSH_KEY` is a
+  Gitea secret; the public key still needs adding on both external accounts:
+  `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZv6MmbYqklc2ljjVuRxbJAMENB3VtkKSf+GjxH79fj gitea-mirror@puhome.net`
+
+### Still open, deliberately not attempted in the sweep
+
+- **Quartz search box still uses FlexSearch**, not `search.puhome.net`. Needs a
+  templated `quartz.layout.ts` mounted into the `quartz-build` image — TypeScript
+  that must compile against a specific Quartz version, which cannot be verified
+  from here. The build script stages and swaps, so a bad build leaves the served
+  wiki intact, but this deserves an iteration with feedback rather than a blind
+  unattended guess.
+- **Diun still notifies out-of-band**, not through the PR flow. This is a design
+  question (who opens the PR, and how an image bump becomes a diff) rather than a
+  fix, so it wants deciding before building.
+- **cmp01 reboot** pending for `linux-image-6.1.0-52`. Not urgent, and rebooting
+  the host that runs Gitea, the runner and the media stack is not an unattended
+  action.
+- **Phase 9d** — LLM summaries on cmp01's A4000. Unstarted; it is a build, not a
+  loose end.
+- **Mixed Debian releases** — `util01` is trixie, `gw01`/`cmp01` are bookworm. An
+  OS-upgrade decision, not a sweep item.
+- **`ansible` in the macOS `admin` group** (`ansible_user_macos_admin`) — noted as
+  a standing privilege choice, not a defect.
 
 ## Session 2026-08-31 — Beszel: ai01 outage, fleet agent upgrade, nas02 online
 
@@ -450,12 +494,15 @@ Result: **6/7 systems up** (gw01, cmp01, util01, ai01, ctl01, nas01).
 - **`ansible` is now in the macOS `admin` group** (`system/ansible_user`,
   `ansible_user_macos_admin`) so Homebrew-driven roles can write to `/opt/homebrew`
   (owned `uknth:admin`). It already held NOPASSWD sudo, so this grants no new
-  privilege. Still outstanding: git refuses the repo as "dubious ownership" for
-  `ansible`, so `brew` reports "shallow or no git repository" — `system/brew` must
-  set `safe.directory` for `/opt/homebrew` (and its taps).
-- **cmp01 reboot** pending for `linux-image-6.1.0-52` — not urgent.
-- **`buildx_buildkit_mybuilder0`** runs on cmp01 but is declared nowhere — a leftover
-  buildx builder. Harmless; remove with `docker buildx rm mybuilder` when convenient.
+  privilege. ~~Still outstanding: git "dubious ownership" for `ansible`~~ —
+  **RESOLVED**, `system/brew` sets the `safe.directory` entries. Verified
+  2026-09-08: `brew --version` is clean as both `ansible` and `uknth` on ai01.
+- **cmp01 reboot** pending for `linux-image-6.1.0-52` — not urgent, and now that
+  cmp01 runs Gitea + the Actions runner a reboot takes the deploy pipeline down
+  with it. Do it deliberately, not as part of a sweep.
+- ~~**`buildx_buildkit_mybuilder0`** leftover buildx builder on cmp01~~ —
+  **RESOLVED 2026-09-08**, removed with `docker buildx rm mybuilder`; only the
+  `default` builder remains.
 
 ## Session 2026-09-07 — nzbget "cannot add .nzb" triage (no server fault)
 

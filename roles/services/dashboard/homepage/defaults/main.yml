@@ -4,6 +4,11 @@
 # Live per-app widgets (arr/jellyfin/paperless) need API keys — add later.
 homepage_image: "ghcr.io/gethomepage/homepage:latest"
 homepage_root_dir: "{{ service_root }}/homepage"
+
+# Where the Portainer API token is cached so it is minted once rather than on
+# every run — see the long comment in tasks/gather_keys.yml. Not in the vault:
+# re-running this role must not rotate a credential services.yaml already holds.
+homepage_portainer_token_file: "{{ homepage_root_dir }}/.portainer_token"
 homepage_port: 8094
 homepage_allowed_hosts: "dash.{{ base_domain }}"
 
