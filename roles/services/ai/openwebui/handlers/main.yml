@@ -1,6 +1,14 @@
 ---
+# The same guard the "Deploy openwebui" task carries, and for the same
+# reason: under --check on a host that has never run this role, the compose
+# dir is a no-op and this dies with "/opt/homelab/openwebui/compose is not a
+# directory". Guarding the task alone was not enough — the templates above it
+# still report "changed" in check mode, which notifies this handler, which
+# then runs at the end of the play and fails the whole dry run. A notified
+# handler needs the same check-mode guard as the task that notifies it.
 - name: Restart openwebui
   become: true
+  when: not ansible_check_mode or _openwebui_deployed.stat.exists
   community.docker.docker_compose_v2:
     project_src: "{{ openwebui_compose_dir }}"
     project_name: "{{ openwebui_compose_project }}"
