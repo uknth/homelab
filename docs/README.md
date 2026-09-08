@@ -46,8 +46,8 @@ drift ahead of the design.
 
 **Plan**
 - [`plan/roadmap.md`](plan/roadmap.md) — build-out phases and current status.
-- [`plan/gitops.md`](plan/gitops.md) — the SourceHut → builds.sr.ht → n8n → Ansible deploy
-  pipeline.
+- [`plan/gitops.md`](plan/gitops.md) — the Gitea → Gitea Actions → Ansible deploy
+  pipeline: change → PR → merge → deploy, and why nobody runs `ansible-playbook` by hand.
 - [`plan/migration.md`](plan/migration.md) — role-by-role mapping from `archive/` (v2) to
   the new `roles/` layout (v3). Note: v3 roles are written **fresh**; `archive/` is read for
   insight, not copied.

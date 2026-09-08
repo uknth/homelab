@@ -1,4 +1,4 @@
-# Session Handoff — Context Dump (updated 2026-09-07)
+# Session Handoff — Context Dump (updated 2026-09-08)
 
 Single pick-up point for a fresh session. Everything below reflects `master` at
 tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
@@ -6,9 +6,14 @@ tag **v3.0.0**. Read this, then [`plan/roadmap.md`](plan/roadmap.md) and the
 
 ## Where we are
 - v3 homelab as Ansible IaC (spec-first, codified, idempotent). **Phases 0–7 done.**
-- Branch `master`; remote `git.sr.ht:~uknth/homelab` (builds.sr.ht CI on push).
-- GitOps executor on util01: systemd timer runs `deploy.sh` (tracks master), in
-  **dry-run** mode (`gitops_auto_apply` off) — flip to enable auto-apply.
+- Branch `master`; remote is **Gitea** (`git@ssh.git.puhome.net:uknth/homelab.git`,
+  web at `git.puhome.net`, on cmp01). git.sr.ht is a **mirror only** now, and GitHub
+  is planned as a second mirror — neither is the source of truth. See
+  [`plan/gitops.md`](plan/gitops.md).
+- **Deploys go through the pipeline, never by hand.** Change → PR → merge → Gitea
+  Actions → executor on util01. `gitops_auto_apply` is now **on**; the human gate is
+  the PR merge, not a flag. The systemd timer is an hourly *backstop* for a dropped
+  webhook, not the trigger.
 - Vault: `hosts/group_vars/all/vault.yml`; password file `~/.config/homelab/.vault_pass`
   (ansible.cfg). To edit safely: `ansible-vault view … > tmp`, append, then
   `ansible-vault encrypt tmp --output hosts/group_vars/all/vault.yml` (do NOT pass
@@ -127,7 +132,30 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
   move disks, `zpool online`/`clear`/`scrub`. Do only after hardware is in.
 - **Jellyfin SSO admin** mapping not codified (a rebuild resets `uknth` to non-admin) — see
   [`spec/auth.md`](spec/auth.md).
-- **GitOps auto-apply** still off (dry-run). Enable when confident.
+- **Branch protection on `master` is missing.** `deploy.yml` does not gate on
+  `ci.yml`, so a red build still deploys. On 2026-09-08 a flaky Galaxy download
+  failed `ansible-lint` on master and the deploy ran anyway — it happened to be
+  harmless, which is exactly the problem. Require the CI checks on `master`.
+- **CI clones by branch name, so merged PRs go red.** `ci.yml` checks out
+  `${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}`; when a PR is merged and its branch
+  deleted, any still-queued run for that PR fails with "Remote branch … not found".
+  Cosmetic but recurring. Cloning `GITHUB_SHA` instead is immune to branch deletion.
+- **`ansible-lint` re-downloads Galaxy roles every run** and is one upstream blip
+  away from red (`comcast.sdkman` failed this way 2026-09-08). Cache the roles
+  between runs, or retry the `ansible-galaxy role install`.
+- **Arena Model still appears in the Open WebUI picker.** `ENABLE_EVALUATION_ARENA_MODELS=false`
+  is set and confirmed in the container env, but the entry persists — almost certainly
+  because Open WebUI wrote it into its `config` table on first start and the DB value
+  wins over the env var. Needs clearing in `webui.db`, not another env change. User has
+  said this is low priority. **Do not assume the env var fixed it.**
+- **Mirrors not wired.** Gitea → sr.ht/GitHub push mirrors are not running. The
+  keypair exists and `MIRROR_SSH_KEY` is already a Gitea secret; the public key
+  `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZv6MmbYqklc2ljjVuRxbJAMENB3VtkKSf+GjxH79fj
+  gitea-mirror@puhome.net` still needs adding on sr.ht and GitHub.
+- **Diun still notifies out-of-band**, not through the PR flow. Container updates
+  should follow the same change → PR → merge → deploy path as everything else.
+- **Quartz search box still uses FlexSearch**, not `search.puhome.net`. Wiring it up
+  replaces Quartz's built-in component and is a separate change.
 - **nzbget log grows without bound** (cmp01). `WriteLog=append` with no rotation —
   `/opt/homelab/arr/nzbget/nzbget.log` reached **315 MB** by 2026-09-07, and nzbget
   warns about it on every start. `RotateLog=3` is already set but is **inert** while
@@ -321,11 +349,22 @@ Requirement: web UI primary, Telegram/WhatsApp secondary; agent on **ctl01**, LL
   recommendation/discovery services.
 
 ## Deploy cheatsheet
+
+**Deploying = opening a PR.** Do not run `ansible-playbook` against the fleet by
+hand; that bypasses CI, the PR dry-run, and the record of what was applied when.
+
 ```
-ansible-playbook site.yml                       # whole fleet
-ansible-playbook playbooks/hosts/<host>.yml     # one host
+git checkout -b <branch> && git commit && git push origin <branch>
+# open a PR against master in Gitea  ->  ci.yml + pr-dryrun.yml run
+# merge  ->  deploy.yml -> util01 executor -> apply
+```
+
+The commands below still exist for **reading** state or for a genuine bootstrap
+(the deploy path cannot deploy itself). Say so explicitly if you use them.
+
+```
+ansible-playbook site.yml --check --diff        # dry-run only (check-mode-safe)
 ansible-playbook playbooks/hosts/<host>.yml --tags <role>
-ansible-playbook site.yml --check               # dry-run (check-mode-safe)
 ```
 
 ## Session 2026-08-30 — maintenance automation
@@ -442,3 +481,92 @@ both fine — it was Safari.** The same upload succeeded in Firefox.
 **If this recurs: check the browser first.** Reproduce in a second browser before
 touching the stack.
 
+
+## Session 2026-09-08 — ask/search split, LiteLLM, and the first real PR deploys
+
+Five PRs (#1–#5), all merged, all deployed through Gitea. **This was the first time
+the PR pipeline was used for real**, and it found four genuine bugs before anything
+reached a host.
+
+### What shipped
+
+- **`ask.puhome.net` and `search.puhome.net` are now separate services**, because
+  they are two trust domains rather than two features:
+  - `search.puhome.net` (vaultask) — wiki search + wiki-grounded answers. Holds the
+    notes, including `Secrets/` and `Finances/`, talks **only** to omlx on ai01, and
+    is behind Authentik. Its ungrounded fallback was **removed**: when retrieval
+    misses it says so and lists the closest notes rather than answering from general
+    knowledge.
+  - `ask.puhome.net` (Open WebUI, cmp01:8104) — general chat, **no wiki data at all**,
+    reaches Anthropic. **No login** (`WEBUI_AUTH=false`, vhost `sso: false`), by
+    explicit and repeated user instruction.
+- **LiteLLM proxy** (cmp01, container-internal only, not published to the host) owns
+  every provider key. Open WebUI holds none — it is the unauthenticated surface.
+- **Model set is enforced, not configured.** LiteLLM defines `qwen` and
+  `claude-sonnet-5`. Opus and Haiku are not restricted; they are *absent*, so they
+  cannot be routed to whatever a picker shows or an API call asks for. Haiku was
+  removed on request (PR #4), which means every fallback now bills at Sonnet rates
+  ($3/$15 per Mtok) on an endpoint with no login — the Anthropic spend cap is the
+  only backstop.
+
+### Failover is proven, not assumed
+
+Stopped omlx on ai01 (`launchctl bootout system/net.puhome.omlx`) and watched a
+request land on Anthropic, then restored it:
+
+```
+omlx up      -> served_by: qwen
+omlx stopped -> served_by: claude-haiku-4-5-20251001   (chain was qwen->haiku->sonnet)
+omlx back    -> served_by: qwen
+```
+
+`KeepAlive` is `true`, so killing the process only respawns it — a real outage
+window needs `bootout` then `bootstrap`.
+
+### The check-mode trap — read this before adding a role
+
+Four separate failures this session, all the same root cause: **a task that depends
+on an earlier task's side effect, which `--check` never produces.** Because
+`pr-dryrun.yml` runs the whole fleet in check mode on every PR, this now fails a PR
+rather than being invisible. It only ever bites on a role's *first-ever* deploy,
+which is precisely when nobody is looking for it.
+
+1. nginx `sites-enabled` symlink — the vhost it points at has not been templated yet.
+   Fixed with `force: "{{ ansible_check_mode }}"` (conditional, not flat `true`, so a
+   real run still fails loudly on a site with no template behind it).
+2. Key generation with `check_mode: false` writing into a compose dir that check mode
+   never created. Now skipped under `--check`, with a placeholder fact.
+3. The restart **handler** — guarding the deploy task was not enough, because the
+   templates still report `changed` under check mode and notify the handler anyway.
+   **A notified handler needs the same guard as the task that notifies it.**
+4. Same handler pattern latent in 26 other roles; all guarded in PR #3, and the rule
+   is now written into [`AGENTS.md`](../AGENTS.md) under Role Conventions.
+
+Also, for the third time: `set -o pipefail` without `executable: /bin/bash`. cmp01's
+`/bin/sh` is dash and rejects it. macOS `/bin/sh` is bash and accepts it, which is why
+`beszel_agent/tasks/macos.yml` still has one and is deliberately left alone.
+
+### Pipeline behaviours worth knowing
+
+- **`deploy.sh` runs its own `--check` before applying and refuses to apply if it
+  fails.** This is why PR #1's broken merge changed *nothing* on any host instead of
+  half-configuring cmp01. Best safety property in the pipeline.
+- **Deploy runs collapse under concurrency.** With `cancel-in-progress: false`, a
+  superseded *pending* deploy is cancelled in favour of the newest commit. A
+  "cancelled" deploy after two quick merges is correct, not a failure — the surviving
+  run deploys a superset.
+- **Merging a PR fires stray `pull_request` events** on any other open PR whose base
+  moved. Harmless, but they occupy the serial runner and can fail if their branch was
+  deleted (see Open items).
+- **`docker compose restart <svc>` from `/opt/homelab/openwebui/compose/` silently
+  does nothing** and still exits 0: the compose project is named `openwebui`, but
+  compose infers `compose` from the directory, matches no containers, and succeeds.
+  Restart by container name, and always check `Up <n> seconds` afterwards.
+
+### One-off exception to the deploy rule
+
+The Haiku removal (PR #4) was applied **directly to cmp01 first**, at the user's
+explicit request ("for this time only"), with the PR bringing git back into sync. The
+next deploy reported `ok` on `Template the litellm config`, confirming the hand-edit
+was byte-identical to what Ansible renders. That check is the reason to bother doing
+it that way — a `changed` there would have meant silent drift.

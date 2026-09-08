@@ -1,101 +1,125 @@
-# GitOps — SourceHut → n8n → Ansible
+# GitOps — Gitea → Gitea Actions → Ansible
 
-The deployment pipeline. Code lives on **SourceHut** (`sr.ht`), not GitHub, so the flow uses
-builds.sr.ht for CI and n8n on `util01` as the deploy trigger. No Argo/Flux — those are
-Kubernetes tools and this fleet is Docker Compose + Ansible.
+The deployment pipeline. Code lives on **Gitea** (`git.puhome.net`, on `cmp01`), which is
+the fleet's source of truth. CI and the deploy trigger are Gitea Actions; the thing that
+actually runs Ansible is an on-LAN executor on `util01`. No Argo/Flux — those are Kubernetes
+tools and this fleet is Docker Compose + Ansible.
+
+> **History:** this used to be SourceHut → builds.sr.ht → n8n polling. That design was
+> replaced in 2026-09 when Gitea was stood up locally. `git.sr.ht` is now a **mirror only**,
+> and GitHub is planned as a second mirror. Nothing polls sr.ht any more — the executor must
+> watch the repo that PRs and merges actually happen against.
+
+## The rule
+
+**Deploying means opening a PR.** Nobody runs `ansible-playbook` against the fleet by hand.
+A hand-run bypasses CI, the PR dry-run, and the record of what was applied and when — which
+is the entire point of having the pipeline.
+
+```
+change ──▶ branch ──▶ PR ──▶ (human merges) ──▶ deploy
+```
+
+The one legitimate exception is bootstrapping the deploy path itself: the executor and its
+trigger cannot deploy themselves. Say plainly that it is a bootstrap when you do it.
 
 ## Flow
 
 ```
- developer ──push──▶ git.sr.ht/~<user>/homelab   (branch: master)
+ developer ──push──▶ Gitea @ cmp01  (git@ssh.git.puhome.net:uknth/homelab.git)
                           │
-                          ▼
-                 builds.sr.ht  (.build.yml)          ← NO secrets, no host access
-                   ├─ ansible-lint
-                   └─ ansible-playbook --syntax-check (parses only; does NOT decrypt
-                          │  on success                 vault, does NOT connect to hosts)
-                          ▼
-                 POST webhook ─────────────▶  n8n @ util01 (10.0.2.8)   ← HOLDS secrets, on-LAN
-                                                 ├─ verify shared secret (HMAC header)
-                                                 ├─ git pull on util01
-                                                 ├─ ansible-playbook --tags <changed> --check   (dry run)
-                                                 └─ ansible-playbook --tags <changed>           (apply)
-                                                      (vault password + SSH key are local files)
-                          │
-                          ▼
-                 result ──▶ ntfy topic: homelab-deploy
+            ┌─────────────┴──────────────┐
+            ▼                            ▼
+      PR opened                      merge to master
+            │                            │
+            ▼                            ▼
+   ci.yml + pr-dryrun.yml            ci.yml + deploy.yml
+   ├─ yamllint                       └─ ssh ──▶ util01 (10.0.2.8)
+   ├─ ansible-lint                             forced command: gitops-trigger.sh
+   ├─ syntax-check                                     │
+   ├─ python-tests                                     ▼
+   └─ ssh util01: `check <sha>`                  deploy.sh
+      (full-fleet --check --diff,                ├─ git fetch/reset to master
+       posted back as a PR comment)              ├─ --check --diff   ← GATE
+                                                 └─ --check passes? then apply
+                                                          │
+                                                          ▼
+                                                 ntfy: homelab-deploy
 ```
 
-## Why this shape
+### The gate that matters
 
-- **CI never holds production secrets.** builds.sr.ht only runs *static* checks — `ansible-lint`
-  and `--syntax-check` — which parse the playbooks without decrypting the vault or connecting
-  to any host. So sr.ht never needs the vault password or an SSH key. A real dry-run (`--check`)
-  needs *both* vault decryption *and* host access, so it belongs on the LAN executor, not in
-  cloud CI.
-- **The vault password lives in exactly two on-LAN files, never in git or sr.ht:**
-  `ctl01` (manual control node) and `util01` (automated executor). Both use the
-  `ansible.cfg` → `vault_password_file = ~/.config/homelab/.vault_pass` convention (chmod 600,
-  git-ignored), plus the ansible SSH private key (`keys/ansible_rsa.private`). Provision both
-  onto `util01` out-of-band when building this phase.
-- **n8n is the deploy trigger**, reusing a service already planned for `util01`. The webhook is
-  authenticated with a shared HMAC secret and is only reachable over Tailscale (or a scoped
-  Tailscale Funnel) — never open to the internet.
-- **`util01` is the executor**, running `ansible-playbook --check` then apply against the
-  changed hosts. It pulls the repo fresh each deploy so running state always matches `main`.
+`deploy.sh` runs its **own** full-fleet `--check --diff` before applying, and refuses to
+apply if it fails. This is not redundant with `pr-dryrun.yml` — it re-checks the merged
+state at apply time, on the executor, with the vault available.
 
-## Secrets summary — where the vault password is (and isn't)
+It has already earned its keep: PR #1 merged with a check-mode bug in a new role, and the
+gate meant the deploy was a **no-op** rather than a half-configured `cmp01`. When a deploy
+fails, look for `dry-run failed; see /tmp/gitops-check.log` in the job log before assuming
+anything was applied.
 
-| Location | Has vault password? | Why |
+## Where the secrets are (and aren't)
+
+| Location | Vault password? | SSH to fleet? | Notes |
+|---|---|---|---|
+| Gitea repo | ❌ never | ❌ | only encrypted `vault.yml` is committed |
+| Gitea Actions runner (cmp01) | ❌ never | ⚠️ trigger key only | holds the Docker socket — a privilege boundary, not a sandbox |
+| `util01` (executor) | ✅ file | ✅ | the only host that can actually change the fleet |
+| `ctl01` | ✅ file | ✅ | manual control node |
+
+- **CI jobs run static checks only** — `yamllint`, `ansible-lint`, `--syntax-check`, unit
+  tests — none of which decrypt the vault or touch a host. A real `--check` needs both, which
+  is exactly why it happens on `util01` and not in a CI container.
+- **The runner cannot deploy.** All it can do is SSH to `util01` and say `apply` or
+  `check <ref>`. `gitops-trigger.sh` is a **forced command**: it is the only thing the CI key
+  can run, and it accepts only those two verbs. That wrapper is the security boundary of this
+  design — read its header before changing it.
+- **`GITEA_TOKEN` is injected per-run by Gitea itself**, scoped to the repo and the run. It is
+  what lets a job clone this **private** repo; it is not a standing credential and does not
+  need to be added by hand.
+
+> **Store multi-line secrets base64-encoded, on one line.** A PEM private key added as a
+> multi-line Actions secret defeated Gitea's log masking and was printed in full into a job
+> log (2026-09-07). The key was rotated, revoked, and re-added base64'd. Treat any multi-line
+> secret as un-maskable.
+
+## Components
+
+| Piece | Where | What it does |
 |---|---|---|
-| git.sr.ht repo | ❌ never | only encrypted `vault.yml` is committed |
-| builds.sr.ht CI | ❌ never | static checks only (lint + syntax-check) |
-| `ctl01` | ✅ file | manual control node |
-| `util01` | ✅ file | automated executor (n8n → ansible) |
+| `services/development/gitea` | cmp01 | Gitea itself. Repos on NFS from nas01, backed up to nas02 by restic. Web on `git.puhome.net`; SSH on `ssh.git.puhome.net` **portless** (`git@ssh.git.puhome.net`, no `:2222`) via a macvlan sidecar at `10.0.2.18` |
+| `services/development/gitea_runner` | cmp01 | `act_runner`, paired 1:1 with Gitea. No fleet credentials |
+| `.gitea/workflows/ci.yml` | — | yamllint · ansible-lint · syntax-check · python-tests |
+| `.gitea/workflows/pr-dryrun.yml` | — | full-fleet `--check --diff` on every PR, posted back as a comment |
+| `.gitea/workflows/deploy.yml` | — | on merge to master, triggers the executor |
+| `ops/gitops_executor` | util01 | `deploy.sh`, `gitops-trigger.sh`, the repo clone, and the hourly backstop timer |
 
-If concentrating the vault password on two boxes ever feels too broad, the more
-GitOps-idiomatic alternative is **sops + age** (per-host age keys, no shared password) — a
-larger change from the current `ansible-vault` setup, noted here as a future option, not a
-Phase 7 requirement.
+`gitops_auto_apply` is **on**. That is not a loosening: the human gate moved from a flag
+nobody remembers to flip, to the PR merge itself. The systemd timer is now an hourly
+*backstop* for a dropped webhook — the event path is the trigger, and `deploy.sh`'s
+up-to-date check makes every other tick a no-op.
 
-## Components to build (Phase 7)
+## Gotchas
 
-1. `.build.yml` at repo root — the builds.sr.ht manifest: install Ansible + collections,
-   `ansible-lint`, `--syntax-check`, `--check --diff`. Fails the build on any lint/dry-run
-   error. Post the success webhook as the final task.
-2. n8n workflow on `util01`:
-   - Webhook node (HMAC-verified).
-   - Exec node: `git -C /opt/homelab pull`.
-   - Exec node: `ansible-playbook site.yml --tags "<from payload>" --vault-password-file …`.
-   - ntfy node: report to `homelab-deploy`.
-3. A deploy secret in the vault (`vault_gitops_webhook_secret`) and the vault-password file
-   provisioned onto `util01` out-of-band (never committed).
+- **Checkout is hand-rolled, not `actions/checkout`.** That action needs Node, which
+  `python:3.12-slim` does not have. The clone uses `${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}`,
+  because on a `pull_request` event `GITHUB_REF_NAME` is the PR *number*, not a branch.
+  Known wart: this clones by branch name, so a still-queued run for a merged-and-deleted
+  branch fails. Cloning `GITHUB_SHA` would be immune.
+- **`deploy.yml` does not gate on `ci.yml`.** A red build still deploys today. Branch
+  protection requiring the CI checks on `master` is the fix, and is still open.
+- **Deploy runs collapse under concurrency** (`group: gitops-deploy`,
+  `cancel-in-progress: false`). A superseded *pending* deploy is cancelled in favour of the
+  newest commit; the surviving run deploys a superset. A cancelled deploy after two quick
+  merges is correct behaviour.
+- **Merging a PR fires stray `pull_request` events** on any other open PR whose base moved.
+  Harmless, but they queue on the serial runner.
+- **`--check` lies about first-ever deploys.** Any task depending on an earlier task's side
+  effect fails, because check mode never produced it. See the check-mode section in
+  [`../HANDOFF.md`](../HANDOFF.md) and the rule in [`../../AGENTS.md`](../../AGENTS.md).
 
 ## Alternative considered
 
-**ansible-pull on a timer** (each host pulls `main` and applies itself, no inbound webhook)
-was considered — more robust, nothing exposed — but rejected in favour of push-triggered
-deploys for immediate feedback. The CI half (builds.sr.ht lint + dry-run) is identical either
-way, so switching later only changes the apply half.
-
-## Prerequisite
-
-Mirror/host the repo on `git.sr.ht`. Today it's a local git repo with a GitHub-style key
-convention; the SourceHut remote and a build user/secret need to be set up before Phase 7.
-
-## Phase 7 build notes (2026-08-22)
-
-**CI is live-ready** (`.build.yml`): verified that `ansible-playbook site.yml
---syntax-check` passes with **no vault password** (CI strips `vault_password_file`
-from `ansible.cfg` into `ci.cfg`), so builds.sr.ht never needs a secret. Lint is
-advisory for now. **To activate:** enable the git.sr.ht → builds.sr.ht integration
-for `~uknth/homelab` (push triggers the build).
-
-**Trigger is polling, not an inbound webhook.** builds.sr.ht runs in the cloud and
-cannot reach n8n on the LAN (`util01`, 10.0.2.8) without exposing it publicly
-(Tailscale Funnel/Cloudflare Tunnel — extra attack surface). So the deploy trigger
-inverts: **n8n on util01 polls git.sr.ht** for a new `master` commit (and, optionally,
-a green builds.sr.ht status) and then runs the on-LAN executor. No inbound exposure.
-
-**Executor still = util01**, out-of-band provisioned with ansible + the repo +
-`~/.config/homelab/.vault_pass` + `keys/ansible_rsa.private`.
+**ansible-pull on a timer** (each host pulls and applies itself) was considered — more
+robust, nothing exposed — but rejected in favour of push-triggered deploys for immediate
+feedback. The CI half is identical either way, so switching later only changes the apply half.
