@@ -88,6 +88,15 @@ openwebui_llm_base_url: "http://{{ openwebui_llm_host }}:{{ omlx_port }}/v1"
 # CLI to script it; Open WebUI's first-run signup does not).
 openwebui_enable_signup: false
 
+# Open WebUI's built-in A/B evaluation feature, which its config.py defaults
+# to True — so leaving this unset is what put an extra "Arena Model" entry in
+# the picker on first deploy. Off here for two reasons: it clutters a picker
+# that is meant to offer exactly one obvious choice, and an arena entry
+# routes to a RANDOMLY chosen model, so on a no-login endpoint it can quietly
+# land on Anthropic and bill per token when the user believes they are on the
+# local model.
+openwebui_enable_arena_models: false
+
 # --- RAG / document ingestion: deliberately left on its LOCAL default ------
 # Open WebUI ships a generic "attach a file to this chat" feature that is
 # UNRELATED to the wiki boundary above — a user pasting a PDF into a chat
