@@ -162,18 +162,21 @@ openwebui_litellm_local_alias: "qwen"
 
 # The exact two Anthropic model_name entries LiteLLM exposes — Sonnet and
 # Haiku only. Opus is 5x Haiku's output price, and this endpoint is
-# unauthenticated, so a per-token bill is exposed to anyone on the LAN. Kept
-# as two scalars rather than a list because litellm-config.yaml.j2 needs to
-# reference each individually (Anthropic model_list entries, and the
-# fallback ordering below, which is NOT the same order).
+# unauthenticated, so a per-token bill is exposed to anyone on the LAN.
 #
-# THIS IS NOW ENFORCED, unlike the old openwebui_anthropic_allowed_models
-# note it replaces: LiteLLM's model_list (litellm-config.yaml.j2) defines
-# exactly these two Anthropic models and no others, so Opus is not a setting
-# someone could leave unset or undo — it is simply absent from what the
-# proxy can route to.
+# ONE Anthropic model, not two. Haiku was removed by request; a
+# openwebui_litellm_haiku_model var used to sit alongside this one and be
+# tried first on fallback. Anything reintroducing a second model has to add
+# it back BOTH here and in litellm-config.yaml.j2's model_list — listing it
+# in the fallback chain alone would make LiteLLM reference a model_name it
+# cannot route.
+#
+# THIS IS ENFORCED, unlike the old openwebui_anthropic_allowed_models note it
+# replaces: LiteLLM's model_list (litellm-config.yaml.j2) defines exactly
+# this one Anthropic model and no others, so Opus is not a setting someone
+# could leave unset or undo — it is simply absent from what the proxy can
+# route to.
 openwebui_litellm_sonnet_model: "claude-sonnet-5"      # $3 / $15 per Mtok
-openwebui_litellm_haiku_model: "claude-haiku-4-5"      # $1 / $5  per Mtok — the cheap fallback
 
 # The master key file, generated on the remote host and read back the same
 # way as the Open WebUI secret key above and Gitea's admin password
