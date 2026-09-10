@@ -24,6 +24,7 @@ const TAG_TOPICS = {{ vaultmerge_tag_topics | to_json }}
 const DEFAULT_TOPIC = {{ vaultmerge_default_topic | to_json }}
 const EXCLUDE_DIRS = new Set({{ vaultmerge_exclude_dirs | to_json }})
 const EXCLUDE_GLOBS = {{ vaultmerge_exclude_globs | to_json }}
+const OPTOUT_KEY = {{ vaultmerge_optout_key | default("wiki") | to_json }}
 
 // Longest prefix wins regardless of the order the rules are written in.
 const RULES = [...PATH_TOPICS].sort((a, b) => b.match.length - a.match.length)
@@ -69,6 +70,23 @@ function tagsOf(fm) {
   return tags.filter(Boolean)
 }
 
+// Per-note opt-out: `wiki: false` in a note's frontmatter keeps it out of the
+// merge, and so out of the wiki, the search index and the enrichment pass. The
+// note stays in the vault untouched — this only decides what gets published.
+//
+// Same reasoning as tagsOf: one key, matched with a regex rather than pulling a
+// YAML parser into the merge path. YAML's false-y spellings are all accepted so
+// `wiki: no` does not silently publish.
+const OPTOUT_RE = OPTOUT_KEY
+  ? new RegExp(
+      "^" +
+        OPTOUT_KEY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+        ":\\s*[\"']?(?:false|no|off)[\"']?\\s*$",
+      "im",
+    )
+  : null
+const optedOut = (fm) => !!(fm && OPTOUT_RE && OPTOUT_RE.test(fm))
+
 function topicFor(vault, rel, tags) {
   const key = `${vault}/${rel}`.split(path.sep).join("/")
   for (const r of RULES) if (key === r.match || key.startsWith(r.match + "/")) return r.topic
@@ -78,6 +96,7 @@ function topicFor(vault, rel, tags) {
 
 // --- pass 1: classify -----------------------------------------------------
 const notes = []
+let optedOutCount = 0
 for (const vault of Object.keys(SOURCES)) {
   const vdir = OVERRIDES[vault] ?? path.join(SRC, vault)
   if (!fs.existsSync(vdir)) continue
@@ -89,6 +108,14 @@ for (const vault of Object.keys(SOURCES)) {
     if (isMd) {
       const raw = fs.readFileSync(full, "utf8")
       ;({ fm, body } = splitFrontmatter(raw))
+      // Dropped before anything else sees it: never classified, never added to
+      // the link tables, never written. A wikilink pointing at it therefore
+      // falls through to the dangling report rather than being rewritten to a
+      // page that will not exist.
+      if (optedOut(fm)) {
+        optedOutCount++
+        continue
+      }
     }
     const tags = isMd ? tagsOf(fm) : []
     notes.push({
@@ -267,6 +294,7 @@ console.log(
     `${notes.filter((n) => !n.isMd).length} attachments into ${OUT}\n` +
     `  topics: ${Object.entries(perTopic).sort().map(([t, c]) => `${t}=${c}`).join(" ")}\n` +
     `  collisions disambiguated: ${collisions}\n` +
+    (OPTOUT_KEY ? `  opted out (${OPTOUT_KEY}: false): ${optedOutCount}\n` : "") +
     `  links rewritten: ${rewritten}, unresolved: ${unresolved} ` +
     `(${report.length} distinct; see ${OUT}/.dangling-links.json)`,
 )
