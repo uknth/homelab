@@ -96,6 +96,31 @@ dashboard, with `stale: true` once it is older than three hours.
 
 ## Things worth knowing
 
+**Keeping a note out of the wiki: `wiki: false`.** A note whose frontmatter
+carries `wiki: false` (or `no`/`off`, quoted or not) is dropped by vaultmerge
+and never reaches `/merged`:
+
+```yaml
+---
+title: Some private note
+wiki: false
+---
+```
+
+The note itself is untouched — it stays in the vault and syncs normally; it just
+stops being published. Because everything downstream reads the merged tree, one
+marker covers all of it: no page on **wiki.puhome.net**, no row in the FTS index
+or embeddings behind **search.puhome.net**, and no LLM summary generated for it.
+Excluding it in the Quartz build instead would have left it searchable.
+
+Links to an opted-out note are deliberately left un-rewritten and show up in
+`merged/.dangling-links.json`, rather than being pointed at a page that will not
+exist. The merge summary reports the count as `opted out (wiki: false): N`.
+
+The key is `vaultmerge_optout_key`; set it to `""` to turn the mechanism off.
+An already-published note disappears on the next ingest — editing it to add the
+marker changes the mirror, which is what triggers the rebuild.
+
 **Change detection does not parse `ob sync` output.** obsidian-headless is
 0.0.x and its output is not a contract, so the script fingerprints the mirror
 (mtime + size + path over every `.md`) before and after. That cannot drift from

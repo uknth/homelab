@@ -106,3 +106,15 @@ vaultmerge_exclude_globs:
   # crowded out real content in the related-links ranking.
   - "AGENTS.md"
   - "CLAUDE.md"
+
+# Per-note opt-out, read from frontmatter. A note carrying this key set to a
+# false value (`wiki: false`, `no`, `off`) is dropped from the merge entirely.
+#
+# Dropped HERE and not in the Quartz build on purpose: the merged tree is also
+# what vaultindex embeds and summarises and what vaultask searches, so an
+# opt-out that only skipped the site would still leave the note answerable from
+# search.puhome.net. One marker, out of everything downstream.
+#
+# The note itself is untouched — it stays in the vault, it just stops being
+# published. Set to "" to disable the mechanism.
+vaultmerge_optout_key: "wiki"
