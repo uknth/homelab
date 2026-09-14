@@ -37,12 +37,23 @@ const SUMMARY_TOKENS = {{ vaultindex_summary_max_tokens }}
 // So rather than embedding only a note's opening, the note is split into
 // windows that each fit, embedded separately, and the vectors averaged
 // (mean-pooling). The whole note therefore contributes to how it ranks against
-// every other note, which is the point of the related-links layer. English runs
-// ~3.7 chars/token here, so 1500 chars per window leaves real headroom.
-const EMBED_WINDOW_CHARS = 1500
-// Cap the windows per note: past ~15k chars the average stops moving and this
+// every other note, which is the point of the related-links layer.
+//
+// Those windows are measured in TOKENS, because only the tokeniser knows how
+// long a window really is. Cutting at 1500 characters instead assumed ~3.7
+// chars/token, which holds for prose and fails everywhere else: a link table or
+// a dense reference note runs nearer 1.6, so the same 1500 characters tokenised
+// to 919 and the server rejected the request outright. Ten notes were losing
+// their vector — and so their related links — on every single run, for good,
+// because a note that fails to embed is never cached and fails again the next
+// hour.
+const EMBED_WINDOW_TOKENS = 480
+// Cap the windows per note: past ~5k tokens the average stops moving and this
 // is a ranking signal, not a reproduction of the text.
 const EMBED_MAX_WINDOWS = 10
+// Bumped whenever the windowing changes. Vectors cached under the old scheme
+// are recomputed rather than left to be compared against new ones.
+const VEC_VERSION = 2
 
 const CACHE_PATH = path.join(OUT, "cache.json")
 const SIDECAR_PATH = path.join(OUT, "enrichment.json")
@@ -88,10 +99,17 @@ async function post(url, body, tries = 3) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       })
-      if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      if (!r.ok) {
+        const detail = await r.text()
+        const err = new Error(`${r.status} ${detail}`)
+        // A context-limit rejection is deterministic: the same input will be
+        // rejected again, so retrying it only burns six seconds per window.
+        err.fatal = /too large to process/.test(detail)
+        throw err
+      }
       return await r.json()
     } catch (e) {
-      if (i === tries - 1) throw e
+      if (e.fatal || i === tries - 1) throw e
       await new Promise((r) => setTimeout(r, 2000 * (i + 1)))
     }
   }
@@ -103,15 +121,44 @@ async function embedOne(text) {
   return Array.isArray(v?.[0]) ? v[0] : v
 }
 
+// The embedding server's own tokeniser, so window boundaries are measured in
+// the units the model actually enforces. Both endpoints are CPU-side string
+// work — no forward pass, no GPU.
+async function tokenize(text) {
+  return (await post(`${EMBED_URL}/tokenize`, { content: text })).tokens || []
+}
+async function detokenize(tokens) {
+  return (await post(`${EMBED_URL}/detokenize`, { tokens })).content || ""
+}
+
+// Insurance for that round trip: a window detokenised from mid-word and then
+// retokenised by the embedding request need not come back at the same count.
+// 480 of a possible 512 leaves room for the CLS/SEP pair and for that drift,
+// but if the server rejects a window regardless, halve it rather than lose the
+// note's vector over a handful of tokens.
+async function embedWindow(text, depth = 0) {
+  try {
+    return [await embedOne(text)]
+  } catch (e) {
+    if (!e.fatal || depth >= 2 || text.length < 2) throw e
+    const mid = Math.floor(text.length / 2)
+    return [
+      ...(await embedWindow(text.slice(0, mid), depth + 1)),
+      ...(await embedWindow(text.slice(mid), depth + 1)),
+    ]
+  }
+}
+
 // Embed the WHOLE note: window it, embed each window, average the vectors.
 async function embed(text) {
+  const tokens = await tokenize(text)
   const windows = []
-  for (let i = 0; i < text.length && windows.length < EMBED_MAX_WINDOWS; i += EMBED_WINDOW_CHARS) {
-    windows.push(text.slice(i, i + EMBED_WINDOW_CHARS))
+  for (let i = 0; i < tokens.length && windows.length < EMBED_MAX_WINDOWS; i += EMBED_WINDOW_TOKENS) {
+    windows.push(tokens.slice(i, i + EMBED_WINDOW_TOKENS))
   }
   if (!windows.length) return null
   const vecs = []
-  for (const w of windows) vecs.push(await embedOne(w))
+  for (const w of windows) vecs.push(...(await embedWindow(await detokenize(w))))
   if (vecs.length === 1) return vecs[0]
   const dims = vecs[0].length
   const mean = new Array(dims).fill(0)
@@ -193,8 +240,20 @@ for (const rel of files) {
   let entry = cache[hash]
   if (entry) {
     reused++
+    // Cached under an older windowing scheme. Recompute the vector so the whole
+    // corpus is ranked on one basis; keep the summary, which does not depend on
+    // windowing and would cost an hour of the 12B model to reproduce unchanged.
+    if (entry.vv !== VEC_VERSION && body.length > 0) {
+      try {
+        entry = { ...entry, vec: norm(await embed(`${title}\n${body}`)), vv: VEC_VERSION }
+        cache[hash] = entry
+        embedded++
+      } catch (e) {
+        console.error(`re-embed failed for ${rel}: ${e.message}`)
+      }
+    }
   } else {
-    entry = { vec: null, summary: null }
+    entry = { vec: null, summary: null, vv: VEC_VERSION }
     if (body.length > 0) {
       try {
         entry.vec = norm(await embed(`${title}\n${body}`))
