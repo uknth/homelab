@@ -297,6 +297,14 @@ is older than `researchd_claim_stale_minutes` (default 60), so a job whose
 ingest died mid-flight is retried rather than wedged forever; `/unclaim` does
 the same on the ingest's own explicit failure branch.
 
+Because the claim happens **before** the SSH ingest opens, every step the
+ingest then runs sees the job as `publishing`, never as `ready` — so each of
+them must accept both. That is `/api/jobs/{id}/bundle.tar.gz` and
+`research-pull.sh`'s own status gate. Gating either on `ready` alone produces
+a silent, self-healing-looking wedge rather than a visible failure: claim,
+fail, unclaim back to `ready`, retry on the next poll, forever, with the job
+sitting at "Ready — awaiting publish" in the UI the whole time.
+
 ## Engines
 
 The research loop is **pluggable**. A job names an engine at submit time and the

@@ -3,7 +3,7 @@
 #
 #   research-pull.sh <job_id>
 #
-# Fetches a `ready` job's bundle from researchd on ctl01 and unpacks it into
+# Fetches a claimed job's bundle from researchd on ctl01 and unpacks it into
 # {{ research_tree_dir }}/<slug>/, replacing that directory in place. Called
 # locally by vault-ingest.sh's --research branch — never invoked over SSH
 # itself, so it takes a real argv, not SSH_ORIGINAL_COMMAND.
@@ -51,7 +51,7 @@ trap cleanup EXIT
 JOB_ID="${1:-}"
 [[ "$JOB_ID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || die "invalid job id: '${JOB_ID}'" 2
 
-# --- 2. read the job, refuse unless it is ready ------------------------------
+# --- 2. read the job, refuse unless it has a bundle to serve -----------------
 DETAIL_JSON="$WORK/detail.json"
 curl -fsS -m 20 "$API/api/jobs/$JOB_ID" -o "$DETAIL_JSON" \
   || die "could not reach researchd for job $JOB_ID"
@@ -59,7 +59,19 @@ curl -fsS -m 20 "$API/api/jobs/$JOB_ID" -o "$DETAIL_JSON" \
 STATUS="$(jq -r '.status // empty' "$DETAIL_JSON")"
 SLUG="$(jq -r '.slug // empty' "$DETAIL_JSON")"
 
-[ "$STATUS" = "ready" ] || die "job $JOB_ID is '${STATUS:-unknown}', not ready" 3
+# `publishing` is accepted alongside `ready`, and this is the normal case, not
+# an edge one: n8n CLAIMS the job (`ready` -> `publishing`) before it opens the
+# SSH session that runs this script, so by the time we read the job detail the
+# status is already `publishing`. Gating on `ready` alone wedged the pipeline
+# permanently -- claim, fail here, unclaim back to `ready`, retry next poll --
+# with no job reaching the wiki. researchd's own bundle endpoint already serves
+# both statuses for exactly this reason (see main.py's /bundle.tar.gz handler);
+# this gate simply never followed it. A bare `ready` still passes so the script
+# stays runnable by hand against an unclaimed job while debugging.
+case "$STATUS" in
+  ready|publishing) : ;;
+  *) die "job $JOB_ID is '${STATUS:-unknown}', not ready or publishing" 3 ;;
+esac
 
 # Same regex as the job id, and the same reasoning: researchd derives the slug
 # from a user-supplied topic string, and it is about to become a directory
