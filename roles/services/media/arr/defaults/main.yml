@@ -79,3 +79,30 @@ arr_torrent_delay: 30
 arr_protocol_apps:
   - { name: radarr, port: "{{ arr_radarr_port }}", api: v3 }
   - { name: sonarr, port: "{{ arr_sonarr_port }}", api: v3 }
+
+# ---- unpackerr: extracts the inner RAR sets nzbget leaves behind ----
+# Scene releases posted as obfuscated outer archives unpack ONCE in nzbget into
+# an inner .rar/.rNN set; nzbget does not recurse, reports UnpackStatus=SUCCESS,
+# and Sonarr then sees only Sample/*.mkv -> rejects it as "Sample" and parks the
+# grab at importPending forever. Measured 2026-09-20: 19 stuck queue items across
+# 45 download folders. unpackerr polls the *arr queues and extracts what is left.
+arr_unpackerr_enabled: true
+arr_unpackerr_image: "golift/unpackerr:latest"
+arr_unpackerr_interval: "2m"
+arr_unpackerr_start_delay: "1m"
+arr_unpackerr_delete_delay: "5m"
+arr_unpackerr_paths: "/data/downloads"
+
+# MUST include the usenet protocol strings. unpackerr's default is
+# "torrent,TorrentDownloadProtocol" — torrent ONLY — which would make it silently
+# no-op on every nzbget grab, i.e. on the entire failure mode it is here to fix.
+arr_unpackerr_protocols: "torrent,TorrentDownloadProtocol,usenet,UsenetDownloadProtocol"
+
+# Apps whose generated API key the role reads out of config.xml (tasks/api_keys.yml).
+# 'port' here is the HOST port, used for the localhost URLs protocol_priority.yml
+# calls. Container-to-container URLs use fixed internal ports — see the compose
+# template — and must NOT use these vars.
+arr_api_apps:
+  - { name: sonarr, port: "{{ arr_sonarr_port }}", api: v3 }
+  - { name: radarr, port: "{{ arr_radarr_port }}", api: v3 }
+  - { name: lidarr, port: "{{ arr_lidarr_port }}", api: v3 }

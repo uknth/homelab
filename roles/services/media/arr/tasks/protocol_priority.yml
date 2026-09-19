@@ -3,26 +3,9 @@
 # catch-all (no tags). We keep preferredProtocol=usenet, hold torrents for
 # arr_torrent_delay minutes (usenet stays at 0), and disable the highest-quality
 # bypass so a fast torrent can't jump the queue. Drift-gated => idempotent.
-
-- name: Read *arr API keys (config.xml)
-  become: true
-  ansible.builtin.slurp:
-    src: "{{ arr_root_dir }}/{{ item.name }}/config.xml"
-  register: _arr_cfg
-  loop: "{{ arr_protocol_apps }}"
-  loop_control:
-    label: "{{ item.name }}"
-  no_log: true
-
-- name: Build app -> {url, key} map
-  ansible.builtin.set_fact:
-    _arr_api: "{{ _arr_api | default({}) | combine({ item.item.name: {
-        'url': 'http://localhost:' ~ item.item.port ~ '/api/' ~ item.item.api,
-        'key': (item.content | b64decode | regex_findall('<ApiKey>([a-f0-9]+)</ApiKey>') | first) } }) }}"
-  loop: "{{ _arr_cfg.results }}"
-  loop_control:
-    label: "{{ item.item.name }}"
-  no_log: true
+#
+# _arr_api (app -> {url, key}) is built by tasks/api_keys.yml, run earlier in
+# tasks/main.yml — not re-read here.
 
 - name: Get current default delay profile
   ansible.builtin.uri:

@@ -1,0 +1,33 @@
+---
+# Read each *arr's generated API key out of its config.xml and build
+#   _arr_api = { app: { url, key } }
+# Consumed by the unpackerr env/compose templates and by protocol_priority.yml.
+#
+# Deliberately tolerant of a missing config.xml: on a FRESH host the LSIO apps
+# have never started, so the file does not exist yet. Every consumer gates on the
+# key being present, so converge #1 brings the *arrs up and converge #2 wires
+# unpackerr to them. That is the documented behaviour, not a latent bug.
+
+- name: Read *arr API keys (config.xml)
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ arr_root_dir }}/{{ item.name }}/config.xml"
+  register: _arr_cfg
+  loop: "{{ arr_api_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+  no_log: true
+
+- name: Build app -> {url, key} map
+  ansible.builtin.set_fact:
+    _arr_api: "{{ _arr_api | default({}) | combine({ item.item.name: {
+        'url': 'http://localhost:' ~ item.item.port ~ '/api/' ~ item.item.api,
+        'key': (item.content | b64decode | regex_findall('<ApiKey>([a-f0-9]+)</ApiKey>') | first) } }) }}"
+  loop: "{{ _arr_cfg.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - item.content is defined
+    - (item.content | b64decode | regex_findall('<ApiKey>([a-f0-9]+)</ApiKey>')) | length > 0
+  no_log: true

@@ -129,3 +129,40 @@ services:
       - {{ arr_root_dir }}/bazarr:/config
       - {{ arr_data_dir }}:/data
     restart: unless-stopped
+{% if arr_unpackerr_enabled and _arr_api is defined and _arr_api.sonarr is defined %}
+
+  # ---- unpackerr: extracts inner RAR sets nzbget left behind ----
+  # See defaults/main.yml for the failure mode this fixes.
+  unpackerr:
+    image: {{ arr_unpackerr_image }}
+    container_name: unpackerr
+    networks: [arr]
+    # NOT a linuxserver.io image: it takes user:group directly and ignores
+    # PUID/PGID env vars, unlike every other service in this file.
+    user: "{{ arr_puid }}:{{ arr_pgid }}"
+    volumes:
+      - {{ arr_root_dir }}/unpackerr:/config
+      # MUST be mounted at the same path the *arrs use: unpackerr resolves the
+      # outputPath the Starr API reports (/data/downloads/...) verbatim.
+      - {{ arr_data_dir }}:/data
+    environment:
+      - TZ={{ timezone }}
+      - UN_INTERVAL={{ arr_unpackerr_interval }}
+      - UN_START_DELAY={{ arr_unpackerr_start_delay }}
+      # Log to the config volume, not /data — /data is the media pool.
+      - UN_LOG_FILE=/config/unpackerr.log
+      - UN_LOG_FILES=5
+{% for app, iport in [('sonarr', 8989), ('radarr', 7878), ('lidarr', 8686)] %}
+{% if _arr_api[app] is defined %}
+      # Container-to-container: fixed INTERNAL port, deliberately not arr_{{ app }}_port
+      # (that is the host-side port and would break if it were ever remapped).
+      - UN_{{ app | upper }}_0_URL=http://{{ app }}:{{ iport }}
+      - UN_{{ app | upper }}_0_API_KEY=${UN_{{ app | upper }}_0_API_KEY}
+      - UN_{{ app | upper }}_0_PATHS_0={{ arr_unpackerr_paths }}
+      - UN_{{ app | upper }}_0_PROTOCOLS={{ arr_unpackerr_protocols }}
+      - UN_{{ app | upper }}_0_DELETE_DELAY={{ arr_unpackerr_delete_delay }}
+      - UN_{{ app | upper }}_0_DELETE_ORIG=false
+{% endif %}
+{% endfor %}
+    restart: unless-stopped
+{% endif %}
