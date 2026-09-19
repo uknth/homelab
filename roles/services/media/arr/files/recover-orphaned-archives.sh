@@ -69,6 +69,19 @@ if [[ -z "$SONARR_KEY" || -z "$RADARR_KEY" ]]; then
   exit 1
 fi
 
+# ---- uid:gid to extract as ----
+# `docker exec` enters the container as ROOT (verified: uid=0), NOT as the app
+# user, so anything unrar writes would land root-owned — and the *arr, running
+# as 1001, would then fail to move or delete it during import. The extract would
+# look successful and the import would still fail. Derive the right owner from
+# the download tree itself so this cannot drift from arr_puid/arr_pgid, and fall
+# back to the role's defaults if stat gives us nothing useful.
+MEDIA_OWNER="$(docker exec nzbget stat -c '%u:%g' "$USENET_ROOT" 2>/dev/null || true)"
+if [[ -z "$MEDIA_OWNER" || "$MEDIA_OWNER" == "0:0" ]]; then
+  MEDIA_OWNER="1001:1001"
+fi
+echo "-- extracting as ${MEDIA_OWNER} (docker exec would otherwise run as root) --"
+
 # ---- SKIP set: release names still owned by unpackerr (present in a queue) ----
 # Anything still in a queue belongs to unpackerr, not us — touching it here
 # would race unpackerr's own extract/import. Parsed with python3 (present on
@@ -105,13 +118,14 @@ fi
 echo "-- ${skip_count} release(s) currently owned by an *arr queue (unpackerr's territory) --"
 
 is_skipped() {
-  # Exact match against the SKIP set built above. A release folder name that
-  # does not literally match its queue "title" (e.g. dots vs spaces) will
+  # Case-insensitive exact match against the SKIP set built above (one real
+  # folder differs from its queue title only in case: ...S03e10...X264-sodapop).
+  # A release folder name that does not otherwise match its queue "title" will
   # not be recognised as skipped — acceptable here: worst case we re-extract
   # a release unpackerr is also about to handle, which is a harmless no-op
   # (unrar -o- never overwrites).
   local name="$1"
-  [[ -n "$SKIP_NAMES" ]] && grep -qxF "$name" <<< "$SKIP_NAMES"
+  [[ -n "$SKIP_NAMES" ]] && grep -qixF "$name" <<< "$SKIP_NAMES"
 }
 
 # ---- candidate dirs: anything holding an inner scene rar set (*.r00) ----
@@ -160,7 +174,7 @@ while IFS= read -r cand; do
     # One bad archive set must not abort the whole sweep — guard set -e
     # around this single extract, capture its exit code, and keep going.
     set +e
-    docker exec nzbget unrar x -o- -y "$rar_file" "${cand}/"
+    docker exec -u "$MEDIA_OWNER" nzbget unrar x -o- -y "$rar_file" "${cand}/"
     rc=$?
     set -e
 
@@ -185,7 +199,7 @@ while IFS= read -r cand; do
     echo "OK    extracted -> ${found}"
     extracted=$((extracted + 1))
   else
-    echo "  [dry-run] would: unrar x -o- -y '${rar_file}' '${cand}/'"
+    echo "  [dry-run] would: docker exec -u ${MEDIA_OWNER} nzbget unrar x -o- -y '${rar_file}' '${cand}/'"
     extracted=$((extracted + 1))
   fi
 

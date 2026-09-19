@@ -164,6 +164,5 @@ services:
       - UN_{{ app | upper }}_0_DELETE_ORIG=false
 {% endif %}
 {% endfor %}
-    env_file: [.env]
     restart: unless-stopped
 {% endif %}
