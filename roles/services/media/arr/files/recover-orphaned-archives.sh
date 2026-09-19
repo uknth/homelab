@@ -130,7 +130,7 @@ is_skipped() {
 
 # ---- candidate dirs: anything holding an inner scene rar set (*.r00) ----
 echo "-- scanning ${USENET_ROOT} for inner scene rar sets (*.r00) --"
-CANDIDATES="$(docker exec nzbget sh -c "find '${USENET_ROOT}' -name '*.r00' -printf '%h\n' | sort -u")"
+CANDIDATES="$(docker exec nzbget sh -c "find '${USENET_ROOT}' -name '*.r00' -printf '%h\n' | sort -u" || true)"
 
 if [[ -z "$CANDIDATES" ]]; then
   echo "No orphaned archives found under ${USENET_ROOT}."
@@ -162,7 +162,7 @@ while IFS= read -r cand; do
     continue
   fi
 
-  rar_file="$(docker exec nzbget sh -c "find '${cand}' -maxdepth 1 -iname '*.rar' | sort | head -1")"
+  rar_file="$(docker exec nzbget sh -c "find '${cand}' -maxdepth 1 -iname '*.rar' | sort | head -1" || true)"
   if [[ -z "$rar_file" ]]; then
     echo "FAIL  no .rar found alongside *.r00 in: ${cand}"
     failed=$((failed + 1))
@@ -178,17 +178,27 @@ while IFS= read -r cand; do
     rc=$?
     set -e
 
-    if [[ $rc -ne 0 ]]; then
+    # unrar exit codes: 0 = success, 1 = non-fatal warning, 10 = RARX_NOFILES.
+    # 10 is exactly what `-o-` returns when the target file is already present —
+    # i.e. a re-run over a folder a previous sweep already recovered. Treating it
+    # as a failure would skip the scan-trigger below and silently strand an
+    # already-extracted episode as un-imported, which is the very dead end this
+    # script exists to clear. In all three accepted cases the verification
+    # immediately below is the real arbiter, not the exit code.
+    if [[ $rc -ne 0 && $rc -ne 1 && $rc -ne 10 ]]; then
       echo "FAIL  unrar exited ${rc} for: ${cand}"
       failed=$((failed + 1))
       continue
+    fi
+    if [[ $rc -eq 10 ]]; then
+      echo "  (already extracted — unrar had nothing to do; verifying and scanning)"
     fi
 
     # Verify: a real video file, not the Sample, must now exist under the
     # top-level release dir.
     found="$(docker exec nzbget sh -c "find '${top_dir}' -type f \
       \( -iname '*.mkv' -o -iname '*.mp4' -o -iname '*.avi' \) \
-      -size +100M -not -path '*/Sample/*' | head -1")"
+      -size +100M -not -path '*/Sample/*' | head -1" || true)"
 
     if [[ -z "$found" ]]; then
       echo "FAIL  extracted but no >100MB video found (excluding Sample/) under: ${top_dir}"
