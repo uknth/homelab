@@ -24,6 +24,11 @@
     - radarr
     - lidarr
     - bazarr
+    - unpackerr
+    - bin
+
+- name: Read *arr API keys (needed by the unpackerr env template)
+  ansible.builtin.include_tasks: api_keys.yml
 
 - name: Template arr compose + env
   become: true
@@ -46,6 +51,15 @@
     project_name: arr
     state: present
     pull: missing
+
+- name: Install orphaned-archive recovery script
+  become: true
+  ansible.builtin.copy:
+    src: recover-orphaned-archives.sh
+    dest: "{{ arr_root_dir }}/bin/recover-orphaned-archives.sh"
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Enforce download-client config (paths + qbit auth)
   ansible.builtin.import_tasks: download_config.yml
