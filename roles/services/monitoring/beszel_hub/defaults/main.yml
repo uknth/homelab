@@ -1,5 +1,7 @@
 ---
-beszel_hub_image: "henrygd/beszel:latest"
+# Pinned to beszel_version (hosts/group_vars/all/vars.yml) so the hub and the
+# agents can never drift apart. Never `:latest` here — see that comment.
+beszel_hub_image: "henrygd/beszel:{{ beszel_version }}"
 beszel_hub_root_dir: "{{ service_root }}/beszel"
 beszel_hub_port: 8090
 

@@ -63,6 +63,24 @@ Diun (one per docker host, watches local socket)
 A held project still produces a priority-4 ntfy naming the exact command to run:
 `ansible-playbook site.yml --tags <project>`.
 
+### Version-locked projects — pinned tag, deliberate bump
+
+A *held* project is one Diun may detect but n8n may not apply. A **version-locked**
+project goes one step further: its tag is pinned in Ansible, so `pull` has nothing
+newer to fetch and the auto-upgrade path cannot move it at all.
+
+| Project | Pin | Why |
+|---|---|---|
+| `beszel` | `beszel_version` in `hosts/group_vars/all/vars.yml` | The hub image and the agent binary on every host are one release pair, and nothing in this pipeline compares them. On `:latest` the hub walked itself to 0.20.0 while every agent sat on 0.18.8 — found 2026-09-21, invisible until someone looked. |
+
+Pinning would otherwise make the project go silent, since Diun's default watch is the
+digest of the running tag and a released version tag never changes. So the beszel
+container carries `diun.watch_repo=true` plus a semver `diun.include_tags`: a real
+release still lands on `homelab-updates`, and applying it means bumping
+`beszel_version` so the pipeline moves the hub and every agent in one deploy. The
+follow-on `No running container uses henrygd/beszel:<new> — nothing to do` from
+`maintenance.sh` is the expected outcome, not a failure.
+
 ### Discovery, not configuration
 
 Neither the host list nor the project list is hand-maintained. Hosts come from
