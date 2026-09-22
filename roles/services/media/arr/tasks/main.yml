@@ -66,3 +66,7 @@
 
 - name: Prefer Usenet (NZB) over torrents in the *arr delay profiles
   ansible.builtin.import_tasks: protocol_priority.yml
+
+- name: Prefer English/Hindi releases in the *arr custom formats
+  ansible.builtin.import_tasks: language_prefs.yml
+  when: arr_language_enabled | bool

@@ -70,6 +70,13 @@ from `playbooks/hosts/cmp01.yml`.
 longer takes down the whole stack (the v2 failure mode). PIA is the provider (port-forward
 helper is already PIA-shaped).
 
+**arr language preference:** Sonarr/Radarr custom formats prefer English/Hindi releases without
+ever hard-blocking a foreign-only one — one positive custom format per wanted language, plus a
+penalty format for anything else, scored onto every quality profile (`minFormatScore` untouched).
+Radarr's profile `language` field moves from Original (hard filter on native audio) to Any, since
+the preference now lives in the custom formats; Sonarr v4 dropped language profiles entirely. See
+`roles/services/media/arr/tasks/language_prefs.yml`.
+
 ## `util01` — Observability / ops services
 
 | Service | Target role | Domain | Status | v2 reference |

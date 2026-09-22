@@ -80,6 +80,36 @@ arr_protocol_apps:
   - { name: radarr, port: "{{ arr_radarr_port }}", api: v3 }
   - { name: sonarr, port: "{{ arr_sonarr_port }}", api: v3 }
 
+# ---- language preference (prefer English/Hindi, never a hard block) ----
+# Sonarr v4 dropped quality-profile "language profiles" entirely — there is no
+# language field to set. Radarr still has one, but its stock value ("Original",
+# id -2) *requires* each movie's native audio, silently rejecting English (or
+# any other) releases of foreign films. We move it to "Any" (-1) and let custom
+# formats express the preference as a score instead of a filter — see
+# tasks/language_prefs.yml.
+#
+# Language IDs are NOT shared between the two apps: English is 1 in both, but
+# Hindi is 27 in Sonarr and 26 in Radarr, and Unknown is 0 in both. Read from
+# GET /api/v3/language on cmp01 on 2026-09-22 — do not assume they match.
+arr_language_enabled: true
+arr_language_score: 500          # each wanted language present on the release
+arr_language_penalty: -10000     # release carries ONLY unwanted languages
+
+# Radarr only. "Original" (-2) — the stock value — makes Radarr *require* a
+# foreign film's native audio and reject English releases of it. -1 = Any hands
+# the decision to the custom formats instead. Sonarr v4 has no such field.
+arr_radarr_profile_language: { id: -1, name: "Any" }
+
+arr_language_apps:
+  - name: sonarr
+    wanted:
+      - { id: 1, name: English }
+      - { id: 27, name: Hindi }
+  - name: radarr
+    wanted:
+      - { id: 1, name: English }
+      - { id: 26, name: Hindi }
+
 # ---- unpackerr: extracts the inner RAR sets nzbget leaves behind ----
 # Scene releases posted as obfuscated outer archives unpack ONCE in nzbget into
 # an inner .rar/.rNN set; nzbget does not recurse, reports UnpackStatus=SUCCESS,
