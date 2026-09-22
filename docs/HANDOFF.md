@@ -68,6 +68,12 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
   (recommendation engine; user curates in Lidarr). Runbook: [`runbooks/music-stack.md`](runbooks/music-stack.md).
 - **NZB > torrents**: arr delay profiles enforce Usenet-first (usenetDelay 0, torrentDelay 30,
   bypassIfHighestQuality off) — `roles/services/media/arr/tasks/protocol_priority.yml`.
+- **English/Hindi preference**: Sonarr/Radarr custom formats score English/Hindi releases up and
+  everything-else-tagged releases down — preference only, `minFormatScore` stays 0 so a
+  foreign-only release still grabs. Radarr's quality-profile language moved Original -> Any (it
+  was hard-filtering to each movie's native audio); Sonarr v4 has no such field. Hindi's language
+  id differs between the two apps (27 in Sonarr, 26 in Radarr) —
+  `roles/services/media/arr/tasks/language_prefs.yml`.
 - **Dashboard**: trialled Homarr, reverted (DB/UI-driven ≠ IaC). Homepage kept and reworked:
   2 tabs (**Home** = family incl. Jellyseerr; **System** = admin-only), each with a **links
   block** (bookmarks) on top and a **widgets block** (services) below in a **two-pane CSS

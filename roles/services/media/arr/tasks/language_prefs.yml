@@ -1,0 +1,178 @@
+---
+# Prefer English/Hindi releases in Sonarr/Radarr — a PREFERENCE, never a hard
+# block. minFormatScore is deliberately left at 0 (never touched here), so a
+# release carrying only a foreign language still clears the profile and grabs;
+# it just loses the race to an English/Hindi release when both are available.
+#
+# Scheme, per app (arr_language_apps, wanted language ids differ between the
+# two apps — see defaults/main.yml):
+#   - One positive custom format per wanted language ("Language: English",
+#     "Language: Hindi", ...), +arr_language_score when that language is on
+#     the release.
+#   - One negative custom format ("Language: Not English/Hindi") built from
+#     "except this language" specs, ALL required — it therefore only matches
+#     when a language other than every wanted one AND other than Unknown is
+#     present, applying arr_language_penalty. Unknown is deliberately exempt:
+#     an untagged release parses as Unknown before the *arr augmenters
+#     substitute the series'/movie's original language, and penalising that
+#     would hit correctly-tagged-as-nothing releases, not foreign ones. A
+#     dual-audio release (e.g. ENG+FRE) matches both the positive English
+#     format (+500) and the negative one (-10000), netting -9500 — still above
+#     a French-only release, which is the intent.
+#
+# Radarr's quality-profile "language" field is moved from Original (hard
+# filter on native audio) to Any in the same profile PUT — see
+# arr_radarr_profile_language in defaults/main.yml. Sonarr v4 has no such
+# field.
+#
+# _arr_api (app -> {url, key}) is built by tasks/api_keys.yml, run earlier in
+# tasks/main.yml. Every task below is gated on the app having a key so a
+# fresh host (no config.xml yet) is a no-op here, same tolerance documented
+# in api_keys.yml.
+
+- name: Get existing custom formats
+  ansible.builtin.uri:
+    url: "{{ _arr_api[item.name].url }}/customformat"
+    method: GET
+    headers:
+      X-Api-Key: "{{ _arr_api[item.name].key }}"
+    return_content: true
+  register: _cf_get
+  loop: "{{ arr_language_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  check_mode: false
+  when: item.name in (_arr_api | default({}))
+
+- name: Index existing custom formats by app
+  ansible.builtin.set_fact:
+    _cf_existing: "{{ _cf_existing | default({}) | combine({ item.item.name: item.json }) }}"
+  loop: "{{ _cf_get.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.item.name in (_arr_api | default({}))
+
+- name: Compute desired custom formats per app
+  ansible.builtin.set_fact:
+    _language_desired: "{{ _language_desired | default({}) | combine({ item.name: (_cfs_json | from_json) }) }}"
+  vars:
+    _cfs_json: >-
+      [
+      {% for w in item.wanted %}
+      {"name": "Language: {{ w.name }}", "includeCustomFormatWhenRenaming": false,
+       "specifications": [{"name": "{{ w.name }}", "implementation": "LanguageSpecification",
+         "negate": false, "required": false,
+         "fields": [{"name": "value", "value": {{ w.id }}}, {"name": "exceptLanguage", "value": false}]}]},
+      {% endfor %}
+      {"name": "Language: Not {{ item.wanted | map(attribute='name') | join('/') }}",
+       "includeCustomFormatWhenRenaming": false,
+       "specifications": [
+       {% for e in item.wanted + [{'id': 0, 'name': 'Unknown'}] %}
+       {"name": "Not {{ e.name }}", "implementation": "LanguageSpecification",
+         "negate": false, "required": true,
+         "fields": [{"name": "value", "value": {{ e.id }}}, {"name": "exceptLanguage", "value": true}]}{{ "," if not loop.last }}
+       {% endfor %}
+       ]}
+      ]
+  loop: "{{ arr_language_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name in (_arr_api | default({}))
+
+- name: Create missing language custom formats
+  ansible.builtin.uri:
+    url: "{{ _arr_api[_pair.0.key].url }}/customformat"
+    method: POST
+    headers:
+      X-Api-Key: "{{ _arr_api[_pair.0.key].key }}"
+    body_format: json
+    body: "{{ _pair.1 }}"
+    status_code: [200, 201]
+  loop: "{{ _language_desired | default({}) | dict2items | subelements('value') }}"
+  loop_control:
+    loop_var: _pair
+    label: "{{ _pair.0.key }}/{{ _pair.1.name }}"
+  when:
+    - _pair.0.key in (_arr_api | default({}))
+    - _pair.1.name not in (_cf_existing[_pair.0.key] | default([]) | map(attribute='name') | list)
+
+- name: Update drifted language custom formats
+  ansible.builtin.uri:
+    url: "{{ _arr_api[_pair.0.key].url }}/customformat/{{ _existing_cf.id }}"
+    method: PUT
+    headers:
+      X-Api-Key: "{{ _arr_api[_pair.0.key].key }}"
+    body_format: json
+    body: "{{ _pair.1 | combine({'id': _existing_cf.id}) }}"
+    status_code: [200, 202]
+  vars:
+    _existing_cf: "{{ (_cf_existing[_pair.0.key] | default([]) | selectattr('name', 'equalto', _pair.1.name) | list | first) | default({}) }}"
+    _existing_sig: >-
+      {% for s in _existing_cf.specifications | default([]) | sort(attribute='name') %}{{ s.implementation }}|{{ s.required | bool }}|{{ s.negate | bool }}|{{ s.fields | selectattr('name','equalto','value') | map(attribute='value') | first }}|{{ s.fields | selectattr('name','equalto','exceptLanguage') | map(attribute='value') | first | default(false) | bool }};{% endfor %}
+    _desired_sig: >-
+      {% for s in _pair.1.specifications | sort(attribute='name') %}{{ s.implementation }}|{{ s.required | bool }}|{{ s.negate | bool }}|{{ s.fields | selectattr('name','equalto','value') | map(attribute='value') | first }}|{{ s.fields | selectattr('name','equalto','exceptLanguage') | map(attribute='value') | first | default(false) | bool }};{% endfor %}
+  loop: "{{ _language_desired | default({}) | dict2items | subelements('value') }}"
+  loop_control:
+    loop_var: _pair
+    label: "{{ _pair.0.key }}/{{ _pair.1.name }}"
+  when:
+    - _pair.0.key in (_arr_api | default({}))
+    - _existing_cf.id is defined
+    - _existing_sig != _desired_sig
+
+# MUST run after the create/update tasks above: creating a custom format makes
+# the *arr add a score-0 formatItem for it to every existing quality profile, and
+# the scoring task below matches those by NAME. That is also why no second
+# customformat GET is needed here — the new ids arrive via the profiles.
+- name: Get all quality profiles
+  ansible.builtin.uri:
+    url: "{{ _arr_api[item.name].url }}/qualityprofile"
+    method: GET
+    headers:
+      X-Api-Key: "{{ _arr_api[item.name].key }}"
+    return_content: true
+  register: _qp_get
+  loop: "{{ arr_language_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  check_mode: false
+  when: item.name in (_arr_api | default({}))
+
+- name: Flatten quality profiles per app
+  ansible.builtin.set_fact:
+    _language_profiles: "{{ _language_profiles | default([]) + [{'app': _row.0.item.name, 'profile': _row.1}] }}"
+  loop: "{{ _qp_get.results | subelements('json', skip_missing=True) }}"
+  loop_control:
+    loop_var: _row
+    label: "{{ _row.0.item.name }}/{{ _row.1.name }}"
+  when: _row.0.item.name in (_arr_api | default({}))
+
+- name: Score the language custom formats onto every quality profile
+  ansible.builtin.uri:
+    url: "{{ _arr_api[_row.app].url }}/qualityprofile/{{ _row.profile.id }}"
+    method: PUT
+    headers:
+      X-Api-Key: "{{ _arr_api[_row.app].key }}"
+    body_format: json
+    body: "{{ _desired }}"
+    status_code: [200, 202]
+  vars:
+    _app_wanted: "{{ (arr_language_apps | selectattr('name', 'equalto', _row.app) | first).wanted }}"
+    _scores_json: >-
+      {
+      {% for w in _app_wanted %}"Language: {{ w.name }}": {{ arr_language_score }},{% endfor %}
+      "Language: Not {{ _app_wanted | map(attribute='name') | join('/') }}": {{ arr_language_penalty }}
+      }
+    _scores: "{{ _scores_json | from_json }}"
+    _items_json: >-
+      [{% for fi in _row.profile.formatItems %}{"format": {{ fi.format }}, "name": {{ fi.name | to_json }}, "score": {{ _scores[fi.name] | default(fi.score) }}}{{ "," if not loop.last }}{% endfor %}]
+    _items: "{{ _items_json | from_json }}"
+    _lang_patch: "{{ {'language': arr_radarr_profile_language} if _row.app == 'radarr' else {} }}"
+    _desired: "{{ _row.profile | combine({'formatItems': _items}) | combine(_lang_patch) }}"
+  loop: "{{ _language_profiles | default([]) }}"
+  loop_control:
+    loop_var: _row
+    label: "{{ _row.app }}/{{ _row.profile.name }}"
+  when:
+    - _row.app in (_arr_api | default({}))
+    - _desired != _row.profile
