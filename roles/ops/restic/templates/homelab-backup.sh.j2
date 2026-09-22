@@ -26,13 +26,32 @@ ntfy_fail() {  # $1 = message
 }
 
 # --- init mode -------------------------------------------------------------
+# `cat config` is only a fast path: it needs the repo to be REACHABLE and the
+# password to decrypt, so it fails for reasons that have nothing to do with the
+# repo being absent — a momentary sftp/NAS hiccup is enough. Falling straight
+# through to `init` on that basis is what turned a healthy 20-snapshot repo
+# into a failed deploy on 2026-09-22 (restic refused with "config file already
+# exists"; nothing was overwritten, but ops/restic is the last role in cmp01's
+# play and the apply died there). So treat restic's own refusal as proof the
+# repo exists rather than as an error, and fail only on something else.
 if [ "${1:-}" = "init" ]; then
   if "${RESTIC[@]}" cat config >/dev/null 2>&1; then
     log "repository already initialized"; exit 0
   fi
   log "initializing repository ${RESTIC_REPOSITORY}"
-  "${RESTIC[@]}" init
-  exit $?
+  if init_out=$("${RESTIC[@]}" init 2>&1); then
+    printf '%s\n' "$init_out"
+    exit 0
+  fi
+  printf '%s\n' "$init_out"
+  # restic NEVER overwrites an existing repo, so either message means the repo
+  # is there and intact — the `cat config` probe simply could not see it.
+  case "$init_out" in
+    *"config file already exists"*|*"already initialized"*)
+      log "repository already initialized"; exit 0 ;;
+  esac
+  log "ERROR: repository init failed"
+  exit 1
 fi
 
 # --- backup mode -----------------------------------------------------------

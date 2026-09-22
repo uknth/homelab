@@ -83,15 +83,19 @@
 - name: Flush handlers so the unit is known before we enable it
   ansible.builtin.meta: flush_handlers
 
+# The script owns the "is it already there?" decision and exits 0 for an
+# existing repo, including when its `cat config` probe was the thing that
+# failed (see the init block in homelab-backup.sh.j2). So trust the exit code
+# here rather than grepping output: the old guard matched only the literal
+# "already initialized" and so let restic's "config file already exists"
+# through as a hard failure, which is how a transient NAS blip took a whole
+# apply down on 2026-09-22.
 - name: Initialise the restic repository if needed
   become: true
   ansible.builtin.command:
     cmd: "{{ restic_script }} init"
   register: restic_init
   changed_when: "'created restic repository' in restic_init.stdout"
-  failed_when:
-    - restic_init.rc != 0
-    - "'already initialized' not in restic_init.stdout + restic_init.stderr"
 
 - name: Enable + start the backup timer
   become: true
