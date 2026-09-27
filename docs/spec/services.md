@@ -51,8 +51,8 @@ names.
 
 | Service | Target role | Domain | Status | v2 reference |
 |---|---|---|---|---|
-| arr stack (**nzbget (primary Usenet)**, qbittorrent, prowlarr, sonarr, radarr, lidarr, bazarr) | `services/media/arr` | per-app (SSO) | 🟢 built + live | VPN=qbit only (OpenVPN/PIA, port-fwd); nzbget + *arr on bridge |
-| gluetun (VPN, **qBittorrent only**) | part of `services/media/arr` | — | 🟢 built + live | PIA OpenVPN (not WireGuard); port-forwarding active; egress verified tunneled |
+| arr stack (**nzbget (primary Usenet)**, qbittorrent, prowlarr, sonarr, radarr, lidarr, bazarr) | `services/media/arr` | per-app (SSO) | 🟢 built + live | **whole stack behind VPN** (OpenVPN/PIA, port-fwd) since 2026-09-27 |
+| gluetun (VPN, **whole arr stack**) | part of `services/media/arr` | — | 🟢 built + live | PIA OpenVPN (not WireGuard); port-forwarding active; publishes all 7 arr UIs |
 | Jellyfin + Jellyseerr | `services/media/jellyfin` | `video.puhome.net`, `seer.puhome.net` | 🟢 built + live | NVENC via A4000 (GPU visible in-container); own auth (native clients) |
 | Kavita | `services/media/kavita` | `books.puhome.net` | 🟢 built + live | **pinned to 0.8.2** (0.9.x hangs on MigrateEmailTemplates first-boot) |
 | Paperless-ngx | `services/documents/paperless` | `docs.puhome.net` | 🟢 built + live | migrated (182 docs) to local disk; postgres:17 glibc; tika/gotenberg; **Authentik OIDC login** (tier-1) + API tokens |
@@ -65,10 +65,22 @@ names.
 **Out of scope for v3 (user directive):** Immich (photos), Vaultwarden (passwords). Removed
 from `playbooks/hosts/cmp01.yml`.
 
-**arr VPN scope:** v3 puts **only qBittorrent + its port-forward helper** behind gluetun. The
-\*arr apps reach indexers over HTTPS and stay on the normal bridge network, so a VPN blip no
-longer takes down the whole stack (the v2 failure mode). PIA is the provider (port-forward
+**arr VPN scope (revised 2026-09-27):** the **entire** arr stack — nzbget, qbittorrent,
+prowlarr, sonarr, radarr, lidarr, bazarr and unpackerr — now shares gluetun's netns, so no
+Usenet or indexer traffic leaves on cmp01's bare IP. PIA is the provider (the port-forward
 helper is already PIA-shaped).
+
+This deliberately gives up the v2→v3 blast-radius fix: a VPN outage now takes the whole stack
+down again, accepted because keeping provider traffic off the bare IP matters more here.
+Two consequences worth knowing:
+
+- **Every UI is published by gluetun**, not by the app container, because a container sharing
+  another container's netns cannot publish ports of its own. The *host* ports are unchanged, so
+  gw01's nginx upstreams (`http://10.0.2.5:8989` and friends) keep working untouched.
+- **In-netns peers address each other as `localhost:<internal port>`**, since the apps no longer
+  hold DNS aliases on the `arr` network. Containers still on that bridge (soularr, slskd,
+  navidrome) must use `gluetun:<internal port>` instead — gluetun is the container that holds
+  the address. `tasks/netns_urls.yml` enforces this wiring.
 
 **arr language preference:** Sonarr/Radarr custom formats prefer English/Hindi releases without
 ever hard-blocking a foreign-only one — one positive custom format per wanted language, plus a

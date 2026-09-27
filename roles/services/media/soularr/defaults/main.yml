@@ -8,3 +8,11 @@ soularr_interval: 300              # seconds between runs
 soularr_puid: "{{ media_uid }}"
 soularr_pgid: "{{ media_gid }}"
 soularr_download_dir: "/data/downloads/soulseek"   # shared view (Lidarr + slskd + soularr)
+
+# Lidarr has no Docker DNS alias on the arr network any more: the whole arr
+# stack shares gluetun's netns (see roles/services/media/arr), so gluetun is
+# now the container that holds the address and publishes 8686. soularr itself
+# is still on the arr bridge network, not in that netns, so it must dial
+# gluetun here — not localhost, which would only work for a container that is
+# actually inside the shared netns.
+soularr_lidarr_url: "http://gluetun:8686"

@@ -64,6 +64,9 @@
 - name: Enforce download-client config (paths + qbit auth)
   ansible.builtin.import_tasks: download_config.yml
 
+- name: Repoint service-to-service URLs at localhost (whole stack shares gluetun's netns)
+  ansible.builtin.import_tasks: netns_urls.yml
+
 - name: Prefer Usenet (NZB) over torrents in the *arr delay profiles
   ansible.builtin.import_tasks: protocol_priority.yml
 
