@@ -18,5 +18,23 @@ authentik_pg_password: "{{ vault_authentik_postgres_password }}"
 authentik_bootstrap_password: "{{ vault_authentik_bootstrap_password }}"
 authentik_bootstrap_email: "{{ vault_certbot_email | default('admin@puhome.net') }}"
 
+# Shared-memory size for the server container.
+#
+# Docker's 64 MB default is not enough. authentik points prometheus_client's
+# multiprocess dir at /dev/shm/authentik_prometheus_tmp, where every gunicorn
+# worker PID leaves a set of *_<pid>.db files. Those are only reaped on a clean
+# worker exit, so ordinary worker recycling leaks them. On 2026-10-01 the dir
+# reached 359,241 files and filled /dev/shm completely; gunicorn could then no
+# longer mmap its worker heartbeat file, so every worker was killed with SIGBUS
+# on boot. That is self-reinforcing -- a SIGBUS death is unclean, so it leaks
+# the files that caused it -- and produced ~343k worker deaths in one afternoon.
+#
+# With the server dead, nginx's forward-auth subrequest failed and every
+# authentik-protected vhost on the fleet served 503, flapping ~15 Uptime Kuma
+# monitors. Raising the ceiling removes the SIGBUS failure mode; it does not
+# stop the underlying leak, which is upstream behaviour. The worker container
+# does not need this -- it had 6 files after the same 5 weeks of uptime.
+authentik_shm_size: "512m"
+
 authentik_postgres_image: "docker.io/library/postgres:16-alpine"
 authentik_redis_image: "docker.io/library/redis:7-alpine"

@@ -191,6 +191,53 @@ blocks them, because "open" was hiding three different situations.
   Verified 2026-09-08: `brew --version` is clean as both `ansible` and `uknth` on
   ai01.
 
+### Found 2026-10-02 during the authentik 503 outage
+
+**The authentik /dev/shm leak is only capped, not fixed.** The outage itself is
+resolved — `authentik-server` was restarted live on 2026-10-02, which emptied the
+tmpfs and stopped the crash loop — and `authentik_shm_size: "512m"` removes the
+SIGBUS cliff. But the thing that filled the old 64 MB ceiling is still running. authentik points `prometheus_client`'s multiprocess dir at
+`/dev/shm/authentik_prometheus_tmp`, and every recycled gunicorn worker leaves
+`*_<pid>.db` files behind that are only reaped on a clean exit. At the rate that
+filled 64 MB in roughly five weeks, 512 MB buys months, not forever.
+
+To check how fast it is actually refilling:
+
+```
+ssh ansible@10.0.2.8 'docker exec authentik-server sh -c \
+  "df -h /dev/shm; ls -U /dev/shm/authentik_prometheus_tmp | wc -l"'
+```
+
+Three ways out, none of them picked yet — **ask before building any of them**:
+
+- Upgrade authentik past `2026.8.0` (`roles/services/auth/authentik/defaults/main.yml`)
+  if upstream has since reaped these on unclean exit. Cheapest if true; needs
+  checking, it was not verified during the outage.
+- Prune `*_<pid>.db` for PIDs that no longer exist, on a timer. Works regardless
+  of upstream, but it is custom machinery poking at another process's state dir.
+- Move the multiproc dir off tmpfs onto the 1.7 TB disk. The leak continues but
+  stops being able to SIGBUS anything, because the mmap always has backing.
+
+**Recreating the container is what applies the new `shm_size`** — a plain
+`docker restart` does not. The role's `Deploy Authentik` task (`state: present`)
+handles this, so a normal CI apply is enough; do not expect the `Restart
+authentik` handler alone to do it.
+
+**Two unrelated things noticed on cmp01 while diagnosing, both still open:**
+
+- **`vaultindex-embed` is permanently "unhealthy" and should not be.** Its
+  healthcheck is `curl -f http://localhost:8080/health`, but the server is
+  started with `--port 8082`, so the check has never once passed — the failing
+  streak was 14,650 when found, exactly matching its 5 days of uptime. The
+  service is fine and serving embeddings throughout. This is a false red in
+  Portainer/Beszel and it masks a real failure if one ever happens, so fix the
+  port in the healthcheck rather than the server.
+- **`vaultindex-llm` exited 0 and stayed down** (2026-09-30T15:31Z, found 33 h
+  later). It has `restart: no` and the log ends with a normal
+  `cleaning up before exit...` after serving a single request, so this may well
+  be a deliberate one-shot. Confirm which it is: if it is meant to be resident,
+  it needs a restart policy; if it is on-demand, it should not be alerted on.
+
 ### Found 2026-09-08, not yet fixed — the fleet is not idempotent
 
 A **docs-only** deploy (PR #6, which changed nothing but markdown) still reported
