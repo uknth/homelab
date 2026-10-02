@@ -31,6 +31,9 @@ services:
     container_name: authentik-server
     restart: unless-stopped
     command: server
+    # See authentik_shm_size in defaults/main.yml -- the 64 MB default fills
+    # with leaked prometheus multiproc files and SIGBUSes every gunicorn worker.
+    shm_size: "{{ authentik_shm_size }}"
     env_file: [.env]
     volumes:
       - {{ authentik_root_dir }}/media:/media
