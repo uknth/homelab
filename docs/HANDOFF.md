@@ -403,6 +403,38 @@ which points at git rather than at the rewrite.
 - **`ansible` in the macOS `admin` group** (`ansible_user_macos_admin`) — noted as
   a standing privilege choice, not a defect.
 
+### Deferred 2026-09-27, when the arr stack moved behind the VPN
+
+Both of these were decided in the same session that put the whole arr stack into
+gluetun's netns (`fix/arr-behind-vpn`). Neither is a loose end — each was weighed
+and deliberately postponed, so pick them up cold from here.
+
+- **PIA on OpenVPN, not WireGuard.** `arr_vpn_type: openvpn`, while the comment
+  above it claimed WireGuard for months. Deliberately kept on OpenVPN for the
+  netns move so that any throughput regression is unambiguously attributable to
+  one change. Worth doing next: nzbget's ~10 MB/s (measured 2026-09-27) now runs
+  through the tunnel, and gluetun's OpenVPN path is frequently the CPU bottleneck,
+  so this is likely the single biggest Usenet-throughput win available.
+  **Check feasibility first:** `docs/plan/roadmap.md` phase 5a recorded WireGuard
+  as *unsupported for PIA* when the stack was built (2026-08-22). Confirm whether
+  gluetun supports PIA over WireGuard now before planning around it — that note
+  may simply be stale, but it was not re-verified in this session.
+- **Dual-provider VPN redundancy (PIA primary + Proton standby) — declined for
+  now.** Evaluated in full: it is *not* achievable as automatic failover, because
+  `network_mode: "service:<x>"` is resolved when a container is created and is
+  fixed for that container's life; Docker will not re-attach a running container
+  to another netns. Any switch therefore recreates all eight dependent containers.
+  The realistic shape, if it is ever wanted: run `gluetun-pia` and
+  `gluetun-proton` side by side, let an `arr_vpn_active` var pick the netns, and
+  publish the seven host ports on the active instance only — failover becomes a
+  one-line change plus a push, roughly a minute of downtime. Two caveats found
+  while evaluating: Proton needs WireGuard (new vault secrets) and its port
+  forwarding runs over NAT-PMP on a paid P2P server, which the current
+  `PORT_FORWARD_ONLY=on` would otherwise refuse. Also note gluetun already
+  rotates servers and reconnects *within* one provider, which covers the common
+  single-bad-server case; a second provider only adds cover for a whole-provider
+  or account-level outage.
+
 ## Session 2026-08-31 — Beszel: ai01 outage, fleet agent upgrade, nas02 online
 
 Started from "ai01 is down on beszel". Three outcomes: a new failure mode, a

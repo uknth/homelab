@@ -8,7 +8,8 @@
 #                    roles/services/development/gitea/defaults/main.yml)
 #   - gitea_runner : Gitea Actions runner, no fleet credentials (see
 #                    roles/services/development/gitea_runner/defaults/main.yml)
-#   - arr          : sonarr/radarr/lidarr/bazarr/prowlarr/qbittorrent (VPN=qbit only)
+#   - arr          : sonarr/radarr/lidarr/bazarr/prowlarr/qbittorrent/nzbget,
+#                    entire stack behind VPN (shares gluetun's netns, 2026-09-27)
 #   - jellyfin     : media server (NVENC) + jellyseerr
 #   - kavita       : books/comics reader
 #   - paperless    : document management (pending existing-data decision)

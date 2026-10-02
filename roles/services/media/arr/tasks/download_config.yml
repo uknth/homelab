@@ -35,7 +35,8 @@
     _nzb_desired: >-
       {{ ['InterDir=' ~ arr_nzbget_interdir, 'DestDir=' ~ arr_nzbget_destdir,
           'WriteLog=' ~ arr_nzbget_writelog, 'RotateLog=' ~ arr_nzbget_rotatelog,
-          'ArticleCache=' ~ arr_nzbget_articlecache, 'WriteBuffer=' ~ arr_nzbget_writebuffer]
+          'ArticleCache=' ~ arr_nzbget_articlecache, 'WriteBuffer=' ~ arr_nzbget_writebuffer,
+          'HealthCheck=' ~ arr_nzbget_healthcheck]
          + (['ControlUsername=' ~ arr_nzbget_username, 'ControlPassword=' ~ arr_nzbget_password]
             if (arr_nzbget_username | length > 0) else []) }}
   no_log: true
@@ -59,6 +60,7 @@
         - { k: RotateLog, v: "{{ arr_nzbget_rotatelog }}" }
         - { k: ArticleCache, v: "{{ arr_nzbget_articlecache }}" }
         - { k: WriteBuffer, v: "{{ arr_nzbget_writebuffer }}" }
+        - { k: HealthCheck, v: "{{ arr_nzbget_healthcheck }}" }
       no_log: true
 
     # One-off cleanup, and it must happen while nzbget is stopped: switching to

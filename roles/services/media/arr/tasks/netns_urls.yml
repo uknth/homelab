@@ -1,0 +1,192 @@
+---
+# The whole arr stack now shares gluetun's netns (see defaults/main.yml), which
+# means every service-to-service URL that used to resolve via Docker's
+# per-network DNS (sonarr, radarr, lidarr, prowlarr, nzbget, gluetun) breaks —
+# in-netns peers must address each other as localhost:<internal port> instead.
+# This file repoints the three places that still name a container:
+#   D1. Sonarr/Radarr/Lidarr download-client hosts (nzbget, qbittorrent)
+#   D2. Prowlarr's application links (baseUrl / prowlarrUrl)
+#   D3. Bazarr's config.yaml (ip: sonarr / ip: radarr)
+# All three are drift-gated: GET (or slurp) first, only PUT/edit when the
+# current value is wrong, so a converged host is a no-op.
+#
+# _arr_api (app -> {url, key}) is built by tasks/api_keys.yml, run earlier in
+# tasks/main.yml — not re-read here. Its .url already points at
+# http://localhost:<host port>/api/<version> (see api_keys.yml), which is also
+# correct for D1 below since these host ports are published by gluetun and
+# reachable from cmp01 itself, where these tasks run.
+
+# ---------- D1: Sonarr/Radarr/Lidarr download-client hosts ----------
+# Retried, because this role recreates every one of these containers on the run
+# that first applies the netns change: the *arr apps are still booting when we
+# get here, and a bare GET would hit connection-refused and fail the play.
+# Loops arr_api_apps directly — NOT a parallel copy of it — because the URL and
+# key below come from _arr_api, which api_keys.yml builds from that same list;
+# two lists would let the loop and the map drift into a KeyError.
+- name: Get current download clients (sonarr/radarr/lidarr)
+  ansible.builtin.uri:
+    url: "{{ _arr_api[item.name].url }}/downloadclient"
+    method: GET
+    headers:
+      X-Api-Key: "{{ _arr_api[item.name].key }}"
+    return_content: true
+  register: _dc_get
+  until: _dc_get is success
+  retries: 12
+  delay: 5
+  loop: "{{ arr_api_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  check_mode: false
+  when: item.name in (_arr_api | default({}))
+
+# Each download client's host lives inside its 'fields' list as the entry
+# named 'host', not as a top-level key — rewrite that one entry in place and
+# PUT the whole object back (a partial body silently drops every other
+# field). nzbget and qbittorrent both currently resolve to their old
+# container-name/gluetun-alias host; both become 'localhost'. Ports are
+# already correct (6789 / 8080) and are left untouched.
+- name: Repoint download-client host to localhost (sonarr/radarr/lidarr)
+  ansible.builtin.uri:
+    url: "{{ _arr_api[item.0.item.name].url }}/downloadclient/{{ item.1.id }}"
+    method: PUT
+    headers:
+      X-Api-Key: "{{ _arr_api[item.0.item.name].key }}"
+    body_format: json
+    body: "{{ item.1 | combine({'fields': _fields}) }}"
+    status_code: [200, 202]
+  vars:
+    _fields: >-
+      {{ (item.1.fields | rejectattr('name', 'equalto', 'host') | list)
+         + [ (item.1.fields | selectattr('name', 'equalto', 'host') | first
+              | combine({'value': 'localhost'})) ] }}
+  loop: "{{ _dc_get.results | subelements('json', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.item.name }} / {{ item.1.name }}"
+  # The length test is load-bearing, not defensive noise: a blackhole download
+  # client (Usenet Blackhole / Torrent Blackhole) has no 'host' field at all,
+  # and | first on the resulting empty list raises rather than skipping. Without
+  # it, adding a blackhole client in the UI would start failing this role.
+  when: >-
+    (item.1.fields | selectattr('name', 'equalto', 'host') | list | length > 0)
+    and (item.1.fields | selectattr('name', 'equalto', 'host')
+         | map(attribute='value') | list | first) != 'localhost'
+
+# ---------- D2: Prowlarr application links ----------
+# Prowlarr isn't in arr_api_apps (it feeds unpackerr, which doesn't talk to
+# Prowlarr), so read its key separately — same slurp + regex_findall technique
+# as tasks/api_keys.yml.
+- name: Read Prowlarr API key (config.xml)
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ arr_root_dir }}/prowlarr/config.xml"
+  register: _prowlarr_cfg
+  failed_when: false
+  no_log: true
+
+- name: Extract Prowlarr API key
+  ansible.builtin.set_fact:
+    _prowlarr_api_key: "{{ (_prowlarr_cfg.content | b64decode | regex_findall('<ApiKey>([a-f0-9]+)</ApiKey>')) | first }}"
+  when:
+    - _prowlarr_cfg.content is defined
+    - (_prowlarr_cfg.content | b64decode | regex_findall('<ApiKey>([a-f0-9]+)</ApiKey>')) | length > 0
+  no_log: true
+
+- name: Get Prowlarr application links
+  ansible.builtin.uri:
+    url: "http://localhost:{{ arr_prowlarr_port }}/api/v1/applications"
+    method: GET
+    headers:
+      X-Api-Key: "{{ _prowlarr_api_key }}"
+    return_content: true
+  register: _prowlarr_apps_get
+  until: _prowlarr_apps_get is success
+  retries: 12
+  delay: 5
+  check_mode: false
+  when: _prowlarr_api_key is defined
+
+# Every application link's baseUrl (http://<app>:<port>) and prowlarrUrl
+# (http://prowlarr:9696) point at container names/aliases that no longer
+# resolve. Both fields live in the link's 'fields' list — rewrite them in
+# place and PUT the whole object back, same caveat as D1.
+- name: Repoint Prowlarr application baseUrl/prowlarrUrl to localhost when drifted
+  ansible.builtin.uri:
+    url: "http://localhost:{{ arr_prowlarr_port }}/api/v1/applications/{{ item.id }}"
+    method: PUT
+    headers:
+      X-Api-Key: "{{ _prowlarr_api_key }}"
+    body_format: json
+    body: "{{ item | combine({'fields': _fields}) }}"
+    status_code: [200, 202]
+  vars:
+    # Keyed on 'implementation' (Prowlarr's own app type: Sonarr/Radarr/Lidarr),
+    # NOT on 'name' — name is the free-text label a human can rename to "Sonarr
+    # 4K" in the UI, which would silently stop matching and leave a dead URL in
+    # place. implementation is fixed by the app type.
+    _impl: "{{ item.implementation | lower }}"
+    _desired_base: "http://localhost:{{ arr_netns_internal_ports[_impl] }}"
+    _desired_prowlarr: "http://localhost:{{ arr_netns_internal_ports['prowlarr'] }}"
+    _fields: >-
+      {{ (item.fields | rejectattr('name', 'in', ['baseUrl', 'prowlarrUrl']) | list)
+         + [ (item.fields | selectattr('name', 'equalto', 'baseUrl') | first
+              | combine({'value': _desired_base})) ]
+         + [ (item.fields | selectattr('name', 'equalto', 'prowlarrUrl') | first
+              | combine({'value': _desired_prowlarr})) ] }}
+  loop: "{{ _prowlarr_apps_get.json | default([]) }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.implementation | default('?') }})"
+  # Both field-presence tests guard a | first that would raise on an empty list,
+  # same reason as D1 above.
+  when: >-
+    _prowlarr_api_key is defined
+    and _impl in arr_netns_internal_ports
+    and (item.fields | selectattr('name', 'equalto', 'baseUrl') | list | length > 0)
+    and (item.fields | selectattr('name', 'equalto', 'prowlarrUrl') | list | length > 0)
+    and ((item.fields | selectattr('name', 'equalto', 'baseUrl')
+          | map(attribute='value') | list | first) != _desired_base
+         or (item.fields | selectattr('name', 'equalto', 'prowlarrUrl')
+             | map(attribute='value') | list | first) != _desired_prowlarr)
+
+# ---------- D3: Bazarr config.yaml ----------
+# Bazarr has no API-driven equivalent of the above: sonarr/radarr host+port
+# live in a live-edited config.yaml, which Bazarr rewrites from memory on
+# shutdown — exactly like nzbget.conf in download_config.yml, so this file may
+# ONLY be edited while the container is stopped. Gated on the file still
+# holding the container-name values, so a converged host is a no-op.
+- name: Read bazarr config.yaml
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ arr_bazarr_conf }}"
+  register: _bazarr_raw
+  failed_when: false
+
+- name: Repoint bazarr's sonarr/radarr host to localhost (stop, edit, start) when drifted
+  when: >-
+    _bazarr_raw.content is defined
+    and (('ip: sonarr' in (_bazarr_raw.content | b64decode)) or ('ip: radarr' in (_bazarr_raw.content | b64decode)))
+  become: true
+  block:
+    - name: Stop bazarr
+      ansible.builtin.command: docker stop bazarr
+      changed_when: true
+
+    # Match the literal "ip: sonarr" / "ip: radarr" values (the container
+    # names), not a bare '^  ip:' regexp — port: 8989 / port: 7878 sit right
+    # next to sonarr's/radarr's ip: keys but are already correct and must be
+    # left alone, and a bare 'ip:' match would be ambiguous across the other
+    # provider sections in this file (e.g. opensubtitles).
+    - name: Set bazarr sonarr/radarr host to localhost
+      ansible.builtin.replace:
+        path: "{{ arr_bazarr_conf }}"
+        regexp: "{{ item.re }}"
+        replace: "{{ item.rep }}"
+      loop:
+        - { re: "ip: sonarr", rep: "ip: localhost" }
+        - { re: "ip: radarr", rep: "ip: localhost" }
+      loop_control:
+        label: "{{ item.re }}"
+
+    - name: Start bazarr
+      ansible.builtin.command: docker start bazarr
+      changed_when: true

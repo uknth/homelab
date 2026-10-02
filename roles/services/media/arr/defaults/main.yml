@@ -1,17 +1,24 @@
 ---
 # services/media/arr — download + management stack on cmp01.
 #
-# KEY v3 FIX vs v2: only qBittorrent (and its port-forward helper) run inside the
-# gluetun VPN netns. Prowlarr/Sonarr/Radarr/Lidarr/Bazarr sit on a normal bridge
-# network, so a VPN blip no longer takes down the whole stack. They reach qbit
-# via gluetun's published port (http://gluetun:8080 on the arr network).
+# As of 2026-09-27 the WHOLE stack (nzbget, qbittorrent, prowlarr, sonarr,
+# radarr, lidarr, bazarr, unpackerr) shares gluetun's VPN netns via
+# network_mode: "service:gluetun", so Usenet traffic and indexer queries never
+# leave on cmp01's bare IP. This deliberately GIVES UP the v2->v3 blast-radius
+# fix (previously: only qBittorrent was in the netns, so a VPN blip couldn't
+# take down the whole stack) — a VPN outage now takes the whole stack down.
+# Accepted trade-off: keeping provider traffic off the bare IP matters more
+# here than that isolation did.
 
 arr_root_dir: "{{ service_root }}/arr"          # /opt/homelab/arr — configs (local disk)
 arr_data_dir: "{{ media_data_dir }}"            # /mnt/media/data — single handoff mount
 arr_puid: "{{ media_uid }}"                     # 1001
 arr_pgid: "{{ media_gid }}"                     # 1001
 
-# ---- VPN (gluetun + PIA via WireGuard) ----
+# ---- VPN (gluetun + PIA via OpenVPN) ----
+# Planned follow-up: move PIA to WireGuard. OpenVPN in gluetun is often the
+# throughput bottleneck, and now that nzbget's ~10 MB/s Usenet traffic also
+# runs through this tunnel, that ceiling matters more than it used to.
 arr_vpn_provider: "private internet access"
 arr_vpn_type: "openvpn"
 arr_vpn_user: "{{ vault_pia_user }}"
@@ -22,7 +29,7 @@ arr_lan_subnet: "10.0.2.0/24"
 # NOTE: qbittorrent-port auto-sync helper removed (fiddly); nzbget (Usenet) is
 # the primary downloader. Set qbit listen port manually if needed, or re-add later.
 # ---- host ports (cmp01) ----
-arr_nzbget_port: 6789            # Usenet (primary downloader; NOT behind VPN)
+arr_nzbget_port: 6789            # Usenet (primary downloader)
 arr_qbittorrent_port: 8080
 arr_prowlarr_port: 9696
 arr_sonarr_port: 8989
@@ -42,7 +49,7 @@ arr_nzbget_categories: ["Movies", "Series", "Music", "Software"]
 
 # nzbget logging and buffers. nzbget.conf is NOT templated — it is edited live in
 # the UI — so these are enforced by the drift block in tasks/download_config.yml,
-# which stops the container to apply them (all four are read only at startup).
+# which stops the container to apply them (read only at startup).
 #
 # WriteLog=rotate, not append: with append the log grows without bound, and
 # RotateLog is inert — /opt/homelab/arr/nzbget/nzbget.log reached 398 MB by
@@ -56,6 +63,19 @@ arr_nzbget_rotatelog: 7          # days of dated logs to keep
 # because DirectWrite=yes, which is where the article cache pays off.
 arr_nzbget_articlecache: 700     # MB
 arr_nzbget_writebuffer: 1024     # KB
+
+# nzbget's default (park) silently shelves a release that is dead on every
+# provider and never tells Sonarr/Radarr, so the queue sits at 0 B/s until a
+# human notices and clears it by hand. delete instead fails the download into
+# history, which trips *arr Failed Download Handling: the release gets
+# blocklisted and re-searched automatically, no human required.
+#
+# Measured incident, 2026-09-27: three REMUX-FraMeSToR UHD grabs (123,570
+# segments each; only the first segment still present on BOTH news.eweka.nl
+# and news.usenet.farm, every other article 430 No Such Article — a DMCA
+# takedown) held nzbget at 0 B/s for ~20 minutes after Radarr upgraded away
+# from releases that were downloading fine.
+arr_nzbget_healthcheck: "delete"
 arr_qbit_categories: ["tv", "movies"]
 # nzbget control creds used by the *arr download clients. Set BOTH in vault to
 # have the role enforce them; leave empty to leave nzbget's creds untouched.
@@ -65,7 +85,15 @@ arr_nzbget_password: "{{ vault_nzbget_password | default('') }}"
 arr_qbit_conf: "{{ arr_root_dir }}/qbittorrent/qBittorrent/qBittorrent.conf"
 arr_qbit_temp_path: "/scratch/qbittorrent"       # in-progress (scratch-pool)
 arr_qbit_save_path: "/data/downloads/torrents"   # completed (data-pool)
-arr_qbit_auth_whitelist: "172.25.0.0/16"         # arr docker net; *arr apps skip qbit login
+# 127.0.0.1/32 is REQUIRED, not belt-and-braces: the *arr apps have no qbit
+# username/password set at all (verified on cmp01 2026-09-27 — Radarr's
+# qbittorrent client has both fields empty), so they depend entirely on this
+# whitelist to skip the WebUI login. Now that the whole stack shares gluetun's
+# netns they reach qbit over loopback, which is NOT inside 172.25.0.0/16, so
+# without the second entry qbit would start demanding auth and all three *arr
+# apps would silently lose qBittorrent. The docker-net entry stays for anything
+# still dialling in from the arr bridge.
+arr_qbit_auth_whitelist: "172.25.0.0/16,127.0.0.1/32"
 # WebUI login (for humans at torrent.puhome.net). Password stored as qbit PBKDF2.
 arr_qbit_username: "admin"
 arr_qbit_password: "{{ vault_qbittorrent_password | default('') }}"
@@ -132,7 +160,29 @@ arr_unpackerr_protocols: "torrent,TorrentDownloadProtocol,usenet,UsenetDownloadP
 # 'port' here is the HOST port, used for the localhost URLs protocol_priority.yml
 # calls. Container-to-container URLs use fixed internal ports — see the compose
 # template — and must NOT use these vars.
+#
+# lidarr is 'api: v1', not v3: confirmed live on cmp01 2026-09-27 —
+# /api/v3/downloadclient returns non-JSON, /api/v1/downloadclient works.
+# Sonarr and Radarr are genuinely v3.
 arr_api_apps:
   - { name: sonarr, port: "{{ arr_sonarr_port }}", api: v3 }
   - { name: radarr, port: "{{ arr_radarr_port }}", api: v3 }
-  - { name: lidarr, port: "{{ arr_lidarr_port }}", api: v3 }
+  - { name: lidarr, port: "{{ arr_lidarr_port }}", api: v1 }
+
+# INTERNAL container ports, for the URLs one in-netns app uses to reach another
+# (tasks/netns_urls.yml rewrites Prowlarr's baseUrl/prowlarrUrl to these).
+# Deliberately literal and NOT the arr_*_port vars above: those are host-side,
+# and per the arr_api_apps note container-to-container URLs must not use them.
+# They happen to be numerically identical today only because the compose
+# template maps each app 1:1 (e.g. 8989:8989) — remapping a host port must not
+# silently rewrite what Prowlarr dials over loopback.
+arr_netns_internal_ports:
+  sonarr: 8989
+  radarr: 7878
+  lidarr: 8686
+  prowlarr: 9696
+
+# Bazarr's config.yaml is a live-edited YAML file, not an API — see
+# tasks/netns_urls.yml. Bazarr rewrites it from memory on shutdown, so, like
+# arr_nzbget_conf above, it may only be edited while the container is stopped.
+arr_bazarr_conf: "{{ arr_root_dir }}/bazarr/config/config.yaml"

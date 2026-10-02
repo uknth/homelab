@@ -1,7 +1,7 @@
 # Managed by Ansible — services/media/soularr
 [Lidarr]
 api_key = {{ _lidarr_key }}
-host_url = http://lidarr:8686
+host_url = {{ soularr_lidarr_url }}
 download_dir = {{ soularr_download_dir }}
 
 [Slskd]
