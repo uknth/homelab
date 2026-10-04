@@ -1,0 +1,108 @@
+---
+# Sync the device registry (hosts/group_vars/all/devices.yml) into the Gitea
+# admin account's SSH keys. Included from main.yml once the admin account
+# exists and _gitea_admin_password is set. The API is on the host-mapped HTTP
+# port (compose maps gitea_http_port -> 3000), reached over loopback.
+#
+# SAFETY RULE — deletion is scoped: only keys whose title starts with
+# "device:" are ever deleted, and only when their key material is no longer
+# desired. Keys added by hand in the UI (e.g. "uknth workstation") are NEVER
+# touched, and a desired key already present under ANY title is left alone.
+# Comparison is by key material (type + base64), not title.
+
+- name: Build the desired Gitea key list from the device registry
+  ansible.builtin.set_fact:
+    _gitea_desired_keys_json: >-
+      {%- set out = [] -%}
+      {%- for name in (devices | default({})).keys() | sort -%}
+      {%- set dev = devices[name] -%}
+      {%- if 'gitea' in (dev.access | default([])) -%}
+      {%- set keys = dev['keys'] | default([]) -%}
+      {%- for key in keys -%}
+      {%- set title = 'device:' ~ name ~ ('-' ~ loop.index if keys | length > 1 else '') -%}
+      {%- set _ = out.append({'title': title, 'key': key | trim}) -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ out | to_json }}
+
+- name: Parse the desired Gitea key list
+  ansible.builtin.set_fact:
+    _gitea_desired_keys: "{{ _gitea_desired_keys_json | from_json }}"
+
+- name: List the admin account's current SSH keys
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ gitea_http_port }}/api/v1/user/keys"
+    method: GET
+    url_username: "{{ gitea_admin_username }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: _gitea_current_keys
+  check_mode: false
+  # On a first-ever deploy a PR dry run has no running Gitea to ask; tolerate
+  # that in check mode only (nothing is written there anyway).
+  ignore_errors: "{{ ansible_check_mode }}"
+  no_log: true
+
+# Key material = the first two whitespace-separated fields (type + base64).
+- name: Work out which keys to add and which device keys to remove
+  ansible.builtin.set_fact:
+    _gitea_keys_to_add_json: >-
+      {%- set have = [] -%}
+      {%- for k in (_gitea_current_keys.json | default([])) -%}
+      {%- set _ = have.append(k.key.split()[:2] | join(' ')) -%}
+      {%- endfor -%}
+      {%- set out = [] -%}
+      {%- for d in _gitea_desired_keys -%}
+      {%- if (d.key.split()[:2] | join(' ')) not in have -%}
+      {%- set _ = out.append(d) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ out | to_json }}
+    _gitea_key_ids_to_delete_json: >-
+      {%- set want = [] -%}
+      {%- for d in _gitea_desired_keys -%}
+      {%- set _ = want.append(d.key.split()[:2] | join(' ')) -%}
+      {%- endfor -%}
+      {%- set out = [] -%}
+      {%- for k in (_gitea_current_keys.json | default([])) -%}
+      {%- if k.title.startswith('device:') and (k.key.split()[:2] | join(' ')) not in want -%}
+      {%- set _ = out.append(k.id) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ out | to_json }}
+  no_log: true
+
+- name: Add missing device keys to Gitea
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ gitea_http_port }}/api/v1/user/keys"
+    method: POST
+    url_username: "{{ gitea_admin_username }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      title: "{{ item.title }}"
+      key: "{{ item.key }}"
+    status_code: 201
+  loop: "{{ _gitea_keys_to_add_json | from_json }}"
+  loop_control:
+    label: "{{ item.title }}"
+  when: not ansible_check_mode
+  no_log: true
+
+# Only ids selected above, i.e. only "device:"-titled keys that are no longer
+# in the registry. Never widen this.
+- name: Remove retired device keys from Gitea
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ gitea_http_port }}/api/v1/user/keys/{{ item }}"
+    method: DELETE
+    url_username: "{{ gitea_admin_username }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: 204
+  loop: "{{ _gitea_key_ids_to_delete_json | from_json }}"
+  when: not ansible_check_mode
+  no_log: true

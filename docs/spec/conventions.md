@@ -97,6 +97,15 @@ it's already in `~/.ssh/authorized_keys` on the Mac hosts — and add it to
 itself is never replaced. After this, `init.yml` (which connects as `uknth` via `id_rsa`) works
 uniformly against any host.
 
+**Update — registry-managed keys.** `uknth`'s authorized keys are now managed by
+`roles/system/device_keys` from the device registry `hosts/group_vars/all/devices.yml`
+(a blockinfile block, bootstrap + dns01 plays, tag `device-keys`). Once that block is
+deployed the hand-added `id_rsa` line is redundant; removing it is a deliberate manual
+follow-up, not something Ansible does. New devices get their **own** key (Secretive /
+Secure Enclave) added by a PR to `devices.yml` — never a copy of `id_rsa`. Devices with
+`gitea` access are also synced into the Gitea `uknth` account's SSH keys
+(`roles/services/development/gitea/tasks/device_keys.yml`, titles `device:<name>`).
+
 ## Variables and secrets
 
 - **`group_vars/` lives in `hosts/` (next to the inventory), not at the repo root.** This is

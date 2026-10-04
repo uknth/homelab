@@ -257,3 +257,8 @@
     _gitea_admin_create.rc != 0
     and 'already exists' not in (_gitea_admin_create.stdout + _gitea_admin_create.stderr)
   no_log: true
+
+# Needs the admin account to exist (created above) and _gitea_admin_password.
+- name: Sync device SSH keys into the admin account
+  ansible.builtin.import_tasks: device_keys.yml
+  tags: [device-keys]

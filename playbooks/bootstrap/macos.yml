@@ -32,6 +32,9 @@
     - role: system/hostname
       tags: [hostname, system]
 
+    - role: system/device_keys
+      tags: [device-keys, ssh, system]
+
     - role: system/network
       tags: [network, static-ip, system]
 
