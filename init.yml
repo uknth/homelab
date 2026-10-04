@@ -6,7 +6,8 @@
 # the whole fleet anytime.
 #
 # It connects as the personal admin user `uknth` (NOT `ansible`, which may not
-# exist yet), using the unified `uknth` key (~/.ssh/id_rsa) — see
+# exist yet), using the unified `uknth` fleet key (served from Proton Pass; only
+# ~/.ssh/id_rsa.pub is on disk) — see
 # docs/spec/conventions.md#unified-uknth-login. Passwordless sudo for `uknth`
 # is assumed (set it up as part of onboarding).
 #
@@ -25,11 +26,16 @@
   hosts: managed
   gather_facts: true
   become: true
-  # Connect as the personal admin account with the unified key. Overridable
-  # with -e / --ask-pass for the very first contact on a brand-new host.
+  # Connect as the personal admin account with the fleet key. The private
+  # half is NOT on disk: it lives in Proton Pass (Homelab vault) and is served
+  # by the pass-cli SSH agent on a personal Mac (LaunchAgent
+  # net.puhome.pass-ssh-agent, from the dotfiles). Pointing at the .pub makes
+  # ssh ask that agent for the matching key. See docs/spec/conventions.md
+  # "Key custody". Overridable with -e / --ask-pass for a first contact.
   vars:
     ansible_user: uknth
-    ansible_ssh_private_key_file: "~/.ssh/id_rsa"
+    ansible_ssh_private_key_file: "~/.ssh/id_rsa.pub"
+    ansible_ssh_common_args: "-o IdentityAgent=~/.ssh/proton-pass-agent.sock -o IdentitiesOnly=yes"
   roles:
     - role: system/ansible_user
       tags:
