@@ -97,6 +97,39 @@ it's already in `~/.ssh/authorized_keys` on the Mac hosts — and add it to
 itself is never replaced. After this, `init.yml` (which connects as `uknth` via `id_rsa`) works
 uniformly against any host.
 
+**Update — registry-managed keys.** `uknth`'s authorized keys are now managed by
+`roles/system/device_keys` from the device registry `hosts/group_vars/all/devices.yml`
+(a blockinfile block, bootstrap + dns01 plays, tag `device-keys`). Once that block is
+deployed the hand-added `id_rsa` line is redundant; removing it is a deliberate manual
+follow-up, not something Ansible does. New devices get their **own** key (Secretive /
+Secure Enclave) added by a PR to `devices.yml` — never a copy of `id_rsa`. Devices with
+`gitea` access are also synced into the Gitea `uknth` account's SSH keys
+(`roles/services/development/gitea/tasks/device_keys.yml`, titles `device:<name>`).
+
+## Key custody (decided 2026-10-04)
+
+**Proton Pass (vault `Homelab`) holds the master copy of every private key and of the Ansible
+vault password.** A copy on disk is a deployment of that master, not the source of truth.
+
+| Secret | Proton Pass item | Must also exist on disk at |
+|---|---|---|
+| `uknth` fleet key (`id_rsa`, ED25519) | `fleet id_rsa (ed25519)` | nowhere: laptops get it from the `pass-cli` SSH agent |
+| `keys/ansible_rsa.private` | `homelab ansible_rsa (ansible user)` | `util01` (gitops executor clone) and `ctl01` (control node). Both run headless |
+| `keys/restic_backup_ed25519` | `homelab restic_backup_ed25519` | `util01` (the restic role copies it to backup clients) |
+| Ansible vault password | `ansible vault password (homelab)` | `util01` / `ctl01` as files; laptops use an executable `~/.config/homelab/.vault_pass` that calls `pass-cli` |
+
+Rules:
+
+- **Laptops don't keep private keys on disk.** Deploys go through Gitea CI, so a laptop never
+  needs `keys/*.private`. If a local run is ever unavoidable, load the key into the agent
+  instead of writing a file.
+- **Headless hosts (`util01`, `ctl01`) keep files**, because nothing is there to unlock Proton
+  Pass. Treat them as deployments: rotating a key means generate → store in Proton Pass → place
+  on these hosts → update `.pub` / vault var → PR.
+- **Never commit a private key**, encrypted or not. `keys/` ignores itself.
+- New personal devices get their own non-exportable key (Secretive / Secure Enclave),
+  registered in `hosts/group_vars/all/devices.yml`. They never get a copy of a key in this table.
+
 ## Variables and secrets
 
 - **`group_vars/` lives in `hosts/` (next to the inventory), not at the repo root.** This is

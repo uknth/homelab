@@ -147,6 +147,33 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
 Reworked 2026-09-08 after an unattended sweep (PR #7). Split by what actually
 blocks them, because "open" was hiding three different situations.
 
+### Device registry (feat/device-registry) — PR to open and merge
+
+`hosts/group_vars/all/devices.yml` is now the source of truth for which personal
+devices may log in as `uknth` (`fleet`) and push/pull Gitea (`gitea`).
+`roles/system/device_keys` writes the fleet keys into `~uknth/.ssh/authorized_keys`
+as a managed block (linux/macos bootstrap + dns01); the gitea role syncs `gitea` keys
+into the admin account, adding `device:<name>` keys and removing only `device:` keys
+no longer in the registry. The branch is pushed; **the PR still needs opening and
+merging** (Gitea API is unreachable from the laptop).
+
+Post-deploy checks:
+- `ssh uknth@<host>` still works on every host (gw01, cmp01, util01, ai01, ctl01, dns01).
+- Gitea user keys show a `device:` entry only for keys not already on the account
+  (the existing "uknth workstation" key is matched by material, so no duplicate).
+- `mba-personal` (Secretive, Touch ID) is in the registry. After deploy, check that it is
+  accepted, bypassing the SSH config:
+  `SSH_AUTH_SOCK=~/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh ssh -F /dev/null uknth@cmp01.host.puhome.net true`
+  If it is, switch the dotfiles' homelab SSH config (`~/.ssh/config.d/homelab`) so the
+  Secretive agent is the day-to-day key; the Proton Pass agent stays as break-glass.
+  If Touch ID is unworkable with the lid closed, recreate the key without
+  authentication and re-register it.
+
+Deferred manual step (needs your confirmation — it is a deletion): once the managed
+block is confirmed on every host, remove the hand-added `id_rsa` line from each
+`uknth` authorized_keys. Per-device SSH config lives in the dotfiles repo,
+https://git.puhome.net/uknth/dotfiles.
+
 ### Fixed in PR #7 — verify after it deploys
 
 - **nzbget unbounded log + default buffers.** `WriteLog=rotate` (`RotateLog=7`),

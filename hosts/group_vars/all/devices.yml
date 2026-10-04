@@ -1,0 +1,42 @@
+---
+# Device registry — the single source of truth for which PERSONAL devices may
+#   fleet : log in over SSH as `uknth` on every managed host
+#           (roles/system/device_keys writes them into ~uknth/.ssh/authorized_keys)
+#   gitea : push/pull Gitea as the `uknth` account
+#           (roles/services/development/gitea syncs them as account SSH keys)
+#
+# Adding a device = a PR that adds its PUBLIC key below. Revoking = deleting
+# the entry. Never put a private key here, and never reuse another device's key:
+# every device gets its own (ideally a Secretive / Secure Enclave key that
+# cannot be copied off the machine).
+#
+# Fields:
+#   class  : personal | work  (informational; shows up in the managed comments)
+#   access : subset of [fleet, gitea]
+#   keys   : list of full public-key lines (type, base64, comment)
+#
+# The ansible service account is NOT governed by this file — its key is
+# vault_public_key (see roles/system/ansible_user).
+devices:
+  fleet-id_rsa:
+    class: personal
+    # Break-glass fleet key (ED25519 despite the filename). Private half lives on the
+    # personal MacBook / in Proton Pass — see docs/spec/conventions.md.
+    access: [fleet, gitea]
+    keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJBTC1NRLff9l5AGi7BfXK8AeTAf1VsHW/goq8w5ienS uknth@fleet-id_rsa"
+
+  mba-personal:
+    class: personal
+    # Secretive / Secure Enclave key on the personal MacBook Air (recreated 2026-10-04,
+    # Touch ID required). Day-to-day key; fleet-id_rsa above is break-glass.
+    access: [fleet, gitea]
+    keys:
+      - "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBIDWEQx9BCcynzWaZEG3P5oHuSVHtdRPsB6Kt2zJEncoL/mVOUwj7BiXp3tW4JOHVCj3oQi3gZPV1305Ha1qv5s= secretive@mba-personal"
+
+  # Example — a Secretive (Secure Enclave) key on a work laptop, Gitea only:
+  # mbp-work:
+  #   class: work
+  #   access: [gitea]
+  #   keys:
+  #     - "ecdsa-sha2-nistp256 AAAA... secretive@mbp-work"

@@ -1,0 +1,108 @@
+---
+# system/device_keys — manage the personal admin login's authorized_keys from
+# the device registry (hosts/group_vars/all/devices.yml).
+#
+# Every device whose `access` contains `fleet` gets its public keys written to
+# ~uknth/.ssh/authorized_keys inside one blockinfile block. Revoking a device
+# is deleting its registry entry; the block is rewritten on the next run.
+#
+# Lines OUTSIDE the block are left alone. In particular the hand-added id_rsa
+# line (see "Unified `uknth` login" in docs/spec/conventions.md) stays put:
+# removing it is a deliberate manual follow-up once the managed block is
+# confirmed on every host, never something this role does on its own.
+#
+# Cross-platform (Linux + macOS) in one file: the only differences are the
+# home-directory lookup and the primary group, handled inline. Tasks carry
+# `become: true` themselves because the macOS bootstrap play runs unprivileged.
+
+# Computed from the registry, sorted by device name, each device's keys preceded
+# by a comment naming it. The block renders to a JSON string; the next task
+# parses it back into a real list (newer Ansible does not auto-eval templates).
+- name: Build the fleet key list from the device registry
+  ansible.builtin.set_fact:
+    _device_fleet_keys_json: >-
+      {%- set out = [] -%}
+      {%- for name in (devices | default({})).keys() | sort -%}
+      {%- set dev = devices[name] -%}
+      {%- if 'fleet' in (dev.access | default([])) -%}
+      {%- set _ = out.append('# ' ~ name ~ ' (' ~ (dev['class'] | default('personal')) ~ ')') -%}
+      {%- for key in (dev['keys'] | default([])) -%}
+      {%- set _ = out.append(key | trim) -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ out | to_json }}
+
+- name: Parse the fleet key list
+  ansible.builtin.set_fact:
+    _device_fleet_keys: "{{ _device_fleet_keys_json | from_json }}"
+
+# An empty or missing registry must never silently wipe access: the block
+# would be rewritten to nothing and lock uknth out of the whole fleet.
+- name: Refuse to run with no fleet keys
+  ansible.builtin.assert:
+    that:
+      - _device_fleet_keys | reject('match', '^#') | list | length > 0
+    fail_msg: >-
+      No device in hosts/group_vars/all/devices.yml has access: [fleet] with a key.
+      Refusing to rewrite {{ device_keys_user }}'s authorized_keys to an empty block.
+    quiet: true
+
+# getent works on Linux; macOS has none, so there the home is fixed and the
+# user's existence is checked via the home directory.
+- name: Look up the user (Linux)
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ device_keys_user }}"
+    fail_key: false
+  when: ansible_system != "Darwin"
+
+- name: Check for the user's home directory (macOS)
+  ansible.builtin.stat:
+    path: "/Users/{{ device_keys_user }}"
+  register: _device_keys_mac_home
+  when: ansible_system == "Darwin"
+
+- name: Resolve home and group
+  ansible.builtin.set_fact:
+    _device_keys_exists: >-
+      {{ (_device_keys_mac_home.stat.exists | default(false))
+         if ansible_system == 'Darwin'
+         else (ansible_facts.getent_passwd[device_keys_user] is defined
+               and ansible_facts.getent_passwd[device_keys_user] is not none) }}
+    _device_keys_home: >-
+      {{ '/Users/' ~ device_keys_user
+         if ansible_system == 'Darwin'
+         else (ansible_facts.getent_passwd[device_keys_user] | default(['', '', '', '', ''], true))[4] }}
+    _device_keys_group: >-
+      {{ 'staff'
+         if ansible_system == 'Darwin'
+         else (ansible_facts.getent_passwd[device_keys_user] | default(['', '', '', ''], true))[2] }}
+
+- name: Skip hosts without the user
+  ansible.builtin.debug:
+    msg: "{{ device_keys_user }} does not exist on {{ inventory_hostname }}; skipping device keys."
+  when: not (_device_keys_exists | bool)
+
+- name: Manage the user's authorized_keys
+  when: _device_keys_exists | bool
+  block:
+    - name: Ensure ~/.ssh exists
+      become: true
+      ansible.builtin.file:
+        path: "{{ _device_keys_home }}/.ssh"
+        state: directory
+        owner: "{{ device_keys_user }}"
+        group: "{{ _device_keys_group }}"
+        mode: "0700"
+
+    - name: Write the device keys block
+      become: true
+      ansible.builtin.blockinfile:
+        path: "{{ _device_keys_home }}/.ssh/authorized_keys"
+        marker: "# {mark} ANSIBLE MANAGED — {{ device_keys_marker_label }}"
+        block: "{{ _device_fleet_keys | join('\n') }}"
+        create: true
+        owner: "{{ device_keys_user }}"
+        group: "{{ _device_keys_group }}"
+        mode: "0600"

@@ -1,0 +1,7 @@
+---
+# The personal admin account whose authorized_keys this role manages.
+# (NOT the `ansible` service account — that is roles/system/ansible_user.)
+device_keys_user: uknth
+
+# Text after "ANSIBLE MANAGED —" in the blockinfile markers.
+device_keys_marker_label: "device keys (hosts/group_vars/all/devices.yml)"

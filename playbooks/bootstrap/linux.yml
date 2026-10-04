@@ -15,6 +15,9 @@
     - role: system/hostname
       tags: [hostname, system]
 
+    - role: system/device_keys
+      tags: [device-keys, ssh, system]
+
     - role: system/apt
       tags: [apt, packages, system]
 
