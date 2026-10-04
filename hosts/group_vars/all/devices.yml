@@ -20,14 +20,12 @@
 devices:
   fleet-id_rsa:
     class: personal
-    # Break-glass fleet key. ROTATING (2026-10-04): the old key below was found on
-    # the employer-managed work Mac, so a new key (second line) replaces it; the old
-    # line is removed in a follow-up PR once the new key is verified everywhere.
-    # (ED25519 despite the historical filename.) Private half lives ONLY in
+    # Break-glass fleet key, rotated 2026-10-04 (the previous key,
+    # SHA256:T7O9lqP0..., was found on the employer-managed work Mac and is revoked).
+    # (ED25519 despite the historical device name.) Private half lives ONLY in
     # Proton Pass (Homelab vault) — see docs/spec/conventions.md "Key custody".
     access: [fleet, gitea]
     keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJBTC1NRLff9l5AGi7BfXK8AeTAf1VsHW/goq8w5ienS uknth@fleet-id_rsa"
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBF70D72/mBJp5JUfnz1VLd9bjhHTLHikJo9+JDS3HW uknth@fleet-2026-10-04"
 
   mba-personal:
