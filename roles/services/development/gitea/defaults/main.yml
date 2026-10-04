@@ -219,6 +219,14 @@ gitea_admin_email: "{{ vault_certbot_email | default('admin@' + base_domain) }}"
 # anything that treats the data dir as "the container's own business".
 gitea_admin_password_file: "{{ gitea_compose_dir }}/.admin_password"
 
+# API token for the device-key sync (tasks/device_keys.yml). Generated ON THE
+# HOST through the Gitea CLI the first time it is missing, scoped to
+# write:user only, and kept beside the admin password at 0600. A token rather
+# than the password above because the `uknth` account predates this role: the
+# "create admin" task finds it already exists, so the generated password was
+# never set on the account and cannot authenticate against the API.
+gitea_device_keys_token_file: "{{ gitea_compose_dir }}/.device_keys_token"
+
 # --- URLs -----------------------------------------------------------------
 gitea_domain: "git.{{ base_domain }}"
 gitea_root_url: "https://{{ gitea_domain }}/"
