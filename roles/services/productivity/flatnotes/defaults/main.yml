@@ -1,0 +1,21 @@
+---
+# services/productivity/flatnotes — scratchpad at pad.puhome.net, on cmp01.
+#
+# Plain-markdown notes in a flat directory, no database. Used by people and by
+# agents (REST API under /api/, see docs/runbooks/pad.md).
+#
+# NO AUTHENTICATION, by owner decision: FLATNOTES_AUTH_TYPE=none and the vhost
+# is `sso: false`. The only gate is the network allow-list on gw01's nginx vhost
+# (hosts/host_vars/gw01/vars.yml: LAN 10.0.2.0/24 + Tailscale 100.64.0.0/10,
+# everything else 403). With auth none flatnotes needs no FLATNOTES_SECRET_KEY
+# (it is only read by the password/TOTP login path), so no secret exists here.
+# Never store secrets or work data in it.
+
+flatnotes_image: "dullage/flatnotes:v5.5.5"
+flatnotes_root_dir: "{{ pad_root_dir }}"        # /opt/homelab/pad (group_vars/all/vars.yml)
+flatnotes_data_dir: "{{ pad_data_dir }}"        # the .md files (restic-backed, see cmp01 host_vars)
+flatnotes_port: 8105
+# Same owner as filebrowser/the arr apps: the `ansible` user on cmp01, so notes
+# can be inspected or restored by hand without sudo gymnastics.
+flatnotes_puid: "{{ media_uid }}"
+flatnotes_pgid: "{{ media_gid }}"

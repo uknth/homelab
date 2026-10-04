@@ -52,6 +52,11 @@ gitea_repos_dir: "/mnt/gitea"                              # mount point on cmp0
 # "'gitea_data_dir' is undefined" and blocked the first pipeline deploy.
 gitea_root_dir: "{{ service_root }}/gitea"
 gitea_data_dir: "{{ gitea_root_dir }}/data"
+# Scratchpad (flatnotes) notes dir. Here rather than in the pad role's defaults
+# for the same reason as gitea_data_dir: cmp01's restic_paths references it and
+# ops/restic runs in a different play that never loads the pad role.
+pad_root_dir: "{{ service_root }}/pad"
+pad_data_dir: "{{ pad_root_dir }}/data"
 media_root: "/mnt/media"
 media_data_dir: "{{ media_root }}/data"                    # local mount point == the export
 

@@ -18,6 +18,13 @@ server {
 {% if item.redirect_to is defined %}
     return 301 {{ item.redirect_to }}$request_uri;
 {% else %}
+{% if item.allow is defined %}
+    # Network allow-list (vhost `allow:`): only these sources, everything else 403.
+{% for cidr in item.allow %}
+    allow {{ cidr }};
+{% endfor %}
+    deny all;
+{% endif %}
 {% if item.sso | default(false) %}
     include /etc/nginx/snippets/authentik-forward-auth.conf;
 {% endif %}
