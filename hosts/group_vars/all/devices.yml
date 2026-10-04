@@ -26,13 +26,13 @@ devices:
     keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJBTC1NRLff9l5AGi7BfXK8AeTAf1VsHW/goq8w5ienS uknth@fleet-id_rsa"
 
-  mbp-personal:
+  mba-personal:
     class: personal
-    # Secretive / Secure Enclave key on the personal MacBook (created 2026-10-04,
+    # Secretive / Secure Enclave key on the personal MacBook Air (created 2026-10-04,
     # Touch ID required). Day-to-day key; fleet-id_rsa above is break-glass.
     access: [fleet, gitea]
     keys:
-      - "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEJ8LGrDwVsMub2f/Tzu1AKUENKlsAWYzkepRkGg2g6QF4gZuReeeea43a4MOGoyWYLLKQSSxU2EAhwNzgJtQv4= secretive@mbp-personal"
+      - "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEJ8LGrDwVsMub2f/Tzu1AKUENKlsAWYzkepRkGg2g6QF4gZuReeeea43a4MOGoyWYLLKQSSxU2EAhwNzgJtQv4= secretive@mba-personal"
 
   # Example — a Secretive (Secure Enclave) key on a work laptop, Gitea only:
   # mbp-work:

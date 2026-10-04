@@ -161,7 +161,7 @@ Post-deploy checks:
 - `ssh uknth@<host>` still works on every host (gw01, cmp01, util01, ai01, ctl01, dns01).
 - Gitea user keys show a `device:` entry only for keys not already on the account
   (the existing "uknth workstation" key is matched by material, so no duplicate).
-- `mbp-personal` (Secretive, Touch ID) is in the registry. After deploy, check that it is
+- `mba-personal` (Secretive, Touch ID) is in the registry. After deploy, check that it is
   accepted, bypassing the SSH config:
   `SSH_AUTH_SOCK=~/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh ssh -F /dev/null uknth@cmp01.host.puhome.net true`
   If it is, switch the dotfiles' homelab SSH config (`~/.ssh/config.d/homelab`) so the
