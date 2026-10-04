@@ -1,0 +1,10 @@
+---
+- name: Restart flatnotes
+  # Skipped under --check: a dry run cannot restart anything, and on a host
+  # where this role has never deployed the compose dir does not exist yet.
+  when: not ansible_check_mode or _flatnotes_deployed.stat.exists | default(false)
+  become: true
+  community.docker.docker_compose_v2:
+    project_src: "{{ flatnotes_root_dir }}/compose"
+    project_name: "flatnotes"
+    state: restarted

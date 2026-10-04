@@ -4,6 +4,9 @@
 #   name     : subdomain (<name>.puhome.net)
 #   upstream : proxy_pass target
 #   sso      : gate behind Authentik forward-auth (omit/false = public)
+#   allow    : optional list of CIDRs; when set the vhost renders `allow <cidr>;`
+#              for each plus `deny all;` (403 to everyone else). Omit = no
+#              network restriction. Use for services with no auth of their own.
 
 nginx_sites:
   # Identity — NOT behind SSO (it IS the login)
@@ -69,6 +72,11 @@ nginx_sites:
   # holding the vault password. SSO-gated: it commissions work on the LLM and
   # writes into the wiki, so it is never anonymous.
   - { name: research,   upstream: "http://10.0.2.4:8110", sso: true }    # researchd (agent UI + API)
+  # Scratchpad for humans + agents. NO authentication by design (flatnotes
+  # FLATNOTES_AUTH_TYPE=none, sso: false); the network allow-list is the only
+  # gate: LAN + Tailscale, everyone else gets 403 here. Never store secrets or
+  # work data in it. See docs/runbooks/pad.md.
+  - { name: pad,        upstream: "http://10.0.2.5:8105", sso: false, allow: ["10.0.2.0/24", "100.64.0.0/10"] }   # flatnotes
   - { name: files,      upstream: "http://10.0.2.5:8085", sso: true }    # Filebrowser (media mgmt)
   - { name: soulseek,   upstream: "http://10.0.2.5:5030", sso: true }    # slskd (Soulseek)
   - { name: music,      upstream: "http://10.0.2.5:4533", sso: false }   # Navidrome (native auth for Subsonic clients)

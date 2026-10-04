@@ -1,0 +1,40 @@
+---
+- name: Create flatnotes dirs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "0755"
+  loop:
+    - { path: "{{ flatnotes_root_dir }}", owner: "{{ user }}", group: "{{ user }}" }
+    - { path: "{{ flatnotes_root_dir }}/compose", owner: "{{ user }}", group: "{{ user }}" }
+    - { path: "{{ flatnotes_data_dir }}", owner: "{{ flatnotes_puid }}", group: "{{ flatnotes_pgid }}" }
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Template flatnotes compose
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ flatnotes_root_dir }}/compose/docker-compose.yml"
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: "0644"
+  notify: Restart flatnotes
+
+- name: Check whether flatnotes has been deployed before
+  become: true
+  ansible.builtin.stat:
+    path: "{{ flatnotes_root_dir }}/compose/docker-compose.yml"
+  register: _flatnotes_deployed
+
+- name: Deploy flatnotes
+  become: true
+  when: not ansible_check_mode or _flatnotes_deployed.stat.exists
+  community.docker.docker_compose_v2:
+    project_src: "{{ flatnotes_root_dir }}/compose"
+    project_name: "flatnotes"
+    state: present
+    pull: missing

@@ -22,6 +22,7 @@
 #                    repointed to search.puhome.net by concurrent work; not
 #                    touched by this role)
 #   - openwebui    : general LLM chat, no wiki data (ask.puhome.net)
+#   - flatnotes    : scratchpad, no auth, LAN+Tailscale only (pad.puhome.net)
 #
 # Out of scope for v3 (user directive): Immich (photos), Vaultwarden (passwords).
 
@@ -68,6 +69,12 @@
 
     - role: services/productivity/filebrowser
       tags: [filebrowser, files]
+
+    # Scratchpad (pad.puhome.net). No auth of its own — gw01's nginx vhost
+    # carries the LAN + Tailscale allow-list. See roles/services/productivity/
+    # flatnotes/defaults/main.yml.
+    - role: services/productivity/flatnotes
+      tags: [pad, flatnotes, productivity]
 
     - role: services/media/slskd
       tags: [slskd, music, downloader]

@@ -5,6 +5,10 @@
 # isn't codified (Jellyfin/Jellyseerr settings, SSO plugin, arr wiring). Bulk
 # media itself is NOT backed up (TrueNAS snapshots handle that).
 restic_paths:
+  # Scratchpad notes (flatnotes): plain .md files, original data with no
+  # upstream. Search index lives in /data/.flatnotes and is rebuilt on start,
+  # so it is excluded below.
+  - "{{ pad_data_dir }}"
   - "{{ service_root }}/paperless/export"
   - "{{ service_root }}/jellyfin"
   - "{{ service_root }}/arr"
@@ -41,3 +45,4 @@ restic_excludes:
   - "**/log"
   - "**/logs"
   - "gluetun"
+  - "**/.flatnotes"

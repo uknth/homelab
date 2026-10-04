@@ -1,0 +1,17 @@
+# Managed by Ansible — services/productivity/flatnotes
+services:
+  flatnotes:
+    image: {{ flatnotes_image }}
+    container_name: flatnotes
+    restart: unless-stopped
+    environment:
+      - TZ={{ timezone }}
+      - PUID={{ flatnotes_puid }}
+      - PGID={{ flatnotes_pgid }}
+      # No login by design; the nginx allow-list on gw01 is the only gate.
+      # With auth none flatnotes needs no secret key.
+      - FLATNOTES_AUTH_TYPE=none
+    volumes:
+      - {{ flatnotes_data_dir }}:/data
+    ports:
+      - "{{ flatnotes_port }}:8080"   # gw01 nginx -> pad.puhome.net (LAN + Tailscale allow-list only)
