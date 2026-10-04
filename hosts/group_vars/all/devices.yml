@@ -34,6 +34,15 @@ devices:
     keys:
       - "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBIDWEQx9BCcynzWaZEG3P5oHuSVHtdRPsB6Kt2zJEncoL/mVOUwj7BiXp3tW4JOHVCj3oQi3gZPV1305Ha1qv5s= secretive@mba-personal"
 
+  mbp-work:
+    class: work
+    # Secretive key on the work MacBook Pro (Mac16,7), created 2026-10-04 via
+    # scripts/onboard-work-mac.sh. Gitea only: dotfiles pull/push; no homelab
+    # SSH (the work Mac runs with homelab=false and never holds the homelab repo).
+    access: [gitea]
+    keys:
+      - "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBJN0cwTRZBpe9o8HFW6Uis8xqkxi1CYNb53cbLtLYDSYDbYrdYVUKZRMwe5NKAgnGVbJ7dLdLTrx5sIKwLsgLwg= secretive@mbp-work"
+
   # Example — a Secretive (Secure Enclave) key on a work laptop, Gitea only:
   # mbp-work:
   #   class: work
