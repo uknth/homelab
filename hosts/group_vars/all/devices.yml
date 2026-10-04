@@ -28,11 +28,11 @@ devices:
 
   mba-personal:
     class: personal
-    # Secretive / Secure Enclave key on the personal MacBook Air (created 2026-10-04,
+    # Secretive / Secure Enclave key on the personal MacBook Air (recreated 2026-10-04,
     # Touch ID required). Day-to-day key; fleet-id_rsa above is break-glass.
     access: [fleet, gitea]
     keys:
-      - "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEJ8LGrDwVsMub2f/Tzu1AKUENKlsAWYzkepRkGg2g6QF4gZuReeeea43a4MOGoyWYLLKQSSxU2EAhwNzgJtQv4= secretive@mba-personal"
+      - "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBIDWEQx9BCcynzWaZEG3P5oHuSVHtdRPsB6Kt2zJEncoL/mVOUwj7BiXp3tW4JOHVCj3oQi3gZPV1305Ha1qv5s= secretive@mba-personal"
 
   # Example — a Secretive (Secure Enclave) key on a work laptop, Gitea only:
   # mbp-work:
