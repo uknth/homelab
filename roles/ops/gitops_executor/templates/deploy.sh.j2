@@ -37,10 +37,13 @@ notify() { curl -fsS -m 15 -H "Title: $1" -d "$2" "$NTFY" >/dev/null 2>&1 || tru
 # apply run, or vice versa — same idiom as
 # roles/services/knowledge/vaultindex/templates/reindex.sh.j2. Degrade to
 # unlocked if flock is missing: never running is worse than a rare overlap.
+# The wait is 45 min because the Gitea runner runs 4 jobs at once
+# (gitea_runner_capacity), so a PR dry-run can now land while a full apply
+# (~15-20 min) holds the lock: it should queue behind it, not fail.
 if command -v flock >/dev/null 2>&1; then
   exec 9>"{{ gitops_dir }}/.deploy.lock"
-  if ! flock -w 300 9; then
-    echo "another deploy.sh run held the lock for 5 minutes — giving up"
+  if ! flock -w 2700 9; then
+    echo "another deploy.sh run held the lock for 45 minutes — giving up"
     notify "Deploy FAILED" "timed out waiting for another gitops run to finish"
     exit 1
   fi

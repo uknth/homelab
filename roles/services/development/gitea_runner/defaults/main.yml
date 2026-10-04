@@ -125,8 +125,11 @@ gitea_runner_labels:
   - "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
   - "ubuntu-22.04:docker://docker.gitea.com/runner-images:ubuntu-22.04"
 
-# One job at a time. cmp01 also runs the whole media/knowledge stack plus
-# GPU work (see playbooks/hosts/cmp01.yml) — a single-user instance has no
-# concurrent-PR pressure that would justify competing with that for CPU/RAM.
-# Raise deliberately if that stops being true.
-gitea_runner_capacity: 1
+# Four jobs at once (raised from 1 on 2026-10-04). The deploy and PR dry-run
+# jobs hold a slot for 15-20 min while doing almost nothing on cmp01 (they
+# SSH to util01 and wait for Ansible there), so at capacity 1 every quick job
+# (lint, the dotfiles mirror) queued behind them. cmp01 has the headroom for
+# four mostly-idle job containers alongside its media/knowledge/GPU stack.
+# Overlapping gitops runs are serialised on util01 by deploy.sh's flock
+# (roles/ops/gitops_executor), which now waits up to 45 min, not fails.
+gitea_runner_capacity: 4
