@@ -1,14 +1,18 @@
 ---
 # Sync the device registry (hosts/group_vars/all/devices.yml) into the Gitea
 # admin account's SSH keys. Included from main.yml once the admin account
-# exists and _gitea_admin_password is set. The API is on the host-mapped HTTP
-# port (compose maps gitea_http_port -> 3000), reached over loopback.
+# exists. The API is on the host-mapped HTTP port (compose maps
+# gitea_http_port -> 3000), reached over loopback.
+#
+# Auth is a write:user API token minted once through the Gitea CLI and kept in
+# gitea_device_keys_token_file (see defaults for why not the admin password).
 #
 # SAFETY RULE — deletion is scoped: only keys whose title starts with
 # "device:" are ever deleted, and only when their key material is no longer
 # desired. Keys added by hand in the UI (e.g. "uknth workstation") are NEVER
 # touched, and a desired key already present under ANY title is left alone.
-# Comparison is by key material (type + base64), not title.
+# Comparison is by key material (type + base64), not title. Nothing is added
+# or deleted unless the current key list was actually read (HTTP 200, a list).
 
 - name: Build the desired Gitea key list from the device registry
   ansible.builtin.set_fact:
@@ -30,58 +34,130 @@
   ansible.builtin.set_fact:
     _gitea_desired_keys: "{{ _gitea_desired_keys_json | from_json }}"
 
+- name: Check for the device-key API token
+  become: true
+  ansible.builtin.stat:
+    path: "{{ gitea_device_keys_token_file }}"
+  register: _gitea_dk_token_stat
+
+# Skipped in check mode (shell module), so a PR dry run on a host without the
+# token reports "would run" and the sync below tolerates the missing token.
+# The token name carries the epoch so a lost token file never collides with
+# the old token's name.
+- name: Mint the device-key API token (write:user)
+  become: true
+  ansible.builtin.shell:
+    cmd: >-
+      umask 077 &&
+      docker exec -u git {{ gitea_container_name }}
+      gitea admin user generate-access-token
+      --username {{ gitea_admin_username }}
+      --token-name device-keys-sync-{{ ansible_facts.date_time.epoch }}
+      --scopes write:user --raw
+      > {{ gitea_device_keys_token_file }}
+    creates: "{{ gitea_device_keys_token_file }}"
+  when: not _gitea_dk_token_stat.stat.exists
+  no_log: true
+
+- name: Re-check for the device-key API token
+  become: true
+  ansible.builtin.stat:
+    path: "{{ gitea_device_keys_token_file }}"
+  register: _gitea_dk_token_stat
+
+- name: Read the device-key API token
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ gitea_device_keys_token_file }}"
+  register: _gitea_dk_token_slurp
+  when: _gitea_dk_token_stat.stat.exists
+  check_mode: false
+  no_log: true
+
 - name: List the admin account's current SSH keys
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ gitea_http_port }}/api/v1/user/keys"
+    url: "http://127.0.0.1:{{ gitea_http_port }}/api/v1/user/keys?limit=100"
     method: GET
-    url_username: "{{ gitea_admin_username }}"
-    url_password: "{{ _gitea_admin_password }}"
-    force_basic_auth: true
+    headers:
+      Authorization: "token {{ (_gitea_dk_token_slurp.content | b64decode).strip() }}"
     return_content: true
     status_code: 200
   register: _gitea_current_keys
+  when: _gitea_dk_token_stat.stat.exists
   check_mode: false
-  # On a first-ever deploy a PR dry run has no running Gitea to ask; tolerate
-  # that in check mode only (nothing is written there anyway).
+  # Tolerated in check mode only (no token yet / Gitea not up on a first-ever
+  # deploy). On a real run a failure here stops the play before any write.
   ignore_errors: "{{ ansible_check_mode }}"
   no_log: true
+
+# Never act on an error body or a missing response: only a 200 with a JSON list
+# counts as "the current keys".
+- name: Decide whether the current key list is usable
+  ansible.builtin.set_fact:
+    _gitea_keys_listed: >-
+      {{ (_gitea_current_keys.status | default(0)) == 200
+         and (_gitea_current_keys.json | default(none)) is sequence
+         and (_gitea_current_keys.json | default(none)) is not string
+         and (_gitea_current_keys.json | default(none)) is not mapping }}
+
+- name: Report the key-list outcome (status only)
+  ansible.builtin.debug:
+    msg: >-
+      Gitea key list: HTTP {{ _gitea_current_keys.status | default('n/a') }};
+      usable={{ _gitea_keys_listed }}; check_mode={{ ansible_check_mode }}
+
+- name: Refuse to sync without a readable key list
+  ansible.builtin.assert:
+    that: _gitea_keys_listed | bool
+    fail_msg: >-
+      Could not read the Gitea account's SSH keys (HTTP
+      {{ _gitea_current_keys.status | default('n/a') }}). Not adding or
+      deleting anything. Check {{ gitea_device_keys_token_file }} on this host.
+    quiet: true
+  when: not ansible_check_mode
 
 # Key material = the first two whitespace-separated fields (type + base64).
 - name: Work out which keys to add and which device keys to remove
   ansible.builtin.set_fact:
     _gitea_keys_to_add_json: >-
+      {%- set current = _gitea_current_keys.json if _gitea_keys_listed | bool else [] -%}
       {%- set have = [] -%}
-      {%- for k in (_gitea_current_keys.json | default([])) -%}
-      {%- set _ = have.append(k.key.split()[:2] | join(' ')) -%}
+      {%- for k in current -%}
+      {%- set _ = have.append(k['key'].split()[:2] | join(' ')) -%}
       {%- endfor -%}
       {%- set out = [] -%}
       {%- for d in _gitea_desired_keys -%}
-      {%- if (d.key.split()[:2] | join(' ')) not in have -%}
+      {%- if (d['key'].split()[:2] | join(' ')) not in have -%}
       {%- set _ = out.append(d) -%}
       {%- endif -%}
       {%- endfor -%}
       {{ out | to_json }}
     _gitea_key_ids_to_delete_json: >-
+      {%- set current = _gitea_current_keys.json if _gitea_keys_listed | bool else [] -%}
       {%- set want = [] -%}
       {%- for d in _gitea_desired_keys -%}
-      {%- set _ = want.append(d.key.split()[:2] | join(' ')) -%}
+      {%- set _ = want.append(d['key'].split()[:2] | join(' ')) -%}
       {%- endfor -%}
       {%- set out = [] -%}
-      {%- for k in (_gitea_current_keys.json | default([])) -%}
-      {%- if k.title.startswith('device:') and (k.key.split()[:2] | join(' ')) not in want -%}
-      {%- set _ = out.append(k.id) -%}
+      {%- for k in current -%}
+      {%- if k['title'].startswith('device:') and (k['key'].split()[:2] | join(' ')) not in want -%}
+      {%- set _ = out.append(k['id']) -%}
       {%- endif -%}
       {%- endfor -%}
       {{ out | to_json }}
-  no_log: true
+
+- name: Show the planned Gitea key changes
+  ansible.builtin.debug:
+    msg: >-
+      add={{ (_gitea_keys_to_add_json | from_json) | map(attribute='title') | list }}
+      delete_ids={{ _gitea_key_ids_to_delete_json | from_json }}
 
 - name: Add missing device keys to Gitea
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ gitea_http_port }}/api/v1/user/keys"
     method: POST
-    url_username: "{{ gitea_admin_username }}"
-    url_password: "{{ _gitea_admin_password }}"
-    force_basic_auth: true
+    headers:
+      Authorization: "token {{ (_gitea_dk_token_slurp.content | b64decode).strip() }}"
     body_format: json
     body:
       title: "{{ item.title }}"
@@ -90,7 +166,9 @@
   loop: "{{ _gitea_keys_to_add_json | from_json }}"
   loop_control:
     label: "{{ item.title }}"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - _gitea_keys_listed | bool
   no_log: true
 
 # Only ids selected above, i.e. only "device:"-titled keys that are no longer
@@ -99,10 +177,11 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ gitea_http_port }}/api/v1/user/keys/{{ item }}"
     method: DELETE
-    url_username: "{{ gitea_admin_username }}"
-    url_password: "{{ _gitea_admin_password }}"
-    force_basic_auth: true
+    headers:
+      Authorization: "token {{ (_gitea_dk_token_slurp.content | b64decode).strip() }}"
     status_code: 204
   loop: "{{ _gitea_key_ids_to_delete_json | from_json }}"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - _gitea_keys_listed | bool
   no_log: true
