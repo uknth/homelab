@@ -16,14 +16,20 @@ arr_puid: "{{ media_uid }}"                     # 1001
 arr_pgid: "{{ media_gid }}"                     # 1001
 
 # ---- VPN (gluetun + PIA via OpenVPN) ----
-# Planned follow-up: move PIA to WireGuard. OpenVPN in gluetun is often the
-# throughput bottleneck, and now that nzbget's ~10 MB/s Usenet traffic also
-# runs through this tunnel, that ceiling matters more than it used to.
+# Planned follow-up: move PIA to WireGuard. Note that on 2026-10-10 the tunnel
+# was NOT CPU-bound (gluetun ~1% CPU) — the slowdown was packet loss on PIA's
+# Netherlands servers, so measure before assuming OpenVPN is the ceiling.
 arr_vpn_provider: "private internet access"
 arr_vpn_type: "openvpn"
 arr_vpn_user: "{{ vault_pia_user }}"
 arr_vpn_password: "{{ vault_pia_password }}"
-arr_vpn_regions: "Netherlands"                  # PF-capable region
+# Comma list: gluetun picks a random server across all of them on every
+# (re)connect. All must be port-forwarding capable (PORT_FORWARD_ONLY=on).
+# Netherlands dropped 2026-10-10: 33-44% packet loss inside the tunnel on three
+# separate amsterdam servers (~0.1 MB/s). Benchmarked from cmp01 the same day,
+# 4-stream to EU: Malaysia 23.6 MB/s, Singapore 16.3 MB/s; Vietnam and
+# Indonesia failed to connect.
+arr_vpn_regions: "Malaysia,Singapore"
 arr_lan_subnet: "10.0.2.0/24"
 
 # NOTE: qbittorrent-port auto-sync helper removed (fiddly); nzbget (Usenet) is

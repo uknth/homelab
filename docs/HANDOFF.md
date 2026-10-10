@@ -442,6 +442,10 @@ and deliberately postponed, so pick them up cold from here.
   one change. Worth doing next: nzbget's ~10 MB/s (measured 2026-09-27) now runs
   through the tunnel, and gluetun's OpenVPN path is frequently the CPU bottleneck,
   so this is likely the single biggest Usenet-throughput win available.
+  **Update 2026-10-10:** a 0.1 MB/s slowdown turned out *not* to be CPU (gluetun
+  ~1%) but 33-44% packet loss on PIA's Netherlands servers; moving to
+  `Malaysia,Singapore` restored 11-15 MB/s on OpenVPN. WireGuard is still worth
+  doing, but measure first — OpenVPN was not the ceiling that day.
   **Check feasibility first:** `docs/plan/roadmap.md` phase 5a recorded WireGuard
   as *unsupported for PIA* when the stack was built (2026-08-22). Confirm whether
   gluetun supports PIA over WireGuard now before planning around it — that note
