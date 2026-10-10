@@ -53,7 +53,7 @@ names.
 |---|---|---|---|---|
 | arr stack (**nzbget (primary Usenet)**, qbittorrent, prowlarr, sonarr, radarr, lidarr, bazarr) | `services/media/arr` | per-app (SSO) | 🟢 built + live | **whole stack behind VPN** (OpenVPN/PIA, port-fwd) since 2026-09-27 |
 | gluetun (VPN, **whole arr stack**) | part of `services/media/arr` | — | 🟢 built + live | PIA OpenVPN (not WireGuard); port-forwarding active; publishes all 7 arr UIs |
-| Jellyfin + Jellyseerr | `services/media/jellyfin` | `video.puhome.net`, `seer.puhome.net` | 🟢 built + live | NVENC via A4000 (GPU visible in-container); own auth (native clients) |
+| Jellyfin + Seerr (ex-Jellyseerr) | `services/media/jellyfin` | `video.puhome.net`, `seer.puhome.net` | 🟢 built + live | NVENC via A4000 (GPU visible in-container); own auth (native clients) |
 | Kavita | `services/media/kavita` | `books.puhome.net` | 🟢 built + live | **pinned to 0.8.2** (0.9.x hangs on MigrateEmailTemplates first-boot) |
 | Paperless-ngx | `services/documents/paperless` | `docs.puhome.net` | 🟢 built + live | migrated (182 docs) to local disk; postgres:17 glibc; tika/gotenberg; **Authentik OIDC login** (tier-1) + API tokens |
 | paperless-ai | part of `services/documents/paperless` | `docs-ai.puhome.net` | 🟢 built + live | LLM auto-tagging + RAG chat. **Opt-in**: only touches documents tagged `ai-process`. SSO-gated (holds a Paperless superuser token). Upstream unmaintained — excluded from auto-upgrades |
