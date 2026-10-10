@@ -45,13 +45,15 @@
 # git rather than only inside n8n's database. Re-importing the same ids is
 # idempotent — it overwrites in place.
 #
-# Three independent credential/workflow sets, each gated on its key existing so a
-# partial fleet run still imports what it can:
+# Four independent credential/workflow sets, each gated on its key/secret existing
+# so a partial fleet run still imports what it can:
 #   maintenance (util01) — ops/maintenance installs the key
 #   wanwatch    (gw01)   — ops/wanwatch installs the key
 #   vaultsync   (cmp01)  — services/knowledge/vaultsync installs the key
 #                          (also reused as-is by workflow-agent-research —
 #                          same forced-command key on cmp01, no second key)
+#   vpn-autoheal (cmp01) — gated on the vault gluetun API key + restricted nzbget
+#                          creds (services/media/arr installs the other end)
 
 - name: Read the restricted maintenance SSH key
   become: true
@@ -84,13 +86,22 @@
   ansible.builtin.set_fact:
     _n8n_telegram_ok: "{{ (n8n_telegram_bot_token | length > 0) and (n8n_telegram_chat_id | length > 0) }}"
 
+- name: Note whether the VPN auto-heal secrets are configured
+  ansible.builtin.set_fact:
+    _n8n_vpnheal_ok: >-
+      {{ (n8n_vpnheal_gluetun_apikey | length > 0)
+         and (n8n_vpnheal_nzbget_user | length > 0)
+         and (n8n_vpnheal_nzbget_password | length > 0) }}
+  no_log: true
+
 - name: Work out which workflow sets can be imported
   ansible.builtin.set_fact:
     _n8n_credentials: >-
       {{ (['credential-maint-ssh.json'] if _n8n_maint_key.content is defined else [])
        + (['credential-wan-ssh.json'] if _n8n_wan_key.content is defined else [])
        + (['credential-vault-ssh.json'] if _n8n_vault_key.content is defined else [])
-       + (['credential-telegram.json'] if _n8n_telegram_ok else []) }}
+       + (['credential-telegram.json'] if _n8n_telegram_ok else [])
+       + (['credential-nzbget.json', 'credential-gluetun-control.json'] if _n8n_vpnheal_ok else []) }}
     # alerts-summary talks only to ntfy over HTTP, so it needs no credential and
     # imports unconditionally.
     _n8n_workflows: >-
@@ -100,7 +111,8 @@
        + (['workflow-wan-watch.json'] if _n8n_wan_key.content is defined else [])
        + (['workflow-vault-ingest.json'] if _n8n_vault_key.content is defined else [])
        + (['workflow-agent-research.json'] if _n8n_vault_key.content is defined else [])
-       + (['workflow-telegram-bridge.json'] if _n8n_telegram_ok else []) }}
+       + (['workflow-telegram-bridge.json'] if _n8n_telegram_ok else [])
+       + (['workflow-vpn-autoheal.json'] if _n8n_vpnheal_ok else []) }}
     _n8n_workflow_ids: >-
       {{ ['homelab-alerts-summary']
        + (['homelab-diun-update', 'homelab-weekly-maintenance']
@@ -108,7 +120,8 @@
        + (['homelab-wan-watch'] if _n8n_wan_key.content is defined else [])
        + (['homelab-vault-ingest'] if _n8n_vault_key.content is defined else [])
        + (['homelab-agent-research'] if _n8n_vault_key.content is defined else [])
-       + (['homelab-telegram-bridge'] if _n8n_telegram_ok else []) }}
+       + (['homelab-telegram-bridge'] if _n8n_telegram_ok else [])
+       + (['homelab-vpn-autoheal'] if _n8n_vpnheal_ok else []) }}
 
 - name: Import workflows into n8n
   when: _n8n_workflows | length > 0

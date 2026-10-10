@@ -51,7 +51,7 @@ names.
 
 | Service | Target role | Domain | Status | v2 reference |
 |---|---|---|---|---|
-| arr stack (**nzbget (primary Usenet)**, qbittorrent, prowlarr, sonarr, radarr, lidarr, bazarr) | `services/media/arr` | per-app (SSO) | 🟢 built + live | **whole stack behind VPN** (OpenVPN/PIA, port-fwd) since 2026-09-27 |
+| arr stack (**nzbget (primary Usenet)**, qbittorrent, prowlarr, sonarr, radarr, lidarr, bazarr) | `services/media/arr` | per-app (SSO) | 🟢 built + live | **whole stack behind VPN** (OpenVPN/PIA, port-fwd) since 2026-09-27. gluetun control API published on cmp01 `:8009` (container `:8000`), API-key auth limited to `GET/PUT /v1/vpn/status`, for n8n `homelab-vpn-autoheal` |
 | gluetun (VPN, **whole arr stack**) | part of `services/media/arr` | — | 🟢 built + live | PIA OpenVPN (not WireGuard); port-forwarding active; publishes all 7 arr UIs |
 | Jellyfin + Jellyseerr | `services/media/jellyfin` | `video.puhome.net`, `seer.puhome.net` | 🟢 built + live | NVENC via A4000 (GPU visible in-container); own auth (native clients) |
 | Kavita | `services/media/kavita` | `books.puhome.net` | 🟢 built + live | **pinned to 0.8.2** (0.9.x hangs on MigrateEmailTemplates first-boot) |
@@ -104,7 +104,7 @@ the preference now lives in the custom formats; Sonarr v4 dropped language profi
 | Homepage | `services/dashboard/homepage` | `dash.puhome.net` | 🟢 built + live | service links + widgets + Docker(util01); replaced Glance. **Nodes tab** (2026-08-30): per-node container inventory, discovered live from the Portainer API |
 | Glance | `services/dashboard/glance` | — | ⚪ retired | replaced by Homepage (role kept in repo) |
 | Portainer | `services/dashboard/portainer` | `docker.puhome.net` | 🟢 built + live | local role (not the ext galaxy one) |
-| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7). Owns three workflows (2 maintenance + dual-WAN watch), defined as JSON in the role and imported via the n8n CLI |
+| n8n | `services/productivity/n8n` | `n8n.puhome.net` | 🟢 built + live | also GitOps trigger (phase 7). Owns the workflows (2 maintenance, dual-WAN watch, vault ingest, alerts summary, Telegram bridge, **VPN auto-heal** `homelab-vpn-autoheal` -- stateless; reconnects gluetun via its control API when nzbget crawls and the ISP is fine, capped by ntfy history), defined as JSON in the role and imported via the n8n CLI |
 | Syncthing | `services/productivity/syncthing` | `sync.puhome.net` | 🟢 built + live | standalone file sync; GUI behind forward-auth; data under `/opt/homelab/syncthing/data` (Restic-backed) |
 | Gitea | `services/development/gitea` | `git.puhome.net` | 🟢 built | single-user Git host, local development; SQLite; registration disabled; own auth (`sso: false` — forward-auth breaks git-over-HTTPS/API); pinned `gitea/gitea:1.27.3`; HTTP on 8102. SSH is **portless** — `git@ssh.git.puhome.net` with no `:2222`, via a macvlan sidecar on `10.0.2.18`. Repos on NFS from nas01, restic-backed-up to nas02. **This is the fleet's source of truth**; see [gitops](../plan/gitops.md) |
 

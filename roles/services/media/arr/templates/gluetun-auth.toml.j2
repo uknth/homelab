@@ -1,0 +1,6 @@
+# Managed by Ansible — services/media/arr. gluetun control-server auth.
+[[roles]]
+name = "n8n-vpn-autoheal"
+routes = ["GET /v1/vpn/status", "PUT /v1/vpn/status"]
+auth = "apikey"
+apikey = "{{ arr_gluetun_control_apikey }}"

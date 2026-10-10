@@ -32,6 +32,14 @@ arr_vpn_password: "{{ vault_pia_password }}"
 arr_vpn_regions: "Malaysia,Singapore"
 arr_lan_subnet: "10.0.2.0/24"
 
+# gluetun control API, published for the n8n VPN auto-heal workflow
+# (roles/services/productivity/n8n). 8000 is already taken on cmp01, so the host
+# port differs from the container port (8000). Access is API-key only and the
+# key's role is limited to reading/setting VPN status — see gluetun-auth.toml.j2.
+arr_gluetun_control_port: 8009
+# Empty (no vault key) = no auth file and no published port; the API stays closed.
+arr_gluetun_control_apikey: "{{ vault_gluetun_control_apikey | default('') }}"
+
 # NOTE: qbittorrent-port auto-sync helper removed (fiddly); nzbget (Usenet) is
 # the primary downloader. Set qbit listen port manually if needed, or re-add later.
 # ---- host ports (cmp01) ----
@@ -87,6 +95,10 @@ arr_qbit_categories: ["tv", "movies"]
 # have the role enforce them; leave empty to leave nzbget's creds untouched.
 arr_nzbget_username: "{{ vault_nzbget_username | default('') }}"
 arr_nzbget_password: "{{ vault_nzbget_password | default('') }}"
+# Restricted nzbget account for n8n's VPN auto-heal (read-only status/listgroups).
+# Same rule: set BOTH in vault to have the role enforce them.
+arr_nzbget_restricted_username: "{{ vault_nzbget_restricted_username | default('') }}"
+arr_nzbget_restricted_password: "{{ vault_nzbget_restricted_password | default('') }}"
 
 arr_qbit_conf: "{{ arr_root_dir }}/qbittorrent/qBittorrent/qBittorrent.conf"
 arr_qbit_temp_path: "/scratch/qbittorrent"       # in-progress (scratch-pool)

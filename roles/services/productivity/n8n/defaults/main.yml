@@ -87,3 +87,38 @@ n8n_alerts_window: "12h"
 # Both must be set for the bridge to import; empty leaves it out entirely.
 n8n_telegram_bot_token: "{{ vault_telegram_bot_token | default('') }}"
 n8n_telegram_chat_id: "{{ vault_telegram_chat_id | default('') }}"
+
+# --- VPN auto-heal (cmp01 arr stack) ----------------------------------------
+# nzbget runs inside gluetun's netns (PIA OpenVPN; gluetun picks a random server
+# across the configured regions on every (re)connect). When a PIA server goes
+# bad nzbget crawls. This workflow notices and makes gluetun reconnect through
+# its control API (stop -> start VPN), which re-picks a server WITHOUT
+# recreating any container.
+#
+# STATELESS by necessity: n8n workflow static data does not persist on this
+# deployment (see the researchd note above), so there are no counters between
+# executions. Each run measures nzbget's rate over one window itself (sample,
+# Wait, sample), and the two guards that would otherwise need memory are derived
+# from facts outside n8n instead:
+#   - ISP gate: before cycling, a ranged download from outside the VPN. If the
+#     ISP link itself is slow, reconnecting cannot help, so it alerts instead.
+#   - rate limiter: ntfy's own history. Every reconnect posts to the jobs topic
+#     with n8n_vpnheal_ntfy_tag; counting those from the last hour caps
+#     reconnects, and a broken gluetun API still posts (with the error), so it
+#     cannot loop unbounded.
+# Only fires when nzbget is actually trying to download (not paused, no speed
+# limit, queue non-empty, a group DOWNLOADING) -- an idle queue is not "slow".
+n8n_vpnheal_nzbget_url: "http://{{ hostvars['cmp01'].ansible_host }}:6789"
+n8n_vpnheal_gluetun_url: "http://{{ hostvars['cmp01'].ansible_host }}:8009"
+n8n_vpnheal_interval_minutes: 20      # schedule; must exceed the window
+n8n_vpnheal_window_minutes: 15        # sustained-slow window measured inside one run
+n8n_vpnheal_min_rate_mbs: 1           # MB/s; below this over the window = slow
+n8n_vpnheal_isp_min_mbps: 10          # Mbit/s; below this = ISP is the problem, don't cycle
+n8n_vpnheal_max_per_hour: 2           # reconnects per rolling hour before alert-and-stop
+n8n_vpnheal_isp_test_url: "https://sin-speed.hetzner.com/100MB.bin"  # nearest Hetzner: ~77 Mbit/s vs ~35 to fsn1
+n8n_vpnheal_isp_test_bytes: 26214400  # 25 MB via Range header
+n8n_vpnheal_ntfy_tag: "vpn-reconnect"
+# All three must be set (vault) for the workflow to import; empty leaves it out.
+n8n_vpnheal_gluetun_apikey: "{{ vault_gluetun_control_apikey | default('') }}"
+n8n_vpnheal_nzbget_user: "{{ vault_nzbget_restricted_username | default('') }}"
+n8n_vpnheal_nzbget_password: "{{ vault_nzbget_restricted_password | default('') }}"
