@@ -29,8 +29,13 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
+  # Seerr — successor to Jellyseerr (fallenbagel/jellyseerr is frozen at 2.7.3,
+  # which only sends the legacy X-Emby-* auth headers that Jellyfin 12 rejects).
+  # Reads the existing Jellyseerr config/db in place. Service + container keep
+  # the old name so nothing downstream (proxy, homepage) has to change.
   jellyseerr:
-    image: fallenbagel/jellyseerr:latest
+    image: ghcr.io/seerr-team/seerr:v3
+    init: true
     container_name: jellyseerr
     networks: [jellyfin]
     ports:
