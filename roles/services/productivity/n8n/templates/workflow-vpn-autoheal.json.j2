@@ -1,0 +1,909 @@
+{% raw %}{
+  "id": "homelab-vpn-autoheal",
+  "name": "Homelab — VPN auto-heal",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": {% endraw %}{{ n8n_vpnheal_interval_minutes }}{% raw %}
+            }
+          ]
+        }
+      },
+      "id": "n-every-few-minutes",
+      "name": "Every few minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "{% endraw %}{{ n8n_vpnheal_nzbget_url }}{% raw %}/jsonrpc/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "n-sample-a-status",
+      "name": "Sample A status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -40,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "homelab-nzbget",
+          "name": "homelab nzbget (restricted)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "{% endraw %}{{ n8n_vpnheal_nzbget_url }}{% raw %}/jsonrpc/listgroups",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "n-sample-a-groups",
+      "name": "Sample A groups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        180,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "homelab-nzbget",
+          "name": "homelab nzbget (restricted)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Is nzbget actually trying to download? If not, a slow rate means nothing.\n\nconst st = $('Sample A status').first().json;\nconst gr = $('Sample A groups').first().json;\nconst s = st && st.result;\nconst groups = gr && Array.isArray(gr.result) ? gr.result : null;\nlet ok = false, reason = '', bytes = null;\nif (!s || !groups) {\n  reason = 'nzbget unreachable or unexpected reply';\n} else {\n  bytes = s.DownloadedSizeHi * 4294967296 + s.DownloadedSizeLo;\n  if (s.DownloadPaused) reason = 'download paused';\n  else if (s.DownloadLimit !== 0) reason = 'speed limit set';\n  else if (!(s.RemainingSizeMB > 0)) reason = 'queue empty';\n  else if (!groups.some((g) => g.Status === 'DOWNLOADING')) reason = 'no group DOWNLOADING';\n  else ok = true;\n}\nreturn [{ json: { ok, reason, t: Date.now(), bytes } }];"
+      },
+      "id": "n-sample-a-gate",
+      "name": "Sample A gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-gate-a-open",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-gate-a-open",
+      "name": "Gate A open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        620,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": {% endraw %}{{ n8n_vpnheal_window_minutes }}{% raw %},
+        "unit": "minutes"
+      },
+      "id": "n-wait-window",
+      "name": "Wait window",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        840,
+        0
+      ],
+      "webhookId": "vpnheal-wait-window"
+    },
+    {
+      "parameters": {
+        "url": "{% endraw %}{{ n8n_vpnheal_nzbget_url }}{% raw %}/jsonrpc/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "n-sample-b-status",
+      "name": "Sample B status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1060,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "homelab-nzbget",
+          "name": "homelab nzbget (restricted)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "{% endraw %}{{ n8n_vpnheal_nzbget_url }}{% raw %}/jsonrpc/listgroups",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "n-sample-b-groups",
+      "name": "Sample B groups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "homelab-nzbget",
+          "name": "homelab nzbget (restricted)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same gate again after the window (user may have paused, queue may have finished),\n// then the sustained rate over the whole window. Stateless: sample A is read back\n// from this same execution, never from static data.\n\nconst st = $('Sample B status').first().json;\nconst gr = $('Sample B groups').first().json;\nconst s = st && st.result;\nconst groups = gr && Array.isArray(gr.result) ? gr.result : null;\nlet ok = false, reason = '', bytes = null;\nif (!s || !groups) {\n  reason = 'nzbget unreachable or unexpected reply';\n} else {\n  bytes = s.DownloadedSizeHi * 4294967296 + s.DownloadedSizeLo;\n  if (s.DownloadPaused) reason = 'download paused';\n  else if (s.DownloadLimit !== 0) reason = 'speed limit set';\n  else if (!(s.RemainingSizeMB > 0)) reason = 'queue empty';\n  else if (!groups.some((g) => g.Status === 'DOWNLOADING')) reason = 'no group DOWNLOADING';\n  else ok = true;\n}\nconst a = $('Sample A gate').first().json;\nconst t = Date.now();\nconst windowS = (t - a.t) / 1000;\nconst rate = ok && windowS > 0 ? (bytes - a.bytes) / windowS / 1e6 : null;\n// A negative delta means nzbget restarted mid-window (counter reset): inconclusive.\nconst slow = ok && rate !== null && rate >= 0 && rate < {% endraw %}{{ n8n_vpnheal_min_rate_mbs }}{% raw %};\nreturn [{ json: { proceed: slow, ok, reason, rate_mbs: rate === null ? null : Math.round(rate * 100) / 100, window_s: Math.round(windowS) } }];"
+      },
+      "id": "n-sample-b-gate",
+      "name": "Sample B gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-slow-and-downloading",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-slow-and-downloading",
+      "name": "Slow and downloading?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { t0: Date.now() } }];"
+      },
+      "id": "n-mark-isp-start",
+      "name": "Mark ISP start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1940,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "{% endraw %}{{ n8n_vpnheal_isp_test_url }}{% raw %}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Range",
+              "value": "bytes=0-{% endraw %}{{ n8n_vpnheal_isp_test_bytes - 1 }}{% raw %}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "n-isp-speed-test",
+      "name": "ISP speed test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Time the 25 MB range download. A failed/timed-out request counts as a slow ISP.\nconst t1 = Date.now();\nconst ctx = $('Sample B gate').first().json;\nconst r = $input.first().json;\nconst failed = !!r.error;\nconst secs = (t1 - $('Mark ISP start').first().json.t0) / 1000;\n// Content-Length of the ranged reply; fall back to the requested size.\nconst hdr = r.headers && (r.headers['content-length'] || r.headers['Content-Length']);\nconst bytes = hdr ? parseInt(hdr, 10) : {% endraw %}{{ n8n_vpnheal_isp_test_bytes }}{% raw %};\nconst mbps = failed || secs <= 0 ? 0 : bytes * 8 / secs / 1e6;\nconst ispOk = !failed && mbps >= {% endraw %}{{ n8n_vpnheal_isp_min_mbps }}{% raw %};\nconst rate = ctx.rate_mbs;\nconst body = failed\n  ? 'nzbget ' + rate + ' MB/s over ' + ctx.window_s + ' s. ISP speed test failed or timed out (' + (typeof r.error === 'string' ? r.error : ((r.error && r.error.message) || 'no response')) + '). Not cycling the VPN.'\n  : 'nzbget ' + rate + ' MB/s over ' + ctx.window_s + ' s. ISP only ' + mbps.toFixed(1) + ' Mbit/s (need {% endraw %}{{ n8n_vpnheal_isp_min_mbps }}{% raw %}). Not cycling the VPN.';\nreturn [{ json: { ispOk, isp_mbps: Math.round(mbps * 10) / 10, isp_failed: failed, rate_mbs: rate, window_s: ctx.window_s, isp_body: body } }];"
+      },
+      "id": "n-isp-result",
+      "name": "ISP result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-isp-healthy",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.ispOk }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-isp-healthy",
+      "name": "ISP healthy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{% endraw %}{{ n8n_ntfy_url }}{% raw %}/{% endraw %}{{ n8n_jobs_ntfy_topic }}{% raw %}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "VPN auto-heal: ISP slow, not reconnecting"
+            },
+            {
+              "name": "Tags",
+              "value": "warning"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.isp_body }}",
+        "options": {}
+      },
+      "id": "n-notify-isp-slow",
+      "name": "Notify ISP slow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2820,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "{% endraw %}{{ n8n_ntfy_url }}{% raw %}/{% endraw %}{{ n8n_jobs_ntfy_topic }}{% raw %}/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "poll",
+              "value": "1"
+            },
+            {
+              "name": "since",
+              "value": "1h"
+            },
+            {
+              "name": "tags",
+              "value": "{% endraw %}{{ n8n_vpnheal_ntfy_tag }}{% raw %}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "n-fetch-reconnect-history",
+      "name": "Fetch reconnect history",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2820,
+        -160
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ntfy history is NDJSON; the response may arrive as one string (or, defensively,\n// as already-parsed objects). Count message events carrying the reconnect tag.\nconst ctx = $('ISP result').first().json;\nconst items = $input.all();\nlet lines = [];\nlet fetchFailed = false;\nfor (const it of items) {\n  const j = it.json || {};\n  if (j.error) { fetchFailed = true; continue; }\n  const d = j.data !== undefined ? j.data : j;\n  if (typeof d === 'string') lines = lines.concat(d.split('\\n'));\n  else if (d && typeof d === 'object') lines.push(JSON.stringify(d));\n}\nlet count = 0;\nfor (const line of lines) {\n  if (!line.trim()) continue;\n  try { if (JSON.parse(line).event === 'message') count++; } catch (e) { /* ignore partial lines */ }\n}\n// If history cannot be read the rate limit cannot be enforced -- fail safe.\nconst limited = fetchFailed || count >= {% endraw %}{{ n8n_vpnheal_max_per_hour }}{% raw %};\nconst body = 'nzbget ' + ctx.rate_mbs + ' MB/s over ' + ctx.window_s + ' s, ISP ' + ctx.isp_mbps + ' Mbit/s. '\n  + (fetchFailed ? 'Could not read ntfy history to check the rate limit.' : count + ' reconnect(s) in the last hour (max {% endraw %}{{ n8n_vpnheal_max_per_hour }}{% raw %}).')\n  + ' Check the VPN by hand.';\nreturn [{ json: Object.assign({}, ctx, { reconnects_last_hour: count, limited, limit_body: body }) }];"
+      },
+      "id": "n-count-recent-reconnects",
+      "name": "Count recent reconnects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-limit-reached",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.limited }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-limit-reached",
+      "name": "Limit reached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3260,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{% endraw %}{{ n8n_ntfy_url }}{% raw %}/{% endraw %}{{ n8n_jobs_ntfy_topic }}{% raw %}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "VPN auto-heal: limit reached, NOT reconnecting"
+            },
+            {
+              "name": "Priority",
+              "value": "4"
+            },
+            {
+              "name": "Tags",
+              "value": "rotating_light"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.limit_body }}",
+        "options": {}
+      },
+      "id": "n-notify-limit-reached",
+      "name": "Notify limit reached",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "{% endraw %}{{ n8n_vpnheal_gluetun_url }}{% raw %}/v1/vpn/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\"status\":\"stopped\"}"
+      },
+      "id": "n-stop-vpn",
+      "name": "Stop VPN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3480,
+        -300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "homelab-gluetun-control",
+          "name": "homelab gluetun control API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "n-wait-5s",
+      "name": "Wait 5s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3700,
+        -300
+      ],
+      "webhookId": "vpnheal-wait-5s"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "{% endraw %}{{ n8n_vpnheal_gluetun_url }}{% raw %}/v1/vpn/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\"status\":\"running\"}"
+      },
+      "id": "n-start-vpn",
+      "name": "Start VPN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3920,
+        -300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "homelab-gluetun-control",
+          "name": "homelab gluetun control API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "n-wait-60s",
+      "name": "Wait 60s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4140,
+        -300
+      ],
+      "webhookId": "vpnheal-wait-60s"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "{% endraw %}{{ n8n_vpnheal_gluetun_url }}{% raw %}/v1/vpn/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-vpn-status",
+      "name": "VPN status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4360,
+        -300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "homelab-gluetun-control",
+          "name": "homelab gluetun control API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Count recent reconnects').first().json;\nconst errs = [];\nconst grab = (name) => { const j = $(name).first().json; return j && j.error ? j.error : null; };\nfor (const n of ['Stop VPN', 'Start VPN', 'VPN status']) {\n  const e = grab(n);\n  if (e) errs.push(n + ': ' + (e.message || JSON.stringify(e)).slice(0, 300));\n}\nconst st = $('VPN status').first().json;\nconst vpn = st && st.status ? st.status : 'unknown';\nconst body = 'nzbget ' + ctx.rate_mbs + ' MB/s over ' + ctx.window_s + ' s, ISP ' + ctx.isp_mbps + ' Mbit/s. VPN status after reconnect: ' + vpn + '.'\n  + (errs.length ? ' Errors: ' + errs.join('; ') : '');\nreturn [{ json: { report_body: body } }];"
+      },
+      "id": "n-build-report",
+      "name": "Build report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4580,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{% endraw %}{{ n8n_ntfy_url }}{% raw %}/{% endraw %}{{ n8n_jobs_ntfy_topic }}{% raw %}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "VPN auto-heal: reconnected gluetun"
+            },
+            {
+              "name": "Tags",
+              "value": "{% endraw %}{{ n8n_vpnheal_ntfy_tag }}{% raw %}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.report_body }}",
+        "options": {}
+      },
+      "id": "n-notify-reconnected",
+      "name": "Notify reconnected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4800,
+        -300
+      ]
+    }
+  ],
+  "connections": {
+    "Every few minutes": {
+      "main": [
+        [
+          {
+            "node": "Sample A status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample A status": {
+      "main": [
+        [
+          {
+            "node": "Sample A groups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample A groups": {
+      "main": [
+        [
+          {
+            "node": "Sample A gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample A gate": {
+      "main": [
+        [
+          {
+            "node": "Gate A open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate A open?": {
+      "main": [
+        [
+          {
+            "node": "Wait window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait window": {
+      "main": [
+        [
+          {
+            "node": "Sample B status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample B status": {
+      "main": [
+        [
+          {
+            "node": "Sample B groups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample B groups": {
+      "main": [
+        [
+          {
+            "node": "Sample B gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample B gate": {
+      "main": [
+        [
+          {
+            "node": "Slow and downloading?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slow and downloading?": {
+      "main": [
+        [
+          {
+            "node": "Mark ISP start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark ISP start": {
+      "main": [
+        [
+          {
+            "node": "ISP speed test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ISP speed test": {
+      "main": [
+        [
+          {
+            "node": "ISP result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ISP result": {
+      "main": [
+        [
+          {
+            "node": "ISP healthy?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ISP healthy?": {
+      "main": [
+        [
+          {
+            "node": "Fetch reconnect history",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify ISP slow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch reconnect history": {
+      "main": [
+        [
+          {
+            "node": "Count recent reconnects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count recent reconnects": {
+      "main": [
+        [
+          {
+            "node": "Limit reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit reached?": {
+      "main": [
+        [
+          {
+            "node": "Notify limit reached",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop VPN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop VPN": {
+      "main": [
+        [
+          {
+            "node": "Wait 5s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5s": {
+      "main": [
+        [
+          {
+            "node": "Start VPN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start VPN": {
+      "main": [
+        [
+          {
+            "node": "Wait 60s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 60s": {
+      "main": [
+        [
+          {
+            "node": "VPN status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VPN status": {
+      "main": [
+        [
+          {
+            "node": "Build report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build report": {
+      "main": [
+        [
+          {
+            "node": "Notify reconnected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}{% endraw %}
