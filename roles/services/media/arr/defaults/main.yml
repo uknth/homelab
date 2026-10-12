@@ -16,15 +16,29 @@ arr_puid: "{{ media_uid }}"                     # 1001
 arr_pgid: "{{ media_gid }}"                     # 1001
 
 # ---- VPN (gluetun + PIA via OpenVPN) ----
-# Planned follow-up: move PIA to WireGuard. OpenVPN in gluetun is often the
-# throughput bottleneck, and now that nzbget's ~10 MB/s Usenet traffic also
-# runs through this tunnel, that ceiling matters more than it used to.
+# Planned follow-up: move PIA to WireGuard. Note that on 2026-10-10 the tunnel
+# was NOT CPU-bound (gluetun ~1% CPU) — the slowdown was packet loss on PIA's
+# Netherlands servers, so measure before assuming OpenVPN is the ceiling.
 arr_vpn_provider: "private internet access"
 arr_vpn_type: "openvpn"
 arr_vpn_user: "{{ vault_pia_user }}"
 arr_vpn_password: "{{ vault_pia_password }}"
-arr_vpn_regions: "Netherlands"                  # PF-capable region
+# Comma list: gluetun picks a random server across all of them on every
+# (re)connect. All must be port-forwarding capable (PORT_FORWARD_ONLY=on).
+# Netherlands dropped 2026-10-10: 33-44% packet loss inside the tunnel on three
+# separate amsterdam servers (~0.1 MB/s). Benchmarked from cmp01 the same day,
+# 4-stream to EU: Malaysia 23.6 MB/s, Singapore 16.3 MB/s; Vietnam and
+# Indonesia failed to connect.
+arr_vpn_regions: "Malaysia,Singapore"
 arr_lan_subnet: "10.0.2.0/24"
+
+# gluetun control API, published for the n8n VPN auto-heal workflow
+# (roles/services/productivity/n8n). 8000 is already taken on cmp01, so the host
+# port differs from the container port (8000). Access is API-key only and the
+# key's role is limited to reading/setting VPN status — see gluetun-auth.toml.j2.
+arr_gluetun_control_port: 8009
+# Empty (no vault key) = no auth file and no published port; the API stays closed.
+arr_gluetun_control_apikey: "{{ vault_gluetun_control_apikey | default('') }}"
 
 # NOTE: qbittorrent-port auto-sync helper removed (fiddly); nzbget (Usenet) is
 # the primary downloader. Set qbit listen port manually if needed, or re-add later.
@@ -81,6 +95,10 @@ arr_qbit_categories: ["tv", "movies"]
 # have the role enforce them; leave empty to leave nzbget's creds untouched.
 arr_nzbget_username: "{{ vault_nzbget_username | default('') }}"
 arr_nzbget_password: "{{ vault_nzbget_password | default('') }}"
+# Restricted nzbget account for n8n's VPN auto-heal (read-only status/listgroups).
+# Same rule: set BOTH in vault to have the role enforce them.
+arr_nzbget_restricted_username: "{{ vault_nzbget_restricted_username | default('') }}"
+arr_nzbget_restricted_password: "{{ vault_nzbget_restricted_password | default('') }}"
 
 arr_qbit_conf: "{{ arr_root_dir }}/qbittorrent/qBittorrent/qBittorrent.conf"
 arr_qbit_temp_path: "/scratch/qbittorrent"       # in-progress (scratch-pool)

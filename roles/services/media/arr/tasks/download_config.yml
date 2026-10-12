@@ -38,7 +38,9 @@
           'ArticleCache=' ~ arr_nzbget_articlecache, 'WriteBuffer=' ~ arr_nzbget_writebuffer,
           'HealthCheck=' ~ arr_nzbget_healthcheck]
          + (['ControlUsername=' ~ arr_nzbget_username, 'ControlPassword=' ~ arr_nzbget_password]
-            if (arr_nzbget_username | length > 0) else []) }}
+            if (arr_nzbget_username | length > 0) else [])
+         + (['RestrictedUsername=' ~ arr_nzbget_restricted_username, 'RestrictedPassword=' ~ arr_nzbget_restricted_password]
+            if (arr_nzbget_restricted_username | length > 0) else []) }}
   no_log: true
 
 - name: Enforce nzbget config (stop, edit, start) when drifted
@@ -83,6 +85,16 @@
         - { k: ControlUsername, v: "{{ arr_nzbget_username }}" }
         - { k: ControlPassword, v: "{{ arr_nzbget_password }}" }
       when: arr_nzbget_username | length > 0
+      no_log: true
+    - name: Set nzbget restricted creds (if provided)
+      ansible.builtin.lineinfile:
+        path: "{{ arr_nzbget_conf }}"
+        regexp: "^{{ item.k }}="
+        line: "{{ item.k }}={{ item.v }}"
+      loop:
+        - { k: RestrictedUsername, v: "{{ arr_nzbget_restricted_username }}" }
+        - { k: RestrictedPassword, v: "{{ arr_nzbget_restricted_password }}" }
+      when: arr_nzbget_restricted_username | length > 0
       no_log: true
     - name: Start nzbget
       ansible.builtin.command: docker start nzbget

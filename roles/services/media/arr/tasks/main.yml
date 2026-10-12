@@ -27,6 +27,28 @@
     - unpackerr
     - bin
 
+- name: Create gluetun auth dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ arr_root_dir }}/gluetun/auth"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: arr_gluetun_control_apikey | length > 0
+
+- name: Template gluetun control-server auth config
+  become: true
+  ansible.builtin.template:
+    src: gluetun-auth.toml.j2
+    dest: "{{ arr_root_dir }}/gluetun/auth/config.toml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart arr
+  when: arr_gluetun_control_apikey | length > 0
+
 - name: Read *arr API keys (needed by the unpackerr env template)
   ansible.builtin.include_tasks: api_keys.yml
 
