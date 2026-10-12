@@ -76,10 +76,24 @@ newer to fetch and the auto-upgrade path cannot move it at all.
 Pinning would otherwise make the project go silent, since Diun's default watch is the
 digest of the running tag and a released version tag never changes. So the beszel
 container carries `diun.watch_repo=true` plus a semver `diun.include_tags`: a real
-release still lands on `homelab-updates`, and applying it means bumping
-`beszel_version` so the pipeline moves the hub and every agent in one deploy. The
-follow-on `No running container uses henrygd/beszel:<new> — nothing to do` from
-`maintenance.sh` is the expected outcome, not a failure.
+release still lands on `homelab-updates`. Applying it is a reviewed PR, not an
+auto-upgrade:
+
+1. Diun reports a `new` event for `henrygd/beszel:<tag>`; `homelab-diun-update`
+   forwards it to `homelab-beszel-bump` (a webhook self-call).
+2. `homelab-beszel-bump` opens a Gitea PR on branch `bump/beszel-<tag>` changing
+   `beszel_version`, but only if `<tag>` is strictly newer than the value on
+   `master`. A stale or duplicate notice is ignored; an existing branch means the
+   PR is already open (low-priority ntfy, no second PR).
+3. A human reviews and merges it; CI then deploys the hub and every managed agent in
+   one run. Nothing is auto-merged.
+
+The workflow is gated on `vault_gitea_write_token` (absent = not imported). The
+hand-deployed NAS agents (`nas01`, `nas02`) are not covered by the deploy and must be
+bumped to the same version by hand
+([`beszel-nas-agents`](../runbooks/beszel-nas-agents.md)). The follow-on
+`No running container uses henrygd/beszel:<new> — nothing to do` from `maintenance.sh`
+is the expected outcome, not a failure.
 
 ### Discovery, not configuration
 

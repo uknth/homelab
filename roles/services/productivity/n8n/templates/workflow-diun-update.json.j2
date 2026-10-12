@@ -153,7 +153,51 @@
       "name": "Notify skipped",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+      "position": [620, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-new",
+              "operator": { "type": "string", "operation": "equals" },
+              "leftValue": "={% raw %}{{ $json.body.status }}{% endraw %}",
+              "rightValue": "new"
+            },
+            {
+              "id": "c-beszel",
+              "operator": { "type": "string", "operation": "regex" },
+              "leftValue": "={% raw %}{{ $json.body.image }}{% endraw %}",
+              "rightValue": "^(?:[^/]+/)*henrygd/beszel:\\d+\\.\\d+\\.\\d+$"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-beszel-if",
+      "name": "Beszel release?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
       "position": [400, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:{{ n8n_beszelbump_internal_port }}/webhook/beszel-bump",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={% raw %}{{ JSON.stringify($json.body) }}{% endraw %}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "n-beszel-bump",
+      "name": "Open beszel bump PR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 100],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -161,6 +205,12 @@
     "Is an update?": {
       "main": [
         [{ "node": "Run maintenance --image", "type": "main", "index": 0 }],
+        [{ "node": "Beszel release?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Beszel release?": {
+      "main": [
+        [{ "node": "Open beszel bump PR", "type": "main", "index": 0 }],
         [{ "node": "Notify skipped", "type": "main", "index": 0 }]
       ]
     },
