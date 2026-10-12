@@ -37,6 +37,11 @@ blocky_extra_mappings:
   # `ssh.git.*` rather than `git.host.*` so it reads as "the SSH layer of
   # git.puhome.net" rather than as an unrelated host record.
   ssh.git.puhome.net: "10.0.2.18"
+  # Home Assistant (ha01, HAOS) is NOT reverse-proxied: the base-domain catch-all
+  # would otherwise send ha.puhome.net to nginx on gw01. Points straight at the
+  # Pi. Plain HTTP on port 80, no wildcard cert, no Authentik (user decision
+  # 2026-10-11 — HA has its own login and the mobile app needs a direct path).
+  ha.puhome.net: "{{ hostvars['ha01'].ansible_host }}"
 
 # Pin specific hostnames to a working IP (workaround for broken anycast edges).
 # GitHub's CDN (*.githubusercontent.com) round-robins 185.199.108-111.133;

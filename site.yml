@@ -26,6 +26,10 @@
 - name: Storage exports (nas01)
   ansible.builtin.import_playbook: playbooks/hosts/nas01.yml
 
+# Phase 11 — Home Assistant core config via API (ha01, runs on control node).
+- name: Home automation (ha01)
+  ansible.builtin.import_playbook: playbooks/hosts/ha01.yml
+
 # Phase 5 — compute/media/documents/music (cmp01). Uncommented 2026-08-30: the
 # roles have been live since 2026-08-22, but the import was still commented out,
 # so `site.yml` (and therefore the GitOps executor) never touched cmp01.
