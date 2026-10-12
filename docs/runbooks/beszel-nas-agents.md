@@ -8,7 +8,7 @@ the agent just needs the hub's public **KEY** and to listen on **45876**.
 
 Ansible-managed hosts get their agent from `roles/system/beszel_agent`, pinned by the
 fleet-wide **`beszel_version`** in `hosts/group_vars/all/vars.yml` — the same value that
-pins the hub image, so the two can never drift. Currently **0.20.0**.
+pins the hub image, so the two can never drift. Currently **0.21.0**.
 
 > **These two NAS agents are the one place that pin does not reach.** They are deployed
 > by hand, so pin them to the same version below and bump them in the same pass as
@@ -32,7 +32,7 @@ Apps → **Discover Apps → Custom App** (install by YAML). Persists across reb
 ```yaml
 services:
   beszel-agent:
-    image: henrygd/beszel-agent:0.20.0     # == beszel_version; never :latest
+    image: henrygd/beszel-agent:0.21.0     # == beszel_version; never :latest
     container_name: beszel-agent
     restart: unless-stopped
     network_mode: host                 # listen on the host's :45876
@@ -89,7 +89,7 @@ Requires a real `smartctl` (>= 7.0) **and** raw access to the devices.
   entire filesystem is `/agent` plus `usr/share/libdrm/amdgpu.ids`. There is no
   `smartctl`, so SMART silently never populates. Switch to the **`:alpine`** tag and add:
   ```yaml
-  image: henrygd/beszel-agent:0.20.0-alpine   # == beszel_version
+  image: henrygd/beszel-agent:0.21.0-alpine   # == beszel_version
   devices:
     - /dev/sda:/dev/sda
     - /dev/sdb:/dev/sdb

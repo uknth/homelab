@@ -101,7 +101,7 @@ beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"
 #
 # The NAS agents (nas01, nas02) are hand-deployed and NOT covered by this —
 # bump them too, per docs/runbooks/beszel-nas-agents.md.
-beszel_version: "0.20.0"
+beszel_version: "0.21.0"
 
 # --- services/ai/omlx (ai01) -----------------------------------------------
 # Resident MLX inference server — the one model the fleet's budget allows (24
