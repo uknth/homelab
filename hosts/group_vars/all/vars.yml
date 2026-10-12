@@ -85,6 +85,24 @@ authentik_oidc_userinfo_url: "{{ authentik_url }}/application/o/userinfo/"
 # `linux`) now that macOS hosts run agents too. Empty until the hub exists.
 beszel_agent_key: "{{ vault_beszel_agent_key | default('') }}"
 
+# Beszel version — ONE pin for the hub image AND every agent binary. Both roles
+# read it (services/monitoring/beszel_hub on util01, system/beszel_agent on every
+# host), and they run in different plays, so a role default cannot hold it — same
+# reason as the key above.
+#
+# The pair must move together, and until 2026-09-21 nothing made them. The hub
+# ran `henrygd/beszel:latest` and was not on maintenance_hold_projects, so diun
+# auto-upgraded it to 0.20.0 while every agent sat on the role default of 0.18.8.
+# Nothing compares the two, so the split was invisible.
+#
+# To bump: change this line, push, let the pipeline deploy. The hub recreates on
+# the new tag; each agent re-downloads because the install task compares the
+# *installed* binary's version against this value.
+#
+# The NAS agents (nas01, nas02) are hand-deployed and NOT covered by this —
+# bump them too, per docs/runbooks/beszel-nas-agents.md.
+beszel_version: "0.21.0"
+
 # --- services/ai/omlx (ai01) -----------------------------------------------
 # Resident MLX inference server — the one model the fleet's budget allows (24
 # GB unified memory on ai01 fits exactly one). Serves research synthesis now,

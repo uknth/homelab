@@ -11,3 +11,21 @@ services:
     environment:
       - TZ={{ timezone }}
       - USER_CREATION={{ beszel_user_creation | string | lower }}
+    labels:
+      # The tag is pinned to beszel_version, which takes the hub out of diun's
+      # auto-upgrade path on purpose: it may only move when the agents move with
+      # it. But diun's default watch is the DIGEST of the running tag, and a
+      # released version tag never changes, so beszel would simply go quiet and
+      # we would freeze on it without noticing.
+      #
+      # watch_repo makes diun compare the repo's TAG LIST instead, so a real
+      # release still lands on homelab-updates; applying it stays a deliberate
+      # beszel_version bump. include_tags drops `latest`/`edge`/`dev` and the
+      # floating `0` / `0.20` aliases, so every notification is a real release.
+      # `$$` is compose's escape for a literal `$` (the end-of-string anchor).
+      #
+      # The notification also fans out to n8n -> maintenance.sh --image, which
+      # finds no project declaring that tag and reports "nothing to do". That
+      # line is expected, not a failure.
+      - 'diun.watch_repo=true'
+      - 'diun.include_tags=^\d+\.\d+\.\d+$$'

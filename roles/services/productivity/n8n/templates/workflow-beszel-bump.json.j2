@@ -1,0 +1,230 @@
+{
+  "id": "homelab-beszel-bump",
+  "name": "Homelab — beszel version bump PR",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "beszel-bump",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Beszel bump webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-40, 0],
+      "webhookId": "beszel-bump"
+    },
+    {
+      "parameters": {
+        "jsCode": {% raw %}"// Diun image looks like docker.io/henrygd/beszel:0.22.0\nconst image = String($input.first().json.body.image || '');\nconst m = image.match(/:(\\d+\\.\\d+\\.\\d+)$/);\nif (!m) {\n  throw new Error('no semver tag in image: ' + image);\n}\nreturn [{ json: { tag: m[1] } }];\n"{% endraw %}
+      },
+      "id": "n-parse",
+      "name": "Parse tag",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "{{ n8n_beszelbump_gitea_url }}/api/v1/repos/{{ n8n_beszelbump_repo }}/contents/{{ n8n_beszelbump_vars_path }}?ref={{ n8n_beszelbump_base_branch }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 20000 }
+      },
+      "id": "n-get",
+      "name": "Get vars file",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 0],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": { "id": "homelab-gitea-api", "name": "homelab gitea API (write)" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": {% raw %}"const tag = $('Parse tag').first().json.tag;\nconst file = $input.first().json;\nconst text = Buffer.from(file.content, 'base64').toString('utf8');\nconst m = text.match(/^beszel_version:\\s*\"(\\d+\\.\\d+\\.\\d+)\"/m);\nif (!m) {\n  throw new Error('beszel_version not found in vars file');\n}\nconst current = m[1];\nconst toNums = (v) => v.split('.').map(Number);\nconst newer = (a, b) => {\n  const x = toNums(a);\n  const y = toNums(b);\n  for (let i = 0; i < 3; i++) {\n    if (x[i] !== y[i]) return x[i] > y[i];\n  }\n  return false;\n};\nif (!newer(tag, current)) {\n  // stale or duplicate notice: stop quietly\n  return [];\n}\nconst newText = text.replace(/^beszel_version:\\s*\"\\d+\\.\\d+\\.\\d+\"/m, 'beszel_version: \"' + tag + '\"');\nreturn [{\n  json: {\n    tag,\n    current,\n    sha: file.sha,\n    newContent: Buffer.from(newText, 'utf8').toString('base64'),\n  },\n}];\n"{% endraw %}
+      },
+      "id": "n-compare",
+      "name": "Compare",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, -80],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_beszelbump_gitea_url }}/api/v1/repos/{{ n8n_beszelbump_repo }}/branches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={% raw %}{{ JSON.stringify({ new_branch_name: 'bump/beszel-' + $json.tag, old_branch_name: {% endraw %}'{{ n8n_beszelbump_base_branch }}'{% raw %} }) }}{% endraw %}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "n-branch",
+      "name": "Create branch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, -80],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": { "id": "homelab-gitea-api", "name": "homelab gitea API (write)" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "{{ n8n_beszelbump_gitea_url }}/api/v1/repos/{{ n8n_beszelbump_repo }}/contents/{{ n8n_beszelbump_vars_path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={% raw %}{{ JSON.stringify({ content: $('Compare').first().json.newContent, sha: $('Compare').first().json.sha, branch: 'bump/beszel-' + $('Compare').first().json.tag, message: 'chore(beszel): bump beszel_version ' + $('Compare').first().json.current + ' -> ' + $('Compare').first().json.tag }) }}{% endraw %}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "n-commit",
+      "name": "Commit bump",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, -160],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": { "id": "homelab-gitea-api", "name": "homelab gitea API (write)" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_beszelbump_gitea_url }}/api/v1/repos/{{ n8n_beszelbump_repo }}/pulls",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={% raw %}{{ JSON.stringify({ title: 'chore(beszel): bump to ' + $('Compare').first().json.tag, head: 'bump/beszel-' + $('Compare').first().json.tag, base: {% endraw %}'{{ n8n_beszelbump_base_branch }}'{% raw %}, body: ['Bumps `beszel_version` from ' + $('Compare').first().json.current + ' to ' + $('Compare').first().json.tag + '.', '', 'Opened automatically by n8n (homelab-beszel-bump) on a Diun release notice. Nothing is auto-merged.', '', '- Merging deploys the hub (util01) and every managed agent together, in one CI run.', '- The hand-deployed NAS agents (nas01, nas02) are NOT covered: bump them to the same version by hand, per docs/runbooks/beszel-nas-agents.md.', '- Check https://github.com/henrygd/beszel/releases for breaking changes before merging.'].join('\\n') }) }}{% endraw %}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "n-pr",
+      "name": "Open PR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, -240],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": { "id": "homelab-gitea-api", "name": "homelab gitea API (write)" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "=beszel {% raw %}{{ $('Compare').first().json.tag }}{% endraw %} released - PR opened" },
+            { "name": "Priority", "value": "3" },
+            { "name": "Tags", "value": "n8n,package" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ $json.html_url }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-ok",
+      "name": "Notify PR opened",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, -300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "beszel bump PR failed" },
+            { "name": "Priority", "value": "4" },
+            { "name": "Tags", "value": "n8n,warning" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={% raw %}{{ JSON.stringify($json).slice(0, 1500) }}{% endraw %}",
+        "options": {}
+      },
+      "id": "n-fail",
+      "name": "Notify failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ n8n_ntfy_url }}/{{ n8n_jobs_ntfy_topic }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "=beszel {% raw %}{{ $('Compare').first().json.tag }}{% endraw %} bump already open" },
+            { "name": "Priority", "value": "2" },
+            { "name": "Tags", "value": "n8n" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "=Branch bump/beszel-{% raw %}{{ $('Compare').first().json.tag }}{% endraw %} already exists (or could not be created); no new PR opened.",
+        "options": {}
+      },
+      "id": "n-exists",
+      "name": "Notify already open",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 0]
+    }
+  ],
+  "connections": {
+    "Beszel bump webhook": { "main": [[{ "node": "Parse tag", "type": "main", "index": 0 }]] },
+    "Parse tag": { "main": [[{ "node": "Get vars file", "type": "main", "index": 0 }]] },
+    "Get vars file": {
+      "main": [
+        [{ "node": "Compare", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compare": {
+      "main": [
+        [{ "node": "Create branch", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create branch": {
+      "main": [
+        [{ "node": "Commit bump", "type": "main", "index": 0 }],
+        [{ "node": "Notify already open", "type": "main", "index": 0 }]
+      ]
+    },
+    "Commit bump": {
+      "main": [
+        [{ "node": "Open PR", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Open PR": {
+      "main": [
+        [{ "node": "Notify PR opened", "type": "main", "index": 0 }],
+        [{ "node": "Notify failure", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

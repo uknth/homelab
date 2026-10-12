@@ -122,3 +122,21 @@ n8n_vpnheal_ntfy_tag: "vpn-reconnect"
 n8n_vpnheal_gluetun_apikey: "{{ vault_gluetun_control_apikey | default('') }}"
 n8n_vpnheal_nzbget_user: "{{ vault_nzbget_restricted_username | default('') }}"
 n8n_vpnheal_nzbget_password: "{{ vault_nzbget_restricted_password | default('') }}"
+
+# --- Beszel release bump PR -------------------------------------------------
+# beszel is version-locked (beszel_version in hosts/group_vars/all/vars.yml; see
+# docs/spec/maintenance.md). When Diun reports a new release tag,
+# homelab-diun-update forwards it to homelab-beszel-bump, which opens a Gitea PR
+# bumping that variable. Nothing is auto-merged: a human merges, CI deploys.
+# Gitea runs on cmp01 (services/development/gitea, gitea_http_port 8102 -- a
+# literal here because that role's defaults are not loaded into util01's play).
+n8n_beszelbump_gitea_url: "http://{{ hostvars['cmp01'].ansible_host }}:8102"
+n8n_beszelbump_repo: "uknth/homelab"
+n8n_beszelbump_base_branch: "master"
+n8n_beszelbump_vars_path: "hosts/group_vars/all/vars.yml"
+# n8n's own listen port INSIDE the container (env.j2 N8N_PORT), for the
+# diun-update -> bump webhook self-call; not n8n_port, which is the host publish.
+n8n_beszelbump_internal_port: 5678
+# Needs write scope on the repo (branch, contents, pulls). Empty leaves the
+# credential and workflow out entirely.
+n8n_beszelbump_gitea_token: "{{ vault_gitea_write_token | default('') }}"
