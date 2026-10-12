@@ -18,7 +18,8 @@ Role-based names of the Nodes
 | dns01    | DNS node        |
 
 
-gw01,ha01 -> RP5, running debian
+gw01 -> RP5, running debian
+ha01 -> RP5, running Home Assistant OS (HAOS, not Debian), 10.0.2.10 — unmanaged
 cmp01 -> custom pc, running debian
 nas01 -> custom pc, running Truenas with 24tb in RAIDZ2
 nas02 -> synology nas device

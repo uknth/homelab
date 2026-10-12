@@ -18,10 +18,17 @@ kuma_config_venv: "{{ lookup('env','HOME') }}/.cache/homelab/kuma-venv"
 
 # HTTP monitors: one per service in gw01's reverse-proxy map.
 kuma_http_monitors: >-
-  {{ hostvars['gw01'].nginx_sites
+  {{ (hostvars['gw01'].nginx_sites
      | map(attribute='name')
      | map('regex_replace', '^(.*)$', '{"name": "\1", "type": "http", "url": "https://\1.' ~ base_domain ~ '"}')
-     | map('from_json') | list }}
+     | map('from_json') | list) + kuma_extra_http_monitors }}
+
+# Services that are NOT behind the gw01 reverse proxy, so nginx_sites cannot
+# derive them. Home Assistant answers plain HTTP on port 80 straight from the Pi.
+kuma_extra_http_monitors:
+  - name: "ha"
+    type: "http"
+    url: "http://{{ hostvars['ha01'].ansible_host }}/"
 
 # Push monitors. Interval is the heartbeat window in seconds: miss it and Kuma
 # calls the monitor down.

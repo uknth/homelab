@@ -1,0 +1,15 @@
+---
+# ha01 — Home Assistant OS (Raspberry Pi 5), API-managed only.
+#
+# ha01 runs HAOS: no ansible account, never SSH-managed. Like nas01, this play
+# runs on the CONTROL NODE (connection: local) and configures Home Assistant
+# through its API, so the settings are reproducible IaC.
+
+- name: Configure Home Assistant (ha01)
+  hosts: ha01
+  connection: local
+  gather_facts: false
+  tags: [ha01, home]
+  roles:
+    - role: services/home/home_assistant_config
+      tags: [ha-config, home]

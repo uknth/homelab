@@ -74,6 +74,12 @@
         href: https://ask.{{ base_domain }}
         icon: mdi-chat-processing-outline
         description: General questions — not wiki-aware
+    # Home automation lives on its own Pi (ha01), not behind nginx/Authentik, so
+    # this is plain http straight to it and carries no widget.
+    - Home Assistant:
+        href: http://ha.{{ base_domain }}
+        icon: home-assistant.png
+        description: Home automation — own login, LAN only
 
 - Development:
     - Gitea:

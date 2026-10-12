@@ -1,0 +1,36 @@
+---
+# services/home/home_assistant_config — declares Home Assistant's core settings as code.
+#
+# ha01 runs Home Assistant OS (HAOS): an appliance with no ansible account, never
+# SSH-managed. Like nas01, this role runs on the CONTROL NODE (connection: local)
+# and talks to HA's API with a long-lived access token. Core settings can only be
+# changed over the WebSocket API (REST has no write path for them), so a small
+# script does the diff-and-update -- same shape as services/monitoring/uptime_kuma_config.
+#
+# Scope is deliberately narrow: core config, and optionally the OS hostname.
+# NOT here: Zigbee/integrations (need the dongle), users, dashboards, automations.
+
+ha_config_url: "http://{{ hostvars['ha01'].ansible_host }}"
+ha_config_token: "{{ vault_ha_token }}"
+ha_config_venv: "{{ lookup('env','HOME') }}/.cache/homelab/ha-venv"
+
+# Core settings. Every key is compared against HA's live config and only the
+# differences are written, so a no-op run reports changed=false.
+ha_location_name: "Home"
+ha_time_zone: "{{ timezone }}"            # group_vars: Asia/Kolkata
+ha_unit_system: "metric"                  # metric | us_customary
+ha_language: "en"
+ha_country: "IN"
+ha_currency: "INR"
+# Latitude/longitude are deliberately NOT managed by default: they were set to the
+# real address in HA's onboarding, and a city-centre default would overwrite that.
+# Uncomment to pin them as code.
+# ha_latitude: 12.9985767
+# ha_longitude: 77.7609716
+ha_elevation: 920                         # metres; Bengaluru
+ha_radius: 100                            # zone.home radius, metres
+
+# OS hostname, set through the Supervisor API. Unset = leave it alone. Setting it
+# renames the mDNS name (homeassistant.local -> <name>.local); ha.puhome.net and
+# 10.0.2.10 are unaffected.
+# ha_hostname: "ha01"

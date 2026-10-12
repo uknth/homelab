@@ -171,6 +171,13 @@ build are derived. See [`knowledge.md`](knowledge.md#backups).
 
 Also the **Ansible control node** — runs the playbooks against the fleet.
 
+## `ha01` — Home automation
+
+| Service | Target role | Domain | Status | Notes |
+|---|---|---|---|---|
+| Home Assistant | — (appliance; host is **unmanaged**) | `ha.puhome.net` → `10.0.2.10` | 🟢 live, registered | Raspberry Pi 5 running **Home Assistant OS** (HAOS), fresh install 2026-10-11, serves **plain HTTP on port 80** (not 8123). Static IP set in HA's network settings. **Deliberate exception to the SSO rule above:** no nginx vhost, no Authentik, no wildcard TLS — HA has its own login, and `ha.puhome.net` is a direct Blocky record (`blocky_extra_mappings`), because the base-domain catch-all would otherwise point it at gw01. Registered in `hosts/hosts.yml` (`unmanaged`), Homepage (Assistant group) and Uptime Kuma (`kuma_extra_http_monitors`). Admin API token and user in the vault (`vault_ha_token`, `vault_ha_username`, `vault_ha_password`). Zigbee (USB dongle) not yet configured. See [HANDOFF](../HANDOFF.md#open-items--todo-carry-forward) |
+| Home Assistant config | `services/home/home_assistant_config` | — | 🟢 built, **not yet applied** | Runs on the control node (`playbooks/hosts/ha01.yml`, `connection: local`) against HA's WebSocket API with `vault_ha_token`. Idempotent diff-and-update of core config only: time zone (`timezone` = Asia/Kolkata), unit system (metric), country/currency (IN/INR), elevation, `zone.home` radius. Latitude/longitude and OS hostname are **opt-in** (`ha_latitude`/`ha_longitude`, `ha_hostname`) so the address set in onboarding is not overwritten. Skipped under `--check`. Out of scope: Zigbee/integrations, users, dashboards, automations |
+
 ## Maintenance / ops (cross-host)
 
 | Concern | Target role / mechanism | Status | Spec |

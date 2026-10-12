@@ -147,6 +147,58 @@ Routing: `<name>.puhome.net` → gw01 nginx (Authentik-gated); `<name>.host.puho
 Reworked 2026-09-08 after an unattended sweep (PR #7). Split by what actually
 blocks them, because "open" was hiding three different situations.
 
+### Home Assistant onboarding — Pi booted, spec next (2026-10-11)
+
+Goal: onboard Home Assistant as an Ansible role (v3.1). **Nothing is built yet** — no
+spec, no inventory entry, no role.
+
+**Update 2026-10-11:** the Pi booted. HAOS answered at 10.0.2.235 (`homeassistant.local`,
+MAC `2c:cf:67:3c:9b:57`) and the UI offers the first-run **"Create my home"** onboarding, so
+this is a **fresh install: the old config and Zigbee pairings are NOT present** (an earlier
+note here said they survived — that was wrong). Decisions: static IP **10.0.2.10** (free,
+outside the DHCP pool 10.0.2.25-254); **no nginx/Authentik proxy** for HA. Static IP 10.0.2.10 is applied and live. Branch `feat/ha01` adds the registration
+(inventory, Blocky `ha.puhome.net`, Homepage, Kuma) and `services/home/home_assistant_config`.
+HA still reports US/imperial/UTC until that role runs via CI. Still to do: merge, then
+confirm dongle model, ZHA vs Zigbee2MQTT. The notes below on the old disk
+are history.
+
+State found today:
+
+- `ha01` appears only in `hosts/hosts.md` (RP5, Debian) and `AGENTS.md` as an unmanaged
+  reference. It is **not** in `hosts/hosts.yml`, `docs/spec/services.md` or the roadmap.
+- The Pi **was not booting**, so its IP is unknown. A full scan of 10.0.2.1–254 for
+  port 8123 found nothing; candidates .4 (ctl01), .18 (git macvlan) and .95 (a network
+  device's admin page) are all something else. It may be off, or on another VLAN.
+- The SSD (256 GB, read through a USB reader) has an **intact HAOS layout** — `hassos-boot`
+  plus A/B system, overlay and data partitions. So HA is the **HAOS appliance**, not
+  Debian + Docker, and the disk itself looks healthy; the boot failure is more likely
+  power, EEPROM boot order, the USB adapter, or the Pi itself. The data partition is
+  ext4 and was not read; no config or backups were extracted.
+- HAOS 18.3 for Pi 5 (`haos_rpi5-64-18.3.img.xz`, sha256 `e148a925…c60f`) is available if
+  a reflash is needed. The user chose to retry booting the existing disk first. Nothing
+  was written to the SSD.
+
+Decision (2026-10-11): **stay on Home Assistant.** Gladys Assistant was considered (Docker-native,
+lighter, but far fewer integrations) and dropped because the user has Zigbee devices on a
+USB dongle. The Zigbee device list lived on the old data partition, but the install came up fresh, so
+Zigbee devices must be re-paired. Dongle
+model and ZHA vs Zigbee2MQTT are still to be confirmed; the dongle must sit on the HA
+host (USB 2 port + extension cable on a Pi 5).
+
+Next steps, in order:
+
+1. Get the Pi booting: official 27W supply, check LED/HDMI output, and if it still fails
+   update the bootloader to USB boot via an SD card. Reflash only as a last resort (it
+   erases the old HA config).
+2. Find its IP (Omada client list or `homeassistant.local:8123`) and add a DHCP
+   reservation.
+3. Decide HAOS vs Container-on-Debian. Recommendation was Container on Debian for
+   fit with this repo; on HAOS the host is unmanaged and the role covers only the
+   gateway side.
+4. Write the `docs/spec/services.md` entry and roadmap line, get sign-off, then build:
+   `ha01` in `hosts.yml`, Blocky DNS record, nginx vhost on gw01 with websocket proxying
+   (`trusted_proxies` in HA's `configuration.yaml`), Homepage link, uptime probe.
+
 ### Device registry (feat/device-registry) — PR to open and merge
 
 `hosts/group_vars/all/devices.yml` is now the source of truth for which personal
