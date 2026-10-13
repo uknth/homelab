@@ -1,0 +1,6 @@
+#; Pi-hole FTL config file
+#; Managed by Ansible (roles/services/network/pihole) — do not edit by hand.
+#; Comments should start with #; to avoid issues with PHP and bash reading this file
+{% for key, value in pihole_ftl_conf.items() %}
+{{ key }}={{ value }}
+{% endfor %}

@@ -11,7 +11,7 @@ upstreams:
 {% for u in blocky_upstreams %}
       - {{ u }}
 {% endfor %}
-  # strict = try in listed order (Pi-hole first, DoH fallback)
+  # strict = try in listed order (Pi-hole, Cloudflare DoH, Quad9 DoH)
   strategy: strict
   timeout: 2s
 
@@ -42,10 +42,40 @@ filtering:
   queryTypes:
     - AAAA
 
-# Blocking is intentionally OFF — Pi-hole (dns01) owns ad/tracker blocking.
+# Small blocklist subset (Pi-hole carries the large lists). Lists load in the
+# background (strategy fast), so a bad/unreachable list never blocks startup.
 blocking:
+  blockType: zeroIp
+  denylists:
+{% for group, urls in blocky_denylists.items() %}
+    {{ group }}:
+{% for u in urls %}
+      - {{ u }}
+{% endfor %}
+{% endfor %}
+{% if dns_allowlist | default([]) | length > 0 %}
+  # Shared allowlist (dns_allowlist): never blocked, whichever group matches.
+  allowlists:
+{% for group in blocky_denylists.keys() %}
+    {{ group }}:
+      - |
+{% for d in dns_allowlist %}
+        {{ d }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+  clientGroupsBlock:
+    default:
+{% for g in blocky_denylist_groups_default %}
+      - {{ g }}
+{% endfor %}
   loading:
     strategy: fast
+    refreshPeriod: 24h
+    downloads:
+      timeout: 60s
+      attempts: 3
+      cooldown: 10s
 
 prometheus:
   enable: true

@@ -1,13 +1,106 @@
 ---
-# services/network/pihole — configures the (already-installed) Pi-hole on dns01.
-# Config-only: Pi-hole itself is not installed/managed by Ansible.
+# services/network/pihole — configures the (already-installed) Pi-hole v5 on dns01.
+# Pi-hole itself is installed by the official installer, NOT by Ansible, and
+# WEBPASSWORD in setupVars.conf is never touched (see docs/runbooks/dns01-pihole.md).
 #
-# The single job: conditionally forward the whole local zone to Blocky, so every
-# *.puhome.net name resolves via the secondary resolver too — set once, works
-# for every service ever launched (no per-app changes). Mirrors how Blocky is
-# authoritative for the zone; Pi-hole just delegates the zone to it.
+# Two jobs:
+#   1. conditionally forward the whole local zone to Blocky, so every
+#      *.puhome.net name resolves via the secondary resolver too — set once,
+#      works for every service ever launched (no per-app changes).
+#   2. own Pi-hole's settings (setupVars keys, FTL conf) and its adlist /
+#      allowlist / regex-denylist content (gravity.db) declaratively.
 
 # Forward the base domain to Blocky (derived from gw01's inventory IP).
 pihole_forward_domain: "{{ base_domain }}"
 pihole_forward_target: "{{ hostvars['gw01'].ansible_host }}"
 pihole_dropin_path: /etc/dnsmasq.d/02-puhome-forward.conf
+
+# Keys of /etc/pihole/setupVars.conf this role owns, applied one lineinfile per
+# key. Values are strings (setupVars is shell-sourced). Any key NOT listed here
+# (WEBPASSWORD, TEMPERATUREUNIT, ...) is left alone. Removing an upstream
+# (PIHOLE_DNS_n) here does not delete the stale line on the host.
+pihole_setupvars:
+  PIHOLE_INTERFACE: eth0
+  IPV4_ADDRESS: 10.0.2.7/24
+  DNSMASQ_LISTENING: single
+  QUERY_LOGGING: "false"
+  BLOCKING_ENABLED: "true"
+  DNS_FQDN_REQUIRED: "true"
+  DNS_BOGUS_PRIV: "true"
+  # Off: the Oct 2026 root-KSK rollover broke local validation; the upstream
+  # resolvers (Google/Cloudflare) validate anyway.
+  DNSSEC: "false"
+  PIHOLE_DNS_1: 8.8.8.8
+  PIHOLE_DNS_2: 2001:4860:4860:0:0:0:0:8888
+  PIHOLE_DNS_3: 1.1.1.1
+  PIHOLE_DNS_4: 1.0.0.1
+  PIHOLE_DNS_5: 2606:4700:4700::1111
+
+# /etc/pihole/pihole-FTL.conf, rendered whole (it holds no secrets).
+pihole_ftl_conf:
+  # Days of query history kept in pihole-FTL.db (does not shrink the file).
+  MAXDBDAYS: 30
+  PRIVACYLEVEL: 0
+  RATE_LIMIT: 9000/60
+
+# Master switch for the gravity.db sync below. The sync is DECLARATIVE: rows of
+# the managed kinds that are not listed here are deleted. Set false to manage
+# lists by hand again.
+pihole_manage_lists: true
+
+# Adlists (gravity.db `adlist`), captured verbatim from dns01 on 2026-10-13.
+pihole_adlists:
+  - { address: "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", enabled: true, comment: "Migrated from /etc/pihole/adlists.list" }
+  - { address: "https://raw.githubusercontent.com/anudeepND/blacklist/master/adservers.txt", enabled: true, comment: "" }
+  - { address: "https://adaway.org/hosts.txt", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/AdguardDNS.txt", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/Admiral.txt", enabled: true, comment: "" }
+  - { address: "https://s3.amazonaws.com/lists.disconnect.me/simple_malvertising.txt", enabled: true, comment: "" }
+  - { address: "https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/Easylist.txt", enabled: true, comment: "" }
+  - { address: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/FadeMind/hosts.extras/master/UncheckyAds/hosts", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/bigdargon/hostsVN/master/hosts", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/Easyprivacy.txt", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/Prigent-Ads.txt", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/FadeMind/hosts.extras/master/add.2o7Net/hosts", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt", enabled: true, comment: "" }
+  - { address: "https://hostfiles.frogeye.fr/firstparty-trackers-hosts.txt", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/Alternate%20versions%20Anti-Malware%20List/AntiMalwareHosts.txt", enabled: true, comment: "" }
+  - { address: "https://osint.digitalside.it/Threat-Intel/lists/latestdomains.txt", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/Prigent-Crypto.txt", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/FadeMind/hosts.extras/master/add.Risk/hosts", enabled: true, comment: "" }
+  - { address: "https://bitbucket.org/ethanr/dns-blacklists/raw/8575c9f96e5b4a1308f2f12394abd86d0927a4a0/bad_lists/Mandiant_APT1_Report_Appendix_D.txt", enabled: true, comment: "" }
+  - { address: "https://phishing.army/download/phishing_army_blocklist_extended.txt", enabled: true, comment: "" }
+  - { address: "https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-malware.txt", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/RPiList-Malware.txt", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/RPiList-Phishing.txt", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/Spam404/lists/master/main-blacklist.txt", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/AssoEchap/stalkerware-indicators/master/generated/hosts", enabled: true, comment: "" }
+  - { address: "https://urlhaus.abuse.ch/downloads/hostfile/", enabled: true, comment: "" }
+  - { address: "https://zerodot1.gitlab.io/CoinBlockerLists/hosts_browser", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/PolishFiltersTeam/KADhosts/master/KADhosts.txt", enabled: true, comment: "" }
+  - { address: "https://raw.githubusercontent.com/FadeMind/hosts.extras/master/add.Spam/hosts", enabled: true, comment: "" }
+  - { address: "https://v.firebog.net/hosts/static/w3kbl.txt", enabled: true, comment: "" }
+  - { address: "https://blocklistproject.github.io/Lists/ads.txt", enabled: true, comment: "" }
+  - { address: "https://blocklistproject.github.io/Lists/fraud.txt", enabled: true, comment: "" }
+  - { address: "https://blocklistproject.github.io/Lists/scam.txt", enabled: true, comment: "" }
+  - { address: "https://blocklistproject.github.io/Lists/tracking.txt", enabled: true, comment: "" }
+
+# Exact allowlist (domainlist type 0). Shared with Blocky's allowlist.
+pihole_allowlist: "{{ dns_allowlist }}"
+
+# Regex allowlist (domainlist type 2). NOTE: the two regexes captured from dns01
+# are stored as type 2 (regex ALLOW), not type 3 (regex deny) as first assumed.
+pihole_regex_allowlist:
+  - '(\.|^)clickhouse\.com$'
+  - '(\.|^)webengage\.com$'
+
+# Regex denylist (domainlist type 3). dns01 has none today; because the sync is
+# declarative, anything added by hand to type 3 will be removed.
+pihole_regex_denylist: []
+
+# Paths / binary. sqlite3 is not installed on dns01; Pi-hole's own FTL binary
+# embeds the sqlite3 shell, so no extra package is needed.
+pihole_gravity_db: /etc/pihole/gravity.db
+pihole_sqlite: [pihole-FTL, sqlite3, -cmd, ".timeout 60000"]

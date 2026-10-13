@@ -1,5 +1,5 @@
 ---
-# Drop the conditional-forward config into Pi-hole's dnsmasq.d and reload DNS.
+# Pi-hole on dns01: conditional-forward drop-in, then settings, then list content.
 
 - name: Ensure dnsmasq.d exists
   become: true
@@ -17,6 +17,18 @@
     group: root
     mode: "0644"
   notify: Restart pihole DNS
+
+- name: Manage Pi-hole settings (setupVars, FTL conf, stale drop-ins)
+  ansible.builtin.include_tasks: config.yml
+
+- name: Manage Pi-hole lists (gravity.db)
+  ansible.builtin.include_tasks: lists.yml
+  when: pihole_manage_lists | bool
+
+# Apply regenerate/restart/gravity handlers now so the validation below tests
+# the config FTL will actually run with.
+- name: Apply pending Pi-hole handlers
+  ansible.builtin.meta: flush_handlers
 
 - name: Validate dnsmasq config
   become: true

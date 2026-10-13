@@ -30,37 +30,44 @@ Blocky and Pi-hole have **distinct jobs** — this is deliberate, not redundant:
 
 - **Blocky (`gw01`)** — authoritative for local names. Resolves `*.puhome.net` and
   `*.host.puhome.net` from the inventory, so local services (and Tailscale clients) resolve
-  by name. It does **not** run blocklists.
-- **Pi-hole (`dns01`)** — the actual ad/tracker blocker for the network.
+  by name. It also carries a **small blocklist subset** (StevenBlack hosts + URLhaus malware),
+  so blocking survives a Pi-hole outage.
+- **Pi-hole (`dns01`)** — the main ad/tracker blocker, carrying the **large** blocklists.
 
 ```
 DHCP advertises:  primary 10.0.2.2 (Blocky) · secondary 10.0.2.7 (Pi-hole)
 
 Blocky @gw01
   *.puhome.net            → answered locally (mapping generated from inventory)
+  small blocklist subset  → 0.0.0.0 (StevenBlack + URLhaus, refreshed every 24h)
   everything else         → upstream group, strict order:
-                              1. Pi-hole (10.0.2.7)   ← blocking happens here
-                              2. Quad9 DoH            ← fallback if Pi-hole is down
+                              1. Pi-hole (10.0.2.7)       ← large blocklists
+                              2. Cloudflare DoH (1.1.1.1) ← fallback, no bootstrap DNS needed
+                              3. Quad9 DoH                ← last resort
 
 Pi-hole @dns01
   puhome.net              → conditional-forward to 10.0.2.2 (Blocky)   ← see note
   everything else         → DoH upstream + gravity blocklists
 ```
 
-Three correctness requirements baked into the roles:
+Uptime Kuma probes both resolvers (resolving an external name through each) and alerts to
+Telegram via ntfy → ntfy-relay → n8n.
 
-1. **Blocky needs a fallback upstream.** Without it, a dead Pi Zero takes down all DNS.
-   With Quad9 as a second `strict`-ordered upstream, a Pi-hole outage degrades to "ads
-   return", not "no internet".
-2a. **Pi-hole blocklists can break platform services.** `push.apple.com` was on
+Correctness requirements baked into the roles:
+
+1. **Blocky needs fallback upstreams.** Without them, a dead Pi Zero takes down all DNS.
+   With Cloudflare and Quad9 DoH as further `strict`-ordered upstreams, a Pi-hole outage
+   degrades to "smaller blocklist", not "no internet".
+2. **Blocklists can break platform services.** `push.apple.com` was on
    `blocklistproject/ads.txt` and answered `0.0.0.0` network-wide until
    whitelisted (2026-08-31). Worth checking here first whenever push, activation
-   or sync misbehaves on the LAN but works on cellular.
-2. **Pi-hole needs a conditional forward for `puhome.net → 10.0.2.2`.** Clients pick either
+   or sync misbehaves on the LAN but works on cellular. The shared `dns_allowlist`
+   (group_vars/all) is applied to both Blocky and Pi-hole.
+3. **Pi-hole needs a conditional forward for `puhome.net → 10.0.2.2`.** Clients pick either
    advertised resolver arbitrarily; without this, local names silently fail for whoever
    lands on the secondary. (Not configured on `dns01` today — a build task.)
-3. **Blocking stays off in Blocky.** Pi-hole owns blocking; running blocklists in both
-   splits stats and whitelists across two UIs.
+4. **Blocky's list loading is non-blocking** (`strategy: fast`), so an unreachable list
+   never stops it from starting or answering.
 
 Tailscale split-DNS maps `puhome.net → 10.0.2.2` so local names resolve remotely.
 

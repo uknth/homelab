@@ -4,6 +4,11 @@ services:
     image: {{ n8n_image }}
     container_name: n8n
     restart: unless-stopped
+    # util01's resolv.conf lists only Blocky. Without a second resolver, a Blocky
+    # outage would also stop the Telegram send for the very alert that reports it.
+    dns:
+      - {{ hostvars['gw01'].ansible_host }}
+      - 1.1.1.1
     ports:
       - "{{ n8n_port }}:5678"
     volumes:

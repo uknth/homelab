@@ -1,0 +1,15 @@
+{# Declarative sync of gravity.db `domainlist`, scoped to the types in
+   pihole_domainlists (0 exact allow, 2 regex allow, 3 regex deny; type 1 exact
+   deny is never touched). Group 0 membership comes from tr_domainlist_add. #}
+{% macro q(v) %}{{ v | string | replace("'", "''") }}{% endmacro %}
+.bail on
+BEGIN;
+{% for dl in pihole_domainlists %}
+{% for d in dl.domains %}
+INSERT OR IGNORE INTO domainlist (type, domain, enabled, comment) VALUES ({{ dl.type }}, '{{ q(d) }}', 1, 'Managed by Ansible');
+UPDATE domainlist SET enabled = 1 WHERE type = {{ dl.type }} AND domain = '{{ q(d) }}' AND enabled <> 1;
+{% endfor %}
+DELETE FROM domainlist WHERE type = {{ dl.type }}{% if dl.domains | length > 0 %} AND domain NOT IN ({% for d in dl.domains %}'{{ q(d) }}'{{ ', ' if not loop.last }}{% endfor %}){% endif %};
+{% endfor %}
+COMMIT;
+SELECT total_changes();

@@ -10,6 +10,10 @@ services:
       - "{{ blocky_ui_ext_port }}:{{ blocky_http_port }}/tcp"
     volumes:
       - "{{ blocky_root_dir }}/config/config.yml:/app/config.yml:ro"
+    # gw01's resolv.conf points at Blocky itself; resolve list-download hosts via
+    # Cloudflare directly so a first start cannot chicken-and-egg on itself.
+    dns:
+      - 1.1.1.1
     environment:
       - TZ={{ timezone }}
     healthcheck:

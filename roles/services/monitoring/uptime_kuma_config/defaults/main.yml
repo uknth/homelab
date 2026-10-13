@@ -4,8 +4,9 @@
 # Uptime Kuma has no REST API (Socket.IO only), so this drives it via the
 # uptime-kuma-api Python lib from the CONTROL NODE. Idempotent by monitor name:
 # an HTTP monitor per *.puhome.net service (derived from gw01's nginx_sites, so
-# it stays in sync) accepting 2xx+3xx (forward-auth 302 = up), plus a "Backups"
-# push monitor that ops/restic pings.
+# it stays in sync) accepting 2xx+3xx (forward-auth 302 = up), DNS monitors that
+# probe each resolver (Blocky, Pi-hole), plus a "Backups" push monitor that
+# ops/restic pings.
 
 kuma_config_url: "http://{{ hostvars['util01'].ansible_host }}:3001"
 # Public URL, used to give push monitors a valid link. Kuma's ntfy provider
@@ -29,6 +30,20 @@ kuma_extra_http_monitors:
   - name: "ha"
     type: "http"
     url: "http://{{ hostvars['ha01'].ansible_host }}/"
+
+# DNS monitors: resolve an EXTERNAL name through each resolver. That catches a
+# broken upstream / DNSSEC failure, not just a dead process. Alerts take
+# ~2-3 min (interval 60s, 2 retries at 30s) and reach Telegram via the usual
+# Kuma -> ntfy -> ntfy-relay -> n8n path.
+kuma_dns_monitors:
+  - name: "DNS · Blocky (gw01)"
+    hostname: "cloudflare.com"
+    resolver: "{{ hostvars['gw01'].ansible_host }}"
+    record_type: "A"
+  - name: "DNS · Pi-hole (dns01)"
+    hostname: "cloudflare.com"
+    resolver: "{{ hostvars['dns01'].ansible_host }}"
+    record_type: "A"
 
 # Push monitors. Interval is the heartbeat window in seconds: miss it and Kuma
 # calls the monitor down.

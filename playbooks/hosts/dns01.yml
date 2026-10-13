@@ -1,10 +1,12 @@
 ---
 # dns01 — Pi-hole DNS appliance (Raspberry Pi Zero)
 #
-# Minimally managed: config only. No docker / full bootstrap (tiny armv6 box).
+# Config-only management of a tiny armv6 box: no docker / full bootstrap, and
+# Pi-hole itself is installed by the official installer, not Ansible.
 #   - hostname : sync OS hostname to inventory name
-#   - pihole   : conditional-forward puhome.net -> Blocky (so the secondary
-#                resolver answers local names for every service, automatically)
+#   - pihole   : conditional-forward puhome.net -> Blocky, plus Pi-hole's owned
+#                settings (setupVars keys, FTL conf) and adlists / allowlist /
+#                regex lists (gravity.db). See docs/runbooks/dns01-pihole.md.
 
 - name: Configure dns01 (Pi-hole)
   hosts: dns
