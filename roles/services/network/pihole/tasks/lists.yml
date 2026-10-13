@@ -1,0 +1,46 @@
+---
+# Declarative gravity.db sync via Pi-hole's embedded sqlite3 shell (the sqlite3
+# package is not installed on dns01). The SQL is idempotent and ends with
+# SELECT total_changes(), so "changed" == rows were really inserted/updated/
+# deleted. Under --check the apply tasks are skipped by the command module
+# (they cannot report drift without writing).
+
+- name: Check Pi-hole's embedded sqlite3 shell works
+  become: true
+  ansible.builtin.command: "{{ (pihole_sqlite + ['-version']) | join(' ') }}"
+  changed_when: false
+  check_mode: false
+
+# Guard against wiping every list because a variable was emptied by mistake.
+- name: Assert the desired adlists and allowlist are non-empty
+  ansible.builtin.assert:
+    that:
+      - pihole_adlists | length > 0
+      - pihole_allowlist | length > 0
+    fail_msg: >-
+      Refusing to sync gravity.db: pihole_adlists or pihole_allowlist is empty and the
+      sync is declarative (it would delete every row). Set pihole_manage_lists: false
+      to stop managing lists.
+
+- name: Sync adlists
+  become: true
+  ansible.builtin.command:
+    argv: "{{ pihole_sqlite + [pihole_gravity_db] }}"
+    stdin: "{{ lookup('ansible.builtin.template', 'gravity-adlists.sql.j2') }}"
+  register: pihole_adlist_sync
+  changed_when: pihole_adlist_sync.stdout_lines | last | int > 0
+  notify: Update pihole gravity
+
+- name: Sync allowlist and regex lists
+  become: true
+  vars:
+    pihole_domainlists:
+      - { type: 0, domains: "{{ pihole_allowlist }}" }
+      - { type: 2, domains: "{{ pihole_regex_allowlist }}" }
+      - { type: 3, domains: "{{ pihole_regex_denylist }}" }
+  ansible.builtin.command:
+    argv: "{{ pihole_sqlite + [pihole_gravity_db] }}"
+    stdin: "{{ lookup('ansible.builtin.template', 'gravity-domainlists.sql.j2') }}"
+  register: pihole_domainlist_sync
+  changed_when: pihole_domainlist_sync.stdout_lines | last | int > 0
+  notify: Reload pihole lists

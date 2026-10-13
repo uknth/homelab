@@ -215,3 +215,9 @@ wanwatch_links:
 # Shared slskd API key (used by slskd + soularr). Set vault_slskd_api_key in the
 # vault to override the placeholder; slskd is internal (arr net) + Authentik-gated.
 slskd_api_key: "{{ vault_slskd_api_key | default('homelab-soularr-slskd-key') }}"
+
+# Domains that must never be blocked by EITHER DNS blocker (Blocky on gw01 and
+# Pi-hole on dns01). Blocklists occasionally catch platform services:
+# push.apple.com sat on blocklistproject/ads.txt and broke iOS push (2026-08-31).
+dns_allowlist:
+  - push.apple.com

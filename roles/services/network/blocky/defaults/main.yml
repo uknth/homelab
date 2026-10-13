@@ -3,10 +3,12 @@
 #
 # Role split (see docs/spec/architecture.md#dns-design):
 #   * Blocky answers LOCAL names (*.puhome.net) and forwards everything else.
-#   * Blocking is OFF here — Pi-hole (dns01) is the ad/tracker blocker.
-#   * Upstreams are strict-ordered: Pi-hole first (so blocking still happens),
-#     then a DoH fallback so a dead Pi Zero degrades to "ads return", not
-#     "no internet".
+#   * Blocky ALSO blocks a small subset (StevenBlack ads + URLhaus malware);
+#     Pi-hole (dns01) keeps the big lists. The shared `dns_allowlist`
+#     (group_vars/all) is applied here and on Pi-hole.
+#   * Upstreams are strict-ordered: Pi-hole first (bigger blocklists), then
+#     Cloudflare DoH, then Quad9 DoH, so a dead Pi Zero degrades to "smaller
+#     blocklist", not "no internet".
 
 blocky_image: "spx01/blocky:v0.26.2"
 blocky_root_dir: "{{ service_root }}/blocky"    # /opt/homelab/blocky
@@ -17,10 +19,23 @@ blocky_ui_ext_port: 14012
 # Where all *.puhome.net service names resolve to (the nginx reverse proxy).
 blocky_reverse_proxy_ip: "10.0.2.2"
 
-# Strict-ordered upstreams: Pi-hole (blocking) then DoH fallback.
+# Strict-ordered upstreams: Pi-hole, then DoH fallbacks.
 blocky_upstreams:
-  - "10.0.2.7"                              # Pi-hole @ dns01 — does the blocking
-  - "https://dns.quad9.net/dns-query"       # DoH fallback if Pi-hole is down
+  - "10.0.2.7"                              # Pi-hole @ dns01 — large blocklists
+  - "https://1.1.1.1/dns-query"             # Cloudflare DoH by IP: needs no bootstrap DNS
+  - "https://dns.quad9.net/dns-query"       # last resort (hostname: needs bootstrap)
+
+# Blocky's own (small) blocklists: group -> list of URLs. Pi-hole carries the
+# large lists. Loading is non-blocking (strategy fast), so an unreachable list
+# never stops Blocky from starting.
+blocky_denylists:
+  ads:
+    - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+  malware:
+    - "https://urlhaus.abuse.ch/downloads/hostfile/"
+# Groups applied to every client (clientGroupsBlock default).
+blocky_denylist_groups_default: [ads, malware]
+# `dns_allowlist` (group_vars/all) is never blocked, in every group above.
 
 # Extra static name→IP mappings beyond the inventory-derived host records.
 blocky_extra_mappings:

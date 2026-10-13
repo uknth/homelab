@@ -1,0 +1,14 @@
+{# Declarative sync of gravity.db `adlist`. Idempotent: every statement is a
+   no-op when the row already matches, so total_changes() is 0 on a re-run.
+   Group membership (group 0) is added by Pi-hole's own tr_adlist_add trigger;
+   rows are removed from adlist_by_group by tr_adlist_delete. #}
+{% macro q(v) %}{{ v | string | replace("'", "''") }}{% endmacro %}
+.bail on
+BEGIN;
+{% for a in pihole_adlists %}
+INSERT OR IGNORE INTO adlist (address, enabled, comment) VALUES ('{{ q(a.address) }}', {{ 1 if a.enabled | default(true) else 0 }}, NULLIF('{{ q(a.comment | default("")) }}', ''));
+UPDATE adlist SET enabled = {{ 1 if a.enabled | default(true) else 0 }}, comment = NULLIF('{{ q(a.comment | default("")) }}', '') WHERE address = '{{ q(a.address) }}' AND (enabled <> {{ 1 if a.enabled | default(true) else 0 }} OR IFNULL(comment, '') <> '{{ q(a.comment | default("")) }}');
+{% endfor %}
+DELETE FROM adlist WHERE address NOT IN ({% for a in pihole_adlists %}'{{ q(a.address) }}'{{ ', ' if not loop.last }}{% endfor %});
+COMMIT;
+SELECT total_changes();

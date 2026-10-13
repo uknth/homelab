@@ -1,5 +1,33 @@
 ---
+# ORDER MATTERS: handlers run in file order. Regenerate first, so 01-pihole.conf
+# already has `dnssec` removed before the plain restart below starts FTL;
+# the other way round briefly serves SERVFAIL (stale anchors, 07 drop-in gone).
+# `pihole -a -i <mode>` is Pi-hole v5's CLI path to ProcessDNSSettings: it
+# re-sources setupVars.conf, rewrites /etc/dnsmasq.d/01-pihole.conf (server=,
+# domain-needed, bogus-priv, dnssec/trust-anchor=, interface) and restarts DNS.
+# The mode argument just re-asserts DNSMASQ_LISTENING, which setupVars already holds.
+- name: Regenerate pihole DNS config
+  become: true
+  ansible.builtin.command: "pihole -a -i {{ pihole_setupvars.DNSMASQ_LISTENING | default('single') }}"
+  changed_when: true
+
+# Full FTL restart: also what makes pihole-FTL.conf (MAXDBDAYS etc.) take effect.
 - name: Restart pihole DNS
   become: true
   ansible.builtin.command: pihole restartdns
+  changed_when: true
+
+# Allow/regex lists live in FTL memory; reload without flushing or restarting.
+- name: Reload pihole lists
+  become: true
+  ansible.builtin.command: pihole restartdns reload-lists
+  changed_when: true
+
+# Adlist change: re-download + rebuild gravity (slow on a Pi Zero W, ~6 min on
+# the weekly cron run; allow up to an hour). Reloads lists itself when done.
+- name: Update pihole gravity
+  become: true
+  ansible.builtin.command: pihole -g
+  async: 3600
+  poll: 30
   changed_when: true

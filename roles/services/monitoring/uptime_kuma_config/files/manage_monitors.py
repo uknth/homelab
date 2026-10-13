@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotently ensure Uptime Kuma monitors exist. Config via env (JSON)."""
+"""Idempotently ensure Uptime Kuma monitors (http, dns, push) exist. Config via env (JSON)."""
 import os, sys, json
 from uptime_kuma_api import UptimeKumaApi, MonitorType, NotificationType
 
@@ -7,6 +7,7 @@ url = os.environ["KUMA_URL"]
 user = os.environ["KUMA_USER"]
 pw = os.environ["KUMA_PASSWORD"]
 http_mons = json.loads(os.environ.get("KUMA_HTTP", "[]"))
+dns_mons = json.loads(os.environ.get("KUMA_DNS", "[]"))
 push_mons = json.loads(os.environ.get("KUMA_PUSH", "[]"))
 ntfy = json.loads(os.environ.get("KUMA_NTFY", "{}"))
 dash_url = os.environ.get("KUMA_DASH_URL", "").rstrip("/")
@@ -47,6 +48,17 @@ try:
         api.add_monitor(type=MonitorType.HTTP, name=m["name"], url=m["url"],
                         accepted_statuscodes=["200-299", "300-399"],
                         interval=60, maxretries=2, retryInterval=60,
+                        notificationIDList=notif_ids)
+        created.append(m["name"])
+    # DNS probes: resolve m["hostname"] through the resolver m["resolver"].
+    # Kuma v1 (image louislam/uptime-kuma:1) has no `conditions` field.
+    for m in dns_mons:
+        if m["name"] in existing:
+            continue
+        api.add_monitor(type=MonitorType.DNS, name=m["name"],
+                        hostname=m["hostname"], dns_resolve_server=m["resolver"],
+                        port=53, dns_resolve_type=m.get("record_type", "A"),
+                        interval=60, maxretries=2, retryInterval=30,
                         notificationIDList=notif_ids)
         created.append(m["name"])
     for m in push_mons:

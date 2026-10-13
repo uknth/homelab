@@ -24,6 +24,7 @@
     KUMA_USER: "{{ kuma_config_user }}"
     KUMA_PASSWORD: "{{ kuma_config_password }}"
     KUMA_HTTP: "{{ kuma_http_monitors | to_json }}"
+    KUMA_DNS: "{{ kuma_dns_monitors | to_json }}"
     KUMA_PUSH: "{{ kuma_push_monitors | to_json }}"
     KUMA_NTFY: "{{ kuma_ntfy | to_json }}"
     KUMA_STATUSPAGE: "{{ kuma_status_page_slug | default('homelab') }}"
