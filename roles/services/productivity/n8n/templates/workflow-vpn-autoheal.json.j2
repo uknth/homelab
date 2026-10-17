@@ -635,6 +635,200 @@
         4800,
         -300
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{% endraw %}{{ n8n_vpnheal_nzbget_url }}{% raw %}/jsonrpc",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\"method\":\"log\",\"params\":[0,400],\"id\":1}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "n-fetch-nzbget-log",
+      "name": "Fetch nzbget log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "homelab-nzbget",
+          "name": "homelab nzbget (restricted)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Is a news server rejecting our login? Then a slow rate is an account problem, and cycling the VPN cannot fix it.\n// Reads nzbget's own recent log; an unreadable log counts as 'not failing' so the normal VPN logic still runs.\n\nconst windowS = {% endraw %}{{ n8n_vpnheal_auth_window_minutes }}{% raw %} * 60;\nconst minHits = {% endraw %}{{ n8n_vpnheal_auth_min_failures }}{% raw %};\nconst j = $input.first().json || {};\nconst entries = !j.error && Array.isArray(j.result) ? j.result : [];\nconst now = Math.floor(Date.now() / 1000);\nconst servers = {};\nlet hits = 0;\nfor (const e of entries) {\n  if (e.Kind !== 'ERROR' || !(now - e.Time <= windowS)) continue;\n  const m = /Authorization (?:for|failed for) (\\S+)/.exec(e.Text || '');\n  if (!m) continue;\n  hits++;\n  servers[m[1]] = (servers[m[1]] || 0) + 1;\n}\nconst failing = hits >= minHits;\nconst list = Object.keys(servers).join(', ');\nconst body = 'nzbget cannot log in to: ' + list + ' (' + hits + ' rejected logins in the last ' + (windowS / 60) + ' min). '\n  + 'This is a Usenet account problem (lapsed plan, changed password, or a lock), not the VPN. '\n  + 'VPN auto-heal is paused while it lasts. Check the provider account page.';\nreturn [{ json: { auth_failing: failing, auth_hits: hits, auth_servers: list, auth_body: body } }];"
+      },
+      "id": "n-auth-check",
+      "name": "Auth check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-auth-failing",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.auth_failing }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-auth-failing",
+      "name": "Auth failing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "{% endraw %}{{ n8n_ntfy_url }}{% raw %}/{% endraw %}{{ n8n_jobs_ntfy_topic }}{% raw %}/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "poll",
+              "value": "1"
+            },
+            {
+              "name": "since",
+              "value": "{% endraw %}{{ n8n_vpnheal_auth_alert_hours }}{% raw %}h"
+            },
+            {
+              "name": "tags",
+              "value": "{% endraw %}{{ n8n_vpnheal_auth_ntfy_tag }}{% raw %}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "n-fetch-auth-alert-history",
+      "name": "Fetch auth alert history",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1060,
+        420
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Alert once per n8n_vpnheal_auth_alert_hours, not every 20-minute run. The window is the ntfy poll's `since`.\n// If history cannot be read, send anyway: a duplicate alert is better than a silent one.\nconst ctx = $('Auth check').first().json;\nlet lines = [];\nlet fetchFailed = false;\nfor (const it of $input.all()) {\n  const j = it.json || {};\n  if (j.error) { fetchFailed = true; continue; }\n  const d = j.data !== undefined ? j.data : j;\n  if (typeof d === 'string') lines = lines.concat(d.split('\\n'));\n  else if (d && typeof d === 'object') lines.push(JSON.stringify(d));\n}\nlet count = 0;\nfor (const line of lines) {\n  if (!line.trim()) continue;\n  try { if (JSON.parse(line).event === 'message') count++; } catch (e) { /* partial line */ }\n}\nreturn [{ json: Object.assign({}, ctx, { alert_due: fetchFailed || count === 0 }) }];"
+      },
+      "id": "n-auth-alert-due-calc",
+      "name": "Auth alert due calc",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-auth-alert-due",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.alert_due }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-auth-alert-due",
+      "name": "Auth alert due?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{% endraw %}{{ n8n_ntfy_url }}{% raw %}/{% endraw %}{{ n8n_jobs_ntfy_topic }}{% raw %}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "nzbget: Usenet login rejected (not a VPN problem)"
+            },
+            {
+              "name": "Priority",
+              "value": "4"
+            },
+            {
+              "name": "Tags",
+              "value": "rotating_light,{% endraw %}{{ n8n_vpnheal_auth_ntfy_tag }}{% raw %}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.auth_body }}",
+        "options": {}
+      },
+      "id": "n-notify-auth-failing",
+      "name": "Notify auth failing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1720,
+        400
+      ]
     }
   ],
   "connections": {
@@ -664,7 +858,80 @@
       "main": [
         [
           {
+            "node": "Fetch nzbget log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch nzbget log": {
+      "main": [
+        [
+          {
+            "node": "Auth check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth check": {
+      "main": [
+        [
+          {
+            "node": "Auth failing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth failing?": {
+      "main": [
+        [
+          {
+            "node": "Fetch auth alert history",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Sample A gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch auth alert history": {
+      "main": [
+        [
+          {
+            "node": "Auth alert due calc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth alert due calc": {
+      "main": [
+        [
+          {
+            "node": "Auth alert due?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth alert due?": {
+      "main": [
+        [
+          {
+            "node": "Notify auth failing",
             "type": "main",
             "index": 0
           }
