@@ -90,6 +90,14 @@ arr_nzbget_writebuffer: 1024     # KB
 # takedown) held nzbget at 0 B/s for ~20 minutes after Radarr upgraded away
 # from releases that were downloading fine.
 arr_nzbget_healthcheck: "delete"
+
+# Both providers at Level 0 so nzbget uses them in parallel. A Level 1 server is
+# a fill server: only asked for articles every Level 0 server answered 430 for,
+# so when Eweka started refusing logins (502 Authentication Failed) nzbget just
+# looped on it and never touched usenet.farm. Server1 = news.eweka.nl,
+# Server2 = news.usenet.farm (host/creds themselves live in nzbget, not here).
+arr_nzbget_server1_level: 0
+arr_nzbget_server2_level: 0
 arr_qbit_categories: ["tv", "movies"]
 # nzbget control creds used by the *arr download clients. Set BOTH in vault to
 # have the role enforce them; leave empty to leave nzbget's creds untouched.
